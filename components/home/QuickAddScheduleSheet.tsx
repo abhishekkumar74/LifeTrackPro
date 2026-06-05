@@ -292,6 +292,7 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
               mode="time"
               is24Hour={false}
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              textColor="#000000"
               onChange={(event, selectedDate) => {
                 if (Platform.OS === 'android') {
                   setShowTimePicker(false);

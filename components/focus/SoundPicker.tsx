@@ -62,6 +62,8 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
     };
   });
 
+  const startVolumeRef = useRef(0);
+
   // Calculate volume percentage and trigger callback
   const handleTouch = (locationX: number) => {
     if (sliderWidth <= 0) return;
@@ -74,11 +76,17 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        handleTouch(evt.nativeEvent.locationX);
+      onPanResponderGrant: (evt, gestureState) => {
+        if (sliderWidth <= 0) return;
+        const initialVolume = Math.max(0, Math.min(1, evt.nativeEvent.locationX / sliderWidth));
+        startVolumeRef.current = initialVolume;
+        onVolumeChange(initialVolume);
       },
-      onPanResponderMove: (evt) => {
-        handleTouch(evt.nativeEvent.locationX);
+      onPanResponderMove: (evt, gestureState) => {
+        if (sliderWidth <= 0) return;
+        const deltaVolume = gestureState.dx / sliderWidth;
+        const newVolume = Math.max(0, Math.min(1, startVolumeRef.current + deltaVolume));
+        onVolumeChange(newVolume);
       },
     })
   ).current;

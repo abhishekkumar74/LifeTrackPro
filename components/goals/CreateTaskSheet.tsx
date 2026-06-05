@@ -217,6 +217,7 @@ export const CreateTaskSheet = React.forwardRef<BottomSheet, CreateTaskSheetProp
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={handleDateChange}
               minimumDate={new Date()}
+              textColor="#000000"
             />
           )}
 

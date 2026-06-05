@@ -25,7 +25,6 @@ import { TimerCircle } from '@/components/focus/TimerCircle';
 import { SoundPicker } from '@/components/focus/SoundPicker';
 import { BlockerToggle } from '@/components/focus/BlockerToggle';
 import { SessionSummary } from '@/components/focus/SessionSummary';
-import { SubjectPicker } from '@/components/shared/SubjectPicker';
 
 const SUBJECT_OPTIONS = ['Physics', 'Chemistry', 'Biology', 'Math', 'Other'];
 
@@ -335,6 +334,7 @@ export default function FocusScreen(): React.JSX.Element {
         {/* Timer Ring (Section D) - Centered and takes all middle space */}
         <View style={styles.timerWrapper}>
           <TimerCircle
+            size={190}
             secondsLeft={secondsLeft}
             totalSeconds={totalSeconds}
             isRunning={isRunning}
@@ -374,13 +374,15 @@ export default function FocusScreen(): React.JSX.Element {
               <Text style={styles.controlIconSmall}>⏭</Text>
             </TouchableOpacity>
           ) : (
-            <SubjectPicker
-              selectedSubject={subjectTag}
-              onSelect={setSubjectTag}
-              placeholder="Subject"
-              isDark={true}
-              style={styles.focusSubjectPicker}
-            />
+            <TouchableOpacity
+              style={[styles.subjectPill, styles.controlCircleSmall]}
+              onPress={cycleSubject}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.subjectTextChip} numberOfLines={1}>
+                {subjectTag || 'General'}
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
 

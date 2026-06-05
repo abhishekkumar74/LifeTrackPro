@@ -180,6 +180,7 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={handleDateChange}
               minimumDate={tomorrow}
+              textColor="#000000"
             />
           )}
 
