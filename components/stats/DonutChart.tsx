@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Svg, { Circle, Text as SvgText, G } from 'react-native-svg';
+import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -105,39 +105,40 @@ export const DonutChart: React.FC<DonutChartProps> = ({
     <View style={styles.container}>
       <View style={styles.chartWrapper}>
         <Svg width={svgSize} height={svgSize}>
-          {/* Rotate SVG by -90 deg so donut starts at 12 o'clock */}
-          <G transform={`rotate(-90 ${centerPos} ${centerPos})`}>
-            {slicesWithOffsets.map((slice, index) => {
-              const startOffset = -(slice.offset / 100) * circumference;
-              
-              // Custom hook to animate the stroke length growing clockwise
-              const animatedProps = useAnimatedProps(() => {
-                const scale = animatedMultiplier.value;
-                const currentLength = (slice.percentage / 100) * circumference * scale;
-                // 2 deg gap = (2 / 360) * 314.16 = 1.74px gap
-                const gapLength = totalSlices > 1 ? 1.74 : 0;
-                const drawLength = Math.max(0, currentLength - gapLength);
+          {/* Rotate circles by -90 deg so donut starts at 12 o'clock */}
+          {slicesWithOffsets.map((slice, index) => {
+            const startOffset = -(slice.offset / 100) * circumference;
+            
+            // Custom hook to animate the stroke length growing clockwise
+            const animatedProps = useAnimatedProps(() => {
+              const scale = animatedMultiplier.value;
+              const currentLength = (slice.percentage / 100) * circumference * scale;
+              // 2 deg gap = (2 / 360) * 314.16 = 1.74px gap
+              const gapLength = totalSlices > 1 ? 1.74 : 0;
+              const drawLength = Math.max(0, currentLength - gapLength);
 
-                return {
-                  strokeDasharray: `${drawLength} ${circumference}`,
-                };
-              });
+              return {
+                strokeDasharray: `${drawLength} ${circumference}`,
+              };
+            });
 
-              return (
-                <AnimatedCircle
-                  key={index}
-                  cx={centerPos}
-                  cy={centerPos}
-                  r={radius}
-                  stroke={slice.color}
-                  strokeWidth={16}
-                  fill="transparent"
-                  strokeDashoffset={startOffset}
-                  animatedProps={animatedProps}
-                />
-              );
-            })}
-          </G>
+            return (
+              <AnimatedCircle
+                key={index}
+                cx={centerPos}
+                cy={centerPos}
+                r={radius}
+                stroke={slice.color}
+                strokeWidth={16}
+                fill="transparent"
+                strokeDashoffset={startOffset}
+                animatedProps={animatedProps}
+                rotation={-90}
+                originX={centerPos}
+                originY={centerPos}
+              />
+            );
+          })}
 
           {/* Center Text */}
           <SvgText

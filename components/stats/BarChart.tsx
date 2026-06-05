@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import Svg, { Rect, Line, Text as SvgText, G } from 'react-native-svg';
+import Svg, { Rect, Line, Text as SvgText } from 'react-native-svg';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -97,7 +97,7 @@ export const BarChart: React.FC<BarChartProps> = ({ data = [], isLoading }) => {
               const xPos = leftAxisWidth + i * (barWidth + barGap);
               const yPos = chartHeight - h;
               return (
-                <G key={i}>
+                <React.Fragment key={i}>
                   <Rect
                     x={xPos}
                     y={yPos}
@@ -115,7 +115,7 @@ export const BarChart: React.FC<BarChartProps> = ({ data = [], isLoading }) => {
                       fill="#E8E7E3"
                     />
                   )}
-                </G>
+                </React.Fragment>
               );
             })}
           </Svg>
@@ -136,7 +136,7 @@ export const BarChart: React.FC<BarChartProps> = ({ data = [], isLoading }) => {
             { y: 20, label: '6h' },
             { y: 0, label: '8h' },
           ]).map((item, idx) => (
-            <G key={idx}>
+            <React.Fragment key={idx}>
               <Line
                 x1={leftAxisWidth}
                 y1={item.y}
@@ -156,7 +156,7 @@ export const BarChart: React.FC<BarChartProps> = ({ data = [], isLoading }) => {
               >
                 {item.label}
               </SvgText>
-            </G>
+            </React.Fragment>
           ))}
 
           {/* Render Bars */}
@@ -167,7 +167,7 @@ export const BarChart: React.FC<BarChartProps> = ({ data = [], isLoading }) => {
             const barColor = getBarColor(item);
 
             return (
-              <G key={i}>
+              <React.Fragment key={i}>
                 <Rect
                   x={xPos}
                   y={yPos}
@@ -198,7 +198,7 @@ export const BarChart: React.FC<BarChartProps> = ({ data = [], isLoading }) => {
                 >
                   {item.dayLabel}
                 </SvgText>
-              </G>
+              </React.Fragment>
             );
           })}
 

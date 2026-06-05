@@ -12,7 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import Svg, { Rect, Text as SvgText, G } from 'react-native-svg';
+import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 
 import { supabase } from '@/lib/supabase/client';
@@ -295,7 +295,7 @@ export default function HabitDetailScreen() {
             }
 
             return (
-              <G key={week.label}>
+              <React.Fragment key={week.label}>
                 {/* Bar */}
                 <Rect
                   x={x}
@@ -319,7 +319,7 @@ export default function HabitDetailScreen() {
                 >
                   {week.label}
                 </SvgText>
-              </G>
+              </React.Fragment>
             );
           })}
         </Svg>
