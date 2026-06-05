@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useImperativeHandle, useEffect } from 'react';
+import React, { useState, useCallback, useImperativeHandle, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,14 +6,13 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Keyboard,
-  ScrollView,
   Platform,
 } from 'react-native';
 import BottomSheet, {
-  BottomSheetView,
   BottomSheetTextInput,
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
+  BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Milestone, TaskPriority } from '@/types/app.types';
@@ -68,8 +67,18 @@ export const CreateTaskSheet = React.forwardRef<BottomSheet, CreateTaskSheetProp
     }, [defaultMilestoneId]);
 
     // Expose ref control
-    const sheetRef = React.useRef<BottomSheet>(null);
+    const sheetRef = useRef<BottomSheet>(null);
+    const inputRef = useRef<any>(null);
+
     useImperativeHandle(ref, () => sheetRef.current as BottomSheet);
+
+    const handleSheetChange = useCallback((index: number) => {
+      if (index >= 0) {
+        setTimeout(() => {
+          inputRef.current?.focus();
+        }, 150);
+      }
+    }, []);
 
     const handleCreate = () => {
       if (!title.trim()) return;
@@ -131,13 +140,15 @@ export const CreateTaskSheet = React.forwardRef<BottomSheet, CreateTaskSheetProp
         enablePanDownToClose={true}
         backdropComponent={renderBackdrop}
         keyboardBehavior="interactive"
+        onChange={handleSheetChange}
       >
-        <ScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
           <Text style={styles.sheetHeader}>New Task</Text>
 
           {/* Title input */}
           <Text style={styles.fieldLabel}>{LABEL_TITLE}</Text>
           <BottomSheetTextInput
+            ref={inputRef}
             style={styles.textInput}
             placeholder={INPUT_PLACEHOLDER}
             placeholderTextColor="#9B9BAF"
@@ -270,7 +281,7 @@ export const CreateTaskSheet = React.forwardRef<BottomSheet, CreateTaskSheetProp
               <Text style={styles.submitButtonText}>{BTN_SUBMIT}</Text>
             )}
           </TouchableOpacity>
-        </ScrollView>
+        </BottomSheetScrollView>
       </BottomSheet>
     );
   }

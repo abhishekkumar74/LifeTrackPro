@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase/client';
 import { Task } from '@/types/app.types';
+import { useUiStore } from '@/lib/store/ui.store';
 
 export function useTasks(milestoneId?: string) {
   return useQuery<Task[]>({
@@ -98,6 +99,7 @@ export function useCompleteTask() {
       if (context?.previousTasks) {
         queryClient.setQueryData(cacheKey, context.previousTasks);
       }
+      useUiStore.getState().showToast('Task completion failed', 'error');
     },
     onSettled: (_, __, { milestoneId }) => {
       queryClient.invalidateQueries({ queryKey: ['tasks', milestoneId || 'standalone'] });

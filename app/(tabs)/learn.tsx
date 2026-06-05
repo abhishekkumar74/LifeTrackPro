@@ -5,13 +5,20 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
+  SectionList,
   TextInput,
   ScrollView,
   ActivityIndicator,
   Alert,
   Keyboard,
   Dimensions,
+  Platform,
+  StatusBar,
 } from 'react-native';
+import { tabScrollRefs } from '@/lib/utils/tab-scroll';
+import Svg, { Circle } from 'react-native-svg';
+import { useAuthStore } from '@/lib/store/auth.store';
+import { getSubjectColor } from '@/lib/utils/subject-colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import BottomSheet, {
@@ -68,7 +75,7 @@ import { ErrorState } from '@/components/shared/ErrorState';
 import { SYLLABUS_TEMPLATES } from '@/lib/utils/syllabus-templates';
 
 type TabType = 'syllabus' | 'notes' | 'flashcards';
-type FilterType = 'All' | 'Physics' | 'Chemistry' | 'Biology' | 'Math' | 'Pinned' | 'Due';
+type FilterType = string;
 type StudySessionState = 'idle' | 'active' | 'complete';
 
 export default function LearnScreen(): React.JSX.Element {
@@ -94,6 +101,34 @@ export default function LearnScreen(): React.JSX.Element {
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
 
+  // Note sorting state
+  const [sortOption, setSortOption] = useState<'recent' | 'oldest' | 'subject' | 'due'>('recent');
+
+  const sortOptionLabel = useMemo(() => {
+    switch (sortOption) {
+      case 'recent': return 'Recent';
+      case 'oldest': return 'Oldest';
+      case 'subject': return 'Subject A-Z';
+      case 'due': return 'Due Review';
+      default: return 'Recent';
+    }
+  }, [sortOption]);
+
+  const handleShowSortOptions = () => {
+    Alert.alert(
+      'Sort Notes',
+      'Select a sorting option:',
+      [
+        { text: 'Recent', onPress: () => setSortOption('recent') },
+        { text: 'Oldest', onPress: () => setSortOption('oldest') },
+        { text: 'Subject A-Z', onPress: () => setSortOption('subject') },
+        { text: 'Due Review', onPress: () => setSortOption('due') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
+  };
+
   // Expanded card tracking
   const [expandedSubjects, setExpandedSubjects] = useState<string[]>([]);
   const [expandedChapters, setExpandedChapters] = useState<string[]>([]);
@@ -102,6 +137,37 @@ export default function LearnScreen(): React.JSX.Element {
   const addTopicSheetRef = useRef<BottomSheet>(null);
   const quickCaptureSheetRef = useRef<QuickCaptureSheetRef>(null);
 
+  // Tab scroll registration
+  const syllabusListRef = useRef<any>(null);
+  const notesListRef = useRef<any>(null);
+
+  const selectedTabRef = useRef(selectedTab);
+  useEffect(() => {
+    selectedTabRef.current = selectedTab;
+  }, [selectedTab]);
+
+  useEffect(() => {
+    tabScrollRefs['learn'] = {
+      current: {
+        scrollTo: () => {
+          if (selectedTabRef.current === 'syllabus') {
+            syllabusListRef.current?.scrollToLocation({
+              sectionIndex: 0,
+              itemIndex: 0,
+              animated: true,
+              viewPosition: 0,
+            });
+          } else if (selectedTabRef.current === 'notes') {
+            notesListRef.current?.scrollToOffset({ offset: 0, animated: true });
+          }
+        }
+      }
+    } as any;
+    return () => {
+      delete tabScrollRefs['learn'];
+    };
+  }, []);
+
   // Add Topic Sheet Form State
   const [newSubject, setNewSubject] = useState('');
   const [newChapter, setNewChapter] = useState('');
@@ -109,13 +175,7 @@ export default function LearnScreen(): React.JSX.Element {
 
   // Queries
   const syllabusQuery = useSyllabus();
-  const notesQuery = useNotes(
-    activeFilter !== 'All' &&
-      activeFilter !== 'Pinned' &&
-      activeFilter !== 'Due'
-      ? activeFilter
-      : undefined
-  );
+  const notesQuery = useNotes();
   const dueRevisionsQuery = useDueRevisions();
 
   // Mutations
@@ -321,6 +381,8 @@ export default function LearnScreen(): React.JSX.Element {
       list = notesQuery.data || [];
       if (activeFilter === 'Pinned') {
         list = list.filter((n) => n.is_pinned);
+      } else if (activeFilter !== 'All') {
+        list = list.filter((n) => n.subject === activeFilter);
       }
     }
 
@@ -328,16 +390,42 @@ export default function LearnScreen(): React.JSX.Element {
     // or keep them as normal notes. We will filter out tag parent links for cleanliness
     list = list.filter((n) => !n.tags.some((t) => t.startsWith('parent:')));
 
-    if (!searchQuery.trim()) return list;
-    const query = searchQuery.trim().toLowerCase();
-    return list.filter(
-      (n) =>
-        (n.title && n.title.toLowerCase().includes(query)) ||
-        (n.content && n.content.toLowerCase().includes(query)) ||
-        (n.subject && n.subject.toLowerCase().includes(query)) ||
-        n.tags.some((tag) => tag.toLowerCase().includes(query))
-    );
-  }, [notesQuery.data, dueRevisionsQuery.data, activeFilter, searchQuery]);
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      list = list.filter(
+        (n) =>
+          (n.title && n.title.toLowerCase().includes(query)) ||
+          (n.content && n.content.toLowerCase().includes(query)) ||
+          (n.subject && n.subject.toLowerCase().includes(query)) ||
+          n.tags.some((tag) => tag.toLowerCase().includes(query))
+      );
+    }
+
+    // Apply local sorting
+    return [...list].sort((a, b) => {
+      if (sortOption === 'recent') {
+        const dateA = new Date(a.updated_at || a.created_at).getTime();
+        const dateB = new Date(b.updated_at || b.created_at).getTime();
+        return dateB - dateA;
+      }
+      if (sortOption === 'oldest') {
+        const dateA = new Date(a.updated_at || a.created_at).getTime();
+        const dateB = new Date(b.updated_at || b.created_at).getTime();
+        return dateA - dateB;
+      }
+      if (sortOption === 'subject') {
+        const subA = a.subject || 'General';
+        const subB = b.subject || 'General';
+        return subA.localeCompare(subB);
+      }
+      if (sortOption === 'due') {
+        const dueA = a.next_review || '9999-12-31';
+        const dueB = b.next_review || '9999-12-31';
+        return dueA.localeCompare(dueB);
+      }
+      return 0;
+    });
+  }, [notesQuery.data, dueRevisionsQuery.data, activeFilter, searchQuery, sortOption]);
 
   // Compiled Flashcards Deck list from cache
   const flashcardDeck = useMemo((): Note[] => {
@@ -419,6 +507,79 @@ export default function LearnScreen(): React.JSX.Element {
     );
     return sorted.length > 0 ? sorted[0].subject : null;
   }, [notesQuery.data]);
+
+  const { profile } = useAuthStore();
+  const examName = useMemo(() => {
+    if (profile?.sub_category && profile.sub_category.length > 0) {
+      return profile.sub_category[0];
+    }
+    if (profile?.category) {
+      return profile.category.charAt(0).toUpperCase() + profile.category.slice(1);
+    }
+    return 'General';
+  }, [profile]);
+
+  const overallMetrics = useMemo(() => {
+    let total = 0;
+    let completed = 0;
+    const data = syllabusQuery.data || {};
+    Object.keys(data).forEach((subName) => {
+      const subject = data[subName];
+      Object.keys(subject.chapters).forEach((chapName) => {
+        const topics = subject.chapters[chapName];
+        total += topics.length;
+        completed += topics.filter((t) => t.status === 'done').length;
+      });
+    });
+
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, percent };
+  }, [syllabusQuery.data]);
+
+  const sections = useMemo(() => {
+    return Object.keys(filteredSyllabus).map((subjectName) => {
+      const groupedSub = filteredSyllabus[subjectName];
+      const isExpanded = expandedSubjects.includes(subjectName);
+      
+      const chapters = Object.keys(groupedSub.chapters);
+      
+      // Calculate complete chapters count
+      const completeChaptersCount = chapters.filter((chapterName) => {
+        const topics = groupedSub.chapters[chapterName];
+        return topics.every((t) => t.status === 'done');
+      }).length;
+
+      return {
+        title: subjectName,
+        completionPercent: groupedSub.completionPercent,
+        chapterCount: chapters.length,
+        completeChaptersCount,
+        isExpanded,
+        data: isExpanded ? chapters : [],
+      };
+    });
+  }, [filteredSyllabus, expandedSubjects]);
+
+  const availableSubjects = useMemo(() => {
+    const list = notesQuery.data || [];
+    const subjects = new Set(
+      list.map((n) => n.subject).filter(Boolean) as string[]
+    );
+    return Array.from(subjects).sort();
+  }, [notesQuery.data]);
+
+  const filterChips = useMemo(() => {
+    const baseChips = [
+      { key: 'All', label: 'All' },
+      { key: 'Pinned', label: '📌 Pinned' },
+      { key: 'Due', label: '📅 Due for Review' },
+    ];
+    const subjectChips = availableSubjects.map((sub) => ({
+      key: sub,
+      label: sub,
+    }));
+    return [...baseChips, ...subjectChips];
+  }, [availableSubjects]);
 
   const subjectsList = useMemo(() => {
     const list = new Set<string>(['Physics', 'Chemistry', 'Biology', 'Math', 'Other']);
@@ -521,6 +682,7 @@ export default function LearnScreen(): React.JSX.Element {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* Screen Header */}
         <View style={styles.header}>
@@ -599,52 +761,134 @@ export default function LearnScreen(): React.JSX.Element {
                   <Skeleton width="100%" height={100} borderRadius={16} style={{ marginBottom: 12 }} />
                 </View>
               ) : syllabusExists ? (
-                <FlatList
-                  data={Object.keys(filteredSyllabus)}
-                  keyExtractor={(item) => item}
-                  removeClippedSubviews={true}
+                <SectionList
+                  ref={syllabusListRef}
+                  sections={sections}
+                  keyExtractor={(item, index) => item + index}
+                  stickySectionHeadersEnabled={true}
+                  keyboardDismissMode="on-drag"
+                  removeClippedSubviews={Platform.OS === 'android'}
                   maxToRenderPerBatch={10}
                   windowSize={5}
                   initialNumToRender={8}
                   onRefresh={handleRefresh}
                   refreshing={isRefreshing}
                   contentContainerStyle={styles.listScroll}
-                  renderItem={({ item: subject }) => {
-                    const groupedSub = filteredSyllabus[subject];
-                    const chapters = Object.keys(groupedSub.chapters);
-                    const isSubExpanded = expandedSubjects.includes(subject);
+                  ListHeaderComponent={() => {
+                    if (!syllabusExists) return null;
+                    return (
+                      <View style={styles.overallHeaderContainer}>
+                        <View style={styles.overallHeaderRow}>
+                          <View style={styles.ringWrapper}>
+                            <View style={styles.ringInner}>
+                              <Svg width={60} height={60} viewBox="0 0 60 60">
+                                <Circle
+                                  cx={30}
+                                  cy={30}
+                                  r={26}
+                                  stroke="#E8E7E3"
+                                  strokeWidth={5}
+                                  fill="transparent"
+                                />
+                                <Circle
+                                  cx={30}
+                                  cy={30}
+                                  r={26}
+                                  stroke="#5B4FE8"
+                                  strokeWidth={5}
+                                  fill="transparent"
+                                  strokeDasharray={2 * Math.PI * 26}
+                                  strokeDashoffset={2 * Math.PI * 26 * (1 - overallMetrics.percent / 100)}
+                                  strokeLinecap="round"
+                                  transform="rotate(-90 30 30)"
+                                />
+                              </Svg>
+                              <View style={styles.ringPercentTextContainer}>
+                                <Text style={styles.ringPercentText}>{overallMetrics.percent}%</Text>
+                              </View>
+                            </View>
+                          </View>
+                          
+                          <View style={styles.overallHeaderTextContainer}>
+                            <Text style={styles.overallCompletedText}>
+                              {`${overallMetrics.completed} of ${overallMetrics.total} topics completed`}
+                            </Text>
+                            <View style={styles.examPill}>
+                              <Text style={styles.examPillText}>Exam: {examName}</Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  }}
+                  renderSectionHeader={({ section }) => {
+                    const isExpandedWithChapters = section.isExpanded && section.data.length > 0;
+                    const accentColor = getSubjectColor(section.title);
 
                     return (
-                      <SubjectCard
-                        subject={subject}
-                        completionPercent={groupedSub.completionPercent}
-                        chapterCount={chapters.length}
-                        doneCount={groupedSub.doneCount}
-                        isExpanded={isSubExpanded}
-                        onToggle={() => toggleSubjectExpanded(subject)}
-                      >
-                        {chapters.map((chapter) => {
-                          const topicsList = groupedSub.chapters[chapter];
-                          const chapterKey = `${subject}-${chapter}`;
-                          const isChapExpanded = expandedChapters.includes(chapterKey);
+                      <View style={[
+                        styles.subjectHeaderStickyContainer,
+                        isExpandedWithChapters ? styles.subjectHeaderExpanded : styles.subjectHeaderCollapsed
+                      ]}>
+                        <TouchableOpacity
+                          onPress={() => toggleSubjectExpanded(section.title)}
+                          style={styles.subjectHeaderClickable}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.leftRow}>
+                            <View style={[styles.accentDot, { backgroundColor: accentColor }]} />
+                            <View style={styles.textContainer}>
+                              <Text style={styles.subjectText}>{section.title}</Text>
+                              <Text style={styles.chaptersCountText}>
+                                {`${section.completeChaptersCount} / ${section.chapterCount} chapters complete`}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.rightRow}>
+                            <Text style={styles.percentText}>{`${section.completionPercent}%`}</Text>
+                            <View style={[styles.chevronWrapper, section.isExpanded && styles.chevronRotated]}>
+                              <ChevronRight size={16} color="#9B9BAF" />
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                        
+                        <View style={styles.progressContainer}>
+                          <View
+                            style={[
+                              styles.progressBarFill,
+                              { backgroundColor: accentColor, width: `${section.completionPercent}%` },
+                            ]}
+                          />
+                        </View>
+                      </View>
+                    );
+                  }}
+                  renderItem={({ item: chapterName, index, section }) => {
+                    const groupedSub = filteredSyllabus[section.title];
+                    const topicsList = groupedSub.chapters[chapterName];
+                    const chapterKey = `${section.title}-${chapterName}`;
+                    const isChapExpanded = expandedChapters.includes(chapterKey);
+                    const isLast = index === section.data.length - 1;
 
-                          return (
-                            <ChapterRow
-                              key={chapter}
-                              chapter={chapter}
-                              topics={topicsList}
-                              isExpanded={isChapExpanded}
-                              onToggle={() => toggleChapterExpanded(chapterKey)}
-                              onTopicStatusChange={handleTopicStatusChange}
-                              selectedTopicIds={selectedTopicIds}
-                              isMultiSelectMode={isMultiSelectMode}
-                              onToggleSelectTopic={handleToggleSelectTopic}
-                              onLongPressTopic={handleLongPressTopic}
-                              searchQuery={searchQuery}
-                            />
-                          );
-                        })}
-                      </SubjectCard>
+                    return (
+                      <View style={[
+                        styles.chapterRowCardWrapper,
+                        isLast && styles.chapterRowCardWrapperLast
+                      ]}>
+                        <ChapterRow
+                          chapter={chapterName}
+                          topics={topicsList}
+                          isExpanded={isChapExpanded}
+                          onToggle={() => toggleChapterExpanded(chapterKey)}
+                          onTopicStatusChange={handleTopicStatusChange}
+                          selectedTopicIds={selectedTopicIds}
+                          isMultiSelectMode={isMultiSelectMode}
+                          onToggleSelectTopic={handleToggleSelectTopic}
+                          onLongPressTopic={handleLongPressTopic}
+                          searchQuery={searchQuery}
+                          subjectColor={getSubjectColor(section.title)}
+                        />
+                      </View>
                     );
                   }}
                   ListEmptyComponent={
@@ -770,7 +1014,7 @@ export default function LearnScreen(): React.JSX.Element {
                       activeOpacity={0.8}
                     >
                       <RotateCw size={14} color="#FFFFFF" />
-                      <Text style={styles.bulkBtnText}>Revision</Text>
+                      <Text style={styles.bulkBtnText}>Needs Revision</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -791,24 +1035,15 @@ export default function LearnScreen(): React.JSX.Element {
               ========================================== */}
           {selectedTab === 'notes' && (
             <View style={{ flex: 1 }}>
-              {/* Horizontal filter chips row */}
-              <View style={styles.filtersScrollContainer}>
+              {/* Horizontal filter chips and Sort row */}
+              <View style={styles.filterAndSortRow}>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.filtersScroll}
+                  style={styles.filtersScrollView}
                 >
-                  {(
-                    [
-                      { key: 'All', label: 'All' },
-                      { key: 'Pinned', label: '📌 Pinned' },
-                      { key: 'Due', label: '📅 Due for Review' },
-                      { key: 'Physics', label: 'Physics' },
-                      { key: 'Chemistry', label: 'Chemistry' },
-                      { key: 'Biology', label: 'Biology' },
-                      { key: 'Math', label: 'Math' },
-                    ] as { key: FilterType; label: string }[]
-                  ).map((f) => {
+                  {filterChips.map((f) => {
                     const active = activeFilter === f.key;
                     return (
                       <TouchableOpacity
@@ -829,6 +1064,16 @@ export default function LearnScreen(): React.JSX.Element {
                     );
                   })}
                 </ScrollView>
+                
+                <TouchableOpacity
+                  style={styles.sortButton}
+                  onPress={handleShowSortOptions}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.sortButtonText}>
+                    Sort: {sortOptionLabel} ▾
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               {/* Amber header notice when Due for Review is active */}
@@ -850,6 +1095,7 @@ export default function LearnScreen(): React.JSX.Element {
                 </View>
               ) : (
                 <FlatList
+                  ref={notesListRef}
                   data={filteredNotes}
                   keyExtractor={(item) => item.id}
                   removeClippedSubviews={true}
@@ -859,6 +1105,7 @@ export default function LearnScreen(): React.JSX.Element {
                   onRefresh={handleRefresh}
                   refreshing={isRefreshing}
                   contentContainerStyle={styles.listScroll}
+                  keyboardDismissMode="on-drag"
                   renderItem={({ item }) => (
                     <NoteCard
                       note={item}
@@ -1937,5 +2184,203 @@ const styles = StyleSheet.create({
   flashcardsTabContainer: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  filterAndSortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 8,
+    gap: 8,
+  },
+  filtersScrollView: {
+    flex: 1,
+  },
+  sortButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sortButtonText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#5C5C70',
+    fontWeight: '600',
+  },
+  overallHeaderContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  overallHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  ringWrapper: {
+    width: 60,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ringInner: {
+    position: 'relative',
+    width: 60,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ringPercentTextContainer: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ringPercentText: {
+    fontFamily: 'DMMono-Medium',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#17172A',
+  },
+  overallHeaderTextContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 4,
+  },
+  overallCompletedText: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#5C5C70',
+  },
+  examPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#EAE8FD',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  examPillText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#5B4FE8',
+    fontWeight: '600',
+  },
+  subjectHeaderStickyContainer: {
+    backgroundColor: '#F7F6F3',
+    borderColor: '#E8E7E3',
+  },
+  subjectHeaderCollapsed: {
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 10,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    marginHorizontal: 20,
+  },
+  subjectHeaderExpanded: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderTopWidth: 1,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
+    marginHorizontal: 20,
+  },
+  subjectHeaderClickable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderRadius: 16,
+  },
+  leftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  accentDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 12,
+  },
+  textContainer: {
+    flex: 1,
+  },
+  subjectText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 15,
+    color: '#17172A',
+    fontWeight: '600',
+  },
+  chaptersCountText: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9B9BAF',
+    marginTop: 2,
+  },
+  rightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  percentText: {
+    fontFamily: 'DMMono',
+    fontSize: 13,
+    color: '#17172A',
+    fontWeight: '600',
+  },
+  chevronWrapper: {
+    transform: [{ rotate: '0deg' }],
+  },
+  chevronRotated: {
+    transform: [{ rotate: '90deg' }],
+  },
+  progressContainer: {
+    height: 4,
+    backgroundColor: '#E8E7E3',
+    width: '100%',
+  },
+  progressBarFill: {
+    height: '100%',
+  },
+  chapterRowCardWrapper: {
+    backgroundColor: '#FFFFFF',
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: '#E8E7E3',
+    marginHorizontal: 20,
+  },
+  chapterRowCardWrapperLast: {
+    borderBottomWidth: 1,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    marginBottom: 10,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
 });

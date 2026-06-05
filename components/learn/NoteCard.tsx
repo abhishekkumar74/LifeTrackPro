@@ -14,10 +14,24 @@ interface NoteCardProps {
 // Simple strip markdown function for previews
 const getNotePreview = (content: string): string => {
   if (!content) return 'Empty note';
-  return content
-    .replace(/[#*`_\[\]()\-+]/g, '')
+  
+  let plainText = content;
+  if (content.startsWith('{"front":')) {
+    try {
+      const parsed = JSON.parse(content);
+      plainText = `Front: ${parsed.front} | Back: ${parsed.back}`;
+    } catch (e) {
+      // fallback
+    }
+  }
+
+  return plainText
+    .replace(/##\s/g, '')
+    .replace(/•\s/g, '')
+    .replace(/\n/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .substring(0, 100);
 };
 
 // Calculate read time based on word count
@@ -67,15 +81,28 @@ const HighlightText = ({ text, query, style }: { text: string; query: string; st
 // Snippet extraction helper that centers on the query match
 const getNoteSnippet = (content: string, query: string): string => {
   if (!content) return 'Empty note';
-  const cleanContent = content
-    .replace(/[#*`_\[\]()\-+]/g, '')
+  
+  let plainText = content;
+  if (content.startsWith('{"front":')) {
+    try {
+      const parsed = JSON.parse(content);
+      plainText = `Front: ${parsed.front} | Back: ${parsed.back}`;
+    } catch (e) {
+      // fallback
+    }
+  }
+
+  const cleanContent = plainText
+    .replace(/##\s/g, '')
+    .replace(/•\s/g, '')
+    .replace(/\n/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  if (!query.trim()) return cleanContent.slice(0, 100) + (cleanContent.length > 100 ? '...' : '');
+  if (!query.trim()) return cleanContent.substring(0, 100);
 
   const idx = cleanContent.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return cleanContent.slice(0, 100) + (cleanContent.length > 100 ? '...' : '');
+  if (idx === -1) return cleanContent.substring(0, 100);
 
   const start = Math.max(0, idx - 30);
   const end = Math.min(cleanContent.length, idx + query.length + 60);

@@ -8,10 +8,10 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import BottomSheet, {
-  BottomSheetView,
   BottomSheetTextInput,
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
+  BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
 import { COLORS, TYPOGRAPHY } from '@/constants/theme';
 import { useCreateTask } from '@/lib/hooks/use-tasks';
@@ -118,7 +118,7 @@ export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
       onChange={handleSheetChange}
       keyboardBehavior="interactive"
     >
-      <BottomSheetView style={styles.sheetContent}>
+      <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
         <Text style={styles.sheetHeader}>Quick Add Task</Text>
 
         {/* Task Title */}
@@ -179,7 +179,7 @@ export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
             <Text style={styles.addButtonText}>Add Task</Text>
           )}
         </TouchableOpacity>
-      </BottomSheetView>
+      </BottomSheetScrollView>
     </BottomSheet>
   );
 };

@@ -9,8 +9,10 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { tabScrollRefs } from '@/lib/utils/tab-scroll';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { Plus } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -59,6 +61,40 @@ export default function GoalsScreen(): React.JSX.Element {
   const [isMilestoneSheetVisible, setIsMilestoneSheetVisible] = useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Tab scroll registration
+  const activeListRef = useRef<any>(null);
+  const milestonesListRef = useRef<any>(null);
+  const achievedListRef = useRef<any>(null);
+
+  const selectedTabRef = useRef(selectedTab);
+  useEffect(() => {
+    selectedTabRef.current = selectedTab;
+  }, [selectedTab]);
+
+  useEffect(() => {
+    tabScrollRefs['goals'] = {
+      current: {
+        scrollTo: () => {
+          if (selectedTabRef.current === 'active') {
+            activeListRef.current?.scrollToOffset({ offset: 0, animated: true });
+          } else if (selectedTabRef.current === 'milestones') {
+            milestonesListRef.current?.scrollToLocation({
+              sectionIndex: 0,
+              itemIndex: 0,
+              animated: true,
+              viewPosition: 0,
+            });
+          } else if (selectedTabRef.current === 'achieved') {
+            achievedListRef.current?.scrollToOffset({ offset: 0, animated: true });
+          }
+        }
+      }
+    } as any;
+    return () => {
+      delete tabScrollRefs['goals'];
+    };
+  }, []);
   
   const [isFabOpen, setIsFabOpen] = useState(false);
   const animValue = useSharedValue(0);
@@ -237,6 +273,7 @@ export default function GoalsScreen(): React.JSX.Element {
 
     return (
       <FlatList
+        ref={activeListRef}
         data={activeGoals}
         keyExtractor={(item) => item.id}
         removeClippedSubviews={true}
@@ -299,6 +336,7 @@ export default function GoalsScreen(): React.JSX.Element {
 
     return (
       <SectionList
+        ref={milestonesListRef}
         sections={milestoneSections}
         keyExtractor={(item) => item.id}
         removeClippedSubviews={true}
@@ -382,6 +420,7 @@ export default function GoalsScreen(): React.JSX.Element {
 
     return (
       <FlatList
+        ref={achievedListRef}
         data={achievedGoals}
         keyExtractor={(item) => item.id}
         removeClippedSubviews={true}
@@ -411,6 +450,7 @@ export default function GoalsScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="dark-content" />
       {/* Header Row */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>

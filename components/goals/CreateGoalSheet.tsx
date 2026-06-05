@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useImperativeHandle } from 'react';
+import React, { useState, useCallback, useImperativeHandle, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,12 @@ import {
   Keyboard,
 } from 'react-native';
 import BottomSheet, {
-  BottomSheetView,
   BottomSheetTextInput,
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
+  BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
+import { useUiStore } from '@/lib/store/ui.store';
 import { useCreateGoal } from '@/lib/hooks/use-goals';
 import { deadlineFromTimeline } from '@/lib/utils/date';
  
@@ -39,9 +40,19 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
     const [isPrimary, setIsPrimary] = useState(false);
  
     // Expose ref control
-    const sheetRef = React.useRef<BottomSheet>(null);
+    const sheetRef = useRef<BottomSheet>(null);
+    const inputRef = useRef<any>(null);
+
     useImperativeHandle(ref, () => sheetRef.current as BottomSheet);
  
+    const handleSheetChange = useCallback((index: number) => {
+      if (index >= 0) {
+        setTimeout(() => {
+          inputRef.current?.focus();
+        }, 150);
+      }
+    }, []);
+
     const handleCreate = () => {
       if (!title.trim()) return;
  
@@ -57,6 +68,7 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
         },
         {
           onSuccess: () => {
+            useUiStore.getState().showToast('Goal created!', 'success');
             // Reset form
             setTitle('');
             setTimeline('6M');
@@ -78,7 +90,7 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
       ),
       []
     );
-
+ 
     return (
       <BottomSheet
         ref={sheetRef}
@@ -87,13 +99,18 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
         enablePanDownToClose={true}
         backdropComponent={renderBackdrop}
         keyboardBehavior="interactive"
+        onChange={handleSheetChange}
       >
-        <BottomSheetView style={styles.contentContainer}>
+        <BottomSheetScrollView
+          contentContainerStyle={styles.contentContainer}
+          keyboardShouldPersistTaps="handled"
+        >
           <Text style={styles.sheetHeader}>New Goal</Text>
-
+ 
           {/* Goal Title Input */}
           <Text style={styles.fieldLabel}>{LABEL_TITLE}</Text>
           <BottomSheetTextInput
+            ref={inputRef}
             style={styles.textInput}
             placeholder={INPUT_PLACEHOLDER}
             placeholderTextColor="#9B9BAF"
@@ -102,7 +119,7 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
             multiline
             numberOfLines={2}
           />
-
+ 
           {/* Timeline Selector */}
           <Text style={styles.fieldLabel}>{LABEL_TIMELINE}</Text>
           <View style={styles.timelineRow}>
@@ -127,7 +144,7 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
               );
             })}
           </View>
-
+ 
           {/* Make Primary Switch */}
           <View style={styles.switchRow}>
             <View style={styles.switchTextContainer}>
@@ -143,7 +160,7 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
               thumbColor={isPrimary ? '#5B4FE8' : '#F4F3F0'}
             />
           </View>
-
+ 
           {/* Submit Button */}
           <TouchableOpacity
             style={[
@@ -160,7 +177,7 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
               <Text style={styles.submitButtonText}>{BTN_SUBMIT}</Text>
             )}
           </TouchableOpacity>
-        </BottomSheetView>
+        </BottomSheetScrollView>
       </BottomSheet>
     );
   }

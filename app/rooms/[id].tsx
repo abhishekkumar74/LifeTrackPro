@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Href } from 'expo-router';
@@ -113,6 +114,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   if (isRoomLoading) {
     return (
       <View style={styles.loadingContainer}>
+        <StatusBar barStyle="light-content" />
         <ActivityIndicator size="large" color="#5B4FE8" />
       </View>
     );
@@ -121,7 +123,8 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   if (roomError || !room) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.errorText}>Failed to join study room</Text>
+        <StatusBar barStyle="light-content" />
+        <Text style={styles.errorText}>Room not found</Text>
         <TouchableOpacity style={styles.leaveButton} onPress={handleLeave}>
           <Text style={styles.leaveButtonText}>Leave Room</Text>
         </TouchableOpacity>
@@ -141,6 +144,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <StatusBar barStyle="light-content" />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +24,7 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 import { ArrowLeft, MoreVertical, Plus, X, Sparkles, Check } from 'lucide-react-native';
 import { SubjectPicker } from '@/components/shared/SubjectPicker';
+import { useUiStore } from '@/lib/store/ui.store';
 
 import {
   useNote,
@@ -96,6 +98,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
   // Bottom Sheet Refs
   const pickerSheetRef = useRef<BottomSheet>(null);
   const flashcardSheetRef = useRef<BottomSheet>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   // Picker search filter state
   const [pickerMode, setPickerMode] = useState<'subject' | 'chapter' | null>(null);
@@ -166,6 +169,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
             onError: () => {
               setSaveStatus('SAVED');
               isCreating.current = false;
+              useUiStore.getState().showToast('Save failed', 'error');
             },
           }
         );
@@ -189,6 +193,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
           },
           onError: () => {
             setSaveStatus('SAVED');
+            useUiStore.getState().showToast('Save failed', 'error');
           },
         }
       );
@@ -349,6 +354,22 @@ export default function NoteEditorScreen(): React.JSX.Element {
     setContent(newContent);
   };
 
+  const handleSelectionChange = (e: any) => {
+    const sel = e.nativeEvent.selection;
+    setSelection(sel);
+    
+    // Scroll to cursor position
+    const textBeforeCursor = content.substring(0, sel.start);
+    const lineCount = textBeforeCursor.split('\n').length;
+    // Estimated offset from top of ScrollView: 24px per line + ~180px for offset
+    const estimatedCursorY = lineCount * 24 + 180;
+    
+    scrollRef.current?.scrollTo({
+      y: Math.max(0, estimatedCursorY - 200),
+      animated: true,
+    });
+  };
+
   // Open Flashcard Sheet
   const handleOpenFlashcardSheet = () => {
     if (id === 'new') return;
@@ -431,9 +452,12 @@ export default function NoteEditorScreen(): React.JSX.Element {
 
           {/* Inputs View */}
           <ScrollView
+            ref={scrollRef}
             style={styles.editorScroll}
             contentContainerStyle={styles.editorContent}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={true}
           >
             {/* Note Title Input */}
             <TextInput
@@ -513,11 +537,69 @@ export default function NoteEditorScreen(): React.JSX.Element {
               placeholder="Start writing note body... (Markdown tags supported)"
               placeholderTextColor="#9B9BAF"
               multiline
+              scrollEnabled={false} // Grow dynamically
               textAlignVertical="top"
               onFocus={() => setIsBodyFocused(true)}
               onBlur={() => setIsBodyFocused(false)}
-              onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+              onSelectionChange={handleSelectionChange}
             />
+
+            {/* Tags Badge strip (inside ScrollView) */}
+            <View style={styles.tagsContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.tagsScroll}
+              >
+                {tags.map((tag) => (
+                  <View key={tag} style={styles.tagBadge}>
+                    <Text style={styles.tagText}>#{tag}</Text>
+                    <TouchableOpacity
+                      onPress={() => handleRemoveTag(tag)}
+                      style={styles.tagCloseBtn}
+                      activeOpacity={0.7}
+                    >
+                      <X size={10} color="#5C5C70" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                {isAddingTag ? (
+                  <TextInput
+                    style={styles.addTagInput}
+                    value={newTag}
+                    onChangeText={setNewTag}
+                    placeholder="Tag..."
+                    placeholderTextColor="#9B9BAF"
+                    onSubmitEditing={handleAddTagSubmit}
+                    onBlur={handleAddTagSubmit}
+                    autoFocus
+                    maxLength={20}
+                  />
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => setIsAddingTag(true)}
+                    style={styles.addTagBtn}
+                    activeOpacity={0.7}
+                  >
+                    <Plus size={12} color="#5C5C70" />
+                    <Text style={styles.addTagText}>Add tag</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Linked Flashcard Creator Button */}
+                {id !== 'new' && (
+                  <TouchableOpacity
+                    onPress={handleOpenFlashcardSheet}
+                    style={styles.createFlashcardBtn}
+                    activeOpacity={0.7}
+                  >
+                    <Sparkles size={11} color="#5B4FE8" />
+                    <Text style={styles.createFlashcardBtnText}>Create Card</Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            </View>
 
             {/* Related Notes Section */}
             {relatedNotes.length > 0 && (
@@ -552,9 +634,15 @@ export default function NoteEditorScreen(): React.JSX.Element {
                 </ScrollView>
               </View>
             )}
+
+            {/* Empty space below content to dismiss keyboard on touch */}
+            <View
+              style={{ minHeight: Dimensions.get('window').height * 0.3 }}
+              onTouchStart={Keyboard.dismiss}
+            />
           </ScrollView>
 
-          {/* Formatting Toolbar (shown when body input focused) */}
+          {/* Formatting Toolbar (shown when body input focused - outside ScrollView) */}
           {isBodyFocused && (
             <View style={styles.toolbar}>
               <TouchableOpacity style={styles.toolbarBtn} onPress={() => handleFormatText('bold')}>
@@ -586,63 +674,6 @@ export default function NoteEditorScreen(): React.JSX.Element {
               </TouchableOpacity>
             </View>
           )}
-
-          {/* Bottom Tags strip */}
-          <View style={styles.tagsContainer}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.tagsScroll}
-            >
-              {tags.map((tag) => (
-                <View key={tag} style={styles.tagBadge}>
-                  <Text style={styles.tagText}>#{tag}</Text>
-                  <TouchableOpacity
-                    onPress={() => handleRemoveTag(tag)}
-                    style={styles.tagCloseBtn}
-                    activeOpacity={0.7}
-                  >
-                    <X size={10} color="#5C5C70" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-
-              {isAddingTag ? (
-                <TextInput
-                  style={styles.addTagInput}
-                  value={newTag}
-                  onChangeText={setNewTag}
-                  placeholder="Tag..."
-                  placeholderTextColor="#9B9BAF"
-                  onSubmitEditing={handleAddTagSubmit}
-                  onBlur={handleAddTagSubmit}
-                  autoFocus
-                  maxLength={20}
-                />
-              ) : (
-                <TouchableOpacity
-                  onPress={() => setIsAddingTag(true)}
-                  style={styles.addTagBtn}
-                  activeOpacity={0.7}
-                >
-                  <Plus size={12} color="#5C5C70" />
-                  <Text style={styles.addTagText}>Add tag</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Linked Flashcard Creator Button */}
-              {id !== 'new' && (
-                <TouchableOpacity
-                  onPress={handleOpenFlashcardSheet}
-                  style={styles.createFlashcardBtn}
-                  activeOpacity={0.7}
-                >
-                  <Sparkles size={11} color="#5B4FE8" />
-                  <Text style={styles.createFlashcardBtnText}>Create Card</Text>
-                </TouchableOpacity>
-              )}
-            </ScrollView>
-          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
 
@@ -813,7 +844,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   editorContent: {
-    paddingBottom: 180,
+    paddingBottom: 200,
   },
   titleInput: {
     fontFamily: 'InstrumentSerif',
@@ -915,9 +946,9 @@ const styles = StyleSheet.create({
     color: '#17172A',
     lineHeight: 24,
     paddingHorizontal: 20,
-    paddingVertical: 8,
-    flex: 1,
-    minHeight: 280,
+    paddingTop: 16,
+    paddingBottom: 16,
+    minHeight: 200,
   },
   // Related Notes
   relatedSection: {

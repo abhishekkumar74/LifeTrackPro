@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,12 +17,13 @@ import { router } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { useUiStore } from '@/lib/store/ui.store';
+import { tabScrollRefs } from '@/lib/utils/tab-scroll';
 import { UserProfile, UserCategory } from '@/types/app.types';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ArrowLeft,
-  Edit2,
   Check,
   Plus,
   Minus,
@@ -30,20 +31,18 @@ import {
   ChevronRight,
   Shield,
   FileText,
-  Download,
-  Trash2,
+  Upload,
+  MessageSquare,
 } from 'lucide-react-native';
 import * as Notifications from 'expo-notifications';
 import {
-  requestNotificationPermission,
   scheduleMorningBrief,
   scheduleStreakAlert,
   cancelAllNotifications,
 } from '@/lib/notifications';
-
-const CATEGORIES: UserCategory[] = ['student', 'employee', 'creator', 'entrepreneur', 'educator', 'aspirant'];
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
+const CATEGORIES: UserCategory[] = ['student', 'employee', 'creator', 'entrepreneur', 'educator', 'aspirant'];
 const PEAK_TIMES: ('morning' | 'afternoon' | 'night')[] = ['morning', 'afternoon', 'night'];
 const DURATIONS = [25, 50, 90];
 
@@ -51,41 +50,62 @@ export default function ProfileScreen(): React.JSX.Element {
   useAndroidBackHandler();
   const queryClient = useQueryClient();
   const { profile, setProfile } = useAuthStore();
+  const showToast = useUiStore((state) => state.showToast);
+
+  // Tab scroll registration
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    tabScrollRefs['profile'] = scrollRef;
+    return () => {
+      delete tabScrollRefs['profile'];
+    };
+  }, []);
 
   // Statistics queries
-  const { data: totalFocusMin } = useQuery({
+  const { data: totalFocusMin, isLoading: focusLoading } = useQuery({
     queryKey: ['profileFocusTime'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('focus_sessions').select('duration_min');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const { data, error } = await supabase
+        .from('focus_sessions')
+        .select('duration_min')
+        .eq('user_id', session.user.id);
       if (error) throw error;
       return (data || []).reduce((sum, fs) => sum + fs.duration_min, 0);
     },
   });
 
-  const { data: goalsCount } = useQuery({
+  const { data: goalsCount, isLoading: goalsLoading } = useQuery({
     queryKey: ['profileGoalsCount'],
     queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
       const { count, error } = await supabase
         .from('goals')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id);
       if (error) throw error;
       return count || 0;
     },
   });
 
-  const { data: habitStreak } = useQuery({
+  const { data: habitStreak, isLoading: streakLoading } = useQuery({
     queryKey: ['profileHabitStreak'],
     queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
       const { data: logs, error } = await supabase
         .from('habit_logs')
         .select('date, done')
+        .eq('user_id', session.user.id)
         .eq('done', true);
       if (error) throw error;
 
       const doneDates = new Set((logs || []).map((l) => l.date));
       let streak = 0;
 
-      const formatDateStr = (d: Date) => d.toISOString().split('T')[0];
+      const formatDateStr = (d: Date) => d.toLocaleDateString('en-CA');
       const checkDate = new Date();
       const checkDateTodayStr = formatDateStr(checkDate);
       checkDate.setDate(checkDate.getDate() - 1);
@@ -121,7 +141,15 @@ export default function ProfileScreen(): React.JSX.Element {
     },
   });
 
-  const totalFocusHours = totalFocusMin ? Math.round(totalFocusMin / 60) : 0;
+  const focusHoursVal = (totalFocusMin && totalFocusMin > 0)
+    ? (() => {
+        const val = (totalFocusMin / 60.0).toFixed(1);
+        return val === '0.0' ? '—' : val;
+      })()
+    : '—';
+
+  const goalsCountVal = (goalsCount && goalsCount > 0) ? String(goalsCount) : '—';
+  const habitStreakVal = (habitStreak && habitStreak > 0) ? String(habitStreak) : '—';
 
   // Local Settings States
   const [isEditingName, setIsEditingName] = useState(false);
@@ -156,6 +184,16 @@ export default function ProfileScreen(): React.JSX.Element {
     loadNotificationSettings();
   }, []);
 
+  // Sync state if profile loads asynchronously
+  useEffect(() => {
+    if (profile) {
+      setName(profile.name || '');
+      setDailyHours(profile.daily_hours || 4);
+      setCategory(profile.category || 'student');
+      setPeakTime(profile.peak_time || 'morning');
+    }
+  }, [profile]);
+
   // Profile update helper
   const updateProfileMutation = useMutation({
     mutationFn: async (updates: Partial<UserProfile>) => {
@@ -180,8 +218,18 @@ export default function ProfileScreen(): React.JSX.Element {
 
   const handleSaveName = () => {
     if (!name.trim()) return;
-    updateProfileMutation.mutate({ name: name.trim() });
-    setIsEditingName(false);
+    updateProfileMutation.mutate(
+      { name: name.trim() },
+      {
+        onSuccess: () => {
+          showToast('Saved ✓', 'success');
+          setIsEditingName(false);
+        },
+        onError: () => {
+          showToast('Failed to update name', 'error');
+        },
+      }
+    );
   };
 
   const handleDailyHoursChange = (change: number) => {
@@ -210,7 +258,6 @@ export default function ProfileScreen(): React.JSX.Element {
     setMorningBriefEnabled(value);
     await AsyncStorage.setItem('pref_morning_brief', String(value));
     if (value) {
-      // Find top task if available or schedule general brief
       const { data: tasks } = await supabase
         .from('tasks')
         .select('title')
@@ -236,7 +283,6 @@ export default function ProfileScreen(): React.JSX.Element {
   const handleToggleHabitReminders = async (value: boolean) => {
     setHabitRemindersEnabled(value);
     await AsyncStorage.setItem('pref_habit_reminders', String(value));
-    // Additional custom logic or scheduling for habit reminders can be added here
   };
 
   // Export User Data
@@ -285,49 +331,6 @@ export default function ProfileScreen(): React.JSX.Element {
     }
   };
 
-  // Delete User Account
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete Account',
-      'Are you sure you want to delete your account? This action is permanent and cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Final Confirmation',
-              'This will erase all your stats, study rooms, goals, habits, and notes forever. Proceed?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Erase Everything',
-                  style: 'destructive',
-                  onPress: async () => {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session) {
-                      const { error } = await supabase
-                        .from('profiles')
-                        .delete()
-                        .eq('id', session.user.id);
-                      if (error) {
-                        Alert.alert('Error deleting account', error.message);
-                        return;
-                      }
-                      await cancelAllNotifications();
-                      await supabase.auth.signOut();
-                    }
-                  },
-                },
-              ]
-            );
-          },
-        },
-      ]
-    );
-  };
-
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -336,17 +339,25 @@ export default function ProfileScreen(): React.JSX.Element {
         style: 'destructive',
         onPress: async () => {
           await cancelAllNotifications();
-          await supabase.auth.signOut();
+          await useAuthStore.getState().signOut();
         },
       },
     ]);
+  };
+
+  const getCategoryDisplay = () => {
+    const cat = profile?.category ? profile.category.charAt(0).toUpperCase() + profile.category.slice(1) : 'Student';
+    const subCats = profile?.sub_category && profile.sub_category.length > 0
+      ? profile.sub_category.join(', ')
+      : '';
+    return subCats ? `${cat} · ${subCats}` : cat;
   };
 
   const initials = profile?.name ? profile.name.trim().charAt(0).toUpperCase() : 'U';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent}>
         {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -362,53 +373,45 @@ export default function ProfileScreen(): React.JSX.Element {
               <Text style={styles.avatarText}>{initials}</Text>
             </View>
             <View style={styles.headerNameRow}>
-              {isEditingName ? (
-                <View style={styles.inlineEditContainer}>
-                  <TextInput
-                    style={styles.nameInput}
-                    value={name}
-                    onChangeText={setName}
-                    autoFocus
-                  />
-                  <TouchableOpacity style={styles.inlineSaveButton} onPress={handleSaveName}>
-                    <Check size={16} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.inlineEditContainer}>
-                  <Text style={styles.profileName}>{profile?.name}</Text>
-                  <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={() => setIsEditingName(true)}
-                  >
-                    <Edit2 size={14} color="rgba(255,255,255,0.6)" />
-                  </TouchableOpacity>
-                </View>
-              )}
+              <Text style={styles.profileName}>{profile?.name || 'Achiever'}</Text>
             </View>
 
-            <View style={styles.categoryPill}>
-              <Text style={styles.categoryPillText}>{profile?.category}</Text>
-            </View>
-
-            <Text style={styles.editPhotoText}>Edit Photo (Future feature)</Text>
+            <TouchableOpacity
+              style={styles.categoryPill}
+              onPress={() => Alert.alert('Update Category', 'Updating your category and sub-category is a future feature coming soon!')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.categoryPillText}>{getCategoryDisplay()}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* STATS SUMMARY ROW */}
         <View style={styles.statsRow}>
           <View style={styles.statsCard}>
-            <Text style={styles.statsNum}>{totalFocusHours}</Text>
+            {focusLoading ? (
+              <View style={styles.skeletonBlock} />
+            ) : (
+              <Text style={styles.statsNum}>{focusHoursVal}</Text>
+            )}
             <Text style={styles.statsLabel}>Focus Hours</Text>
           </View>
 
           <View style={styles.statsCard}>
-            <Text style={styles.statsNum}>{goalsCount}</Text>
+            {goalsLoading ? (
+              <View style={styles.skeletonBlock} />
+            ) : (
+              <Text style={styles.statsNum}>{goalsCountVal}</Text>
+            )}
             <Text style={styles.statsLabel}>Goals Created</Text>
           </View>
 
           <View style={styles.statsCard}>
-            <Text style={styles.statsNum}>{habitStreak || 0}</Text>
+            {streakLoading ? (
+              <View style={styles.skeletonBlock} />
+            ) : (
+              <Text style={styles.statsNum}>{habitStreakVal}</Text>
+            )}
             <Text style={styles.statsLabel}>Habit Streak</Text>
           </View>
         </View>
@@ -416,6 +419,47 @@ export default function ProfileScreen(): React.JSX.Element {
         {/* SETTINGS SECTIONS */}
         <View style={styles.settingsSection}>
           <Text style={styles.sectionTitle}>Account</Text>
+
+          {/* Inline Edit Name Row */}
+          {isEditingName ? (
+            <View style={styles.row}>
+              <View style={styles.rowLabelCol}>
+                <Text style={styles.rowTitle}>Name</Text>
+                <TextInput
+                  style={styles.nameRowInput}
+                  value={name}
+                  onChangeText={setName}
+                  autoFocus
+                  onBlur={() => {
+                    setTimeout(() => {
+                      setIsEditingName(false);
+                    }, 200);
+                  }}
+                />
+              </View>
+              <TouchableOpacity style={styles.inlineSaveButton} onPress={handleSaveName}>
+                <Check size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.row}
+              onPress={() => {
+                setName(profile?.name || '');
+                setIsEditingName(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.rowLabelCol}>
+                <Text style={styles.rowTitle}>Name</Text>
+                <Text style={styles.rowSubtitle}>Tap to edit your profile name</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.rowVal}>{profile?.name || 'Achiever'}</Text>
+                <ChevronRight size={16} color="#9B9BAF" />
+              </View>
+            </TouchableOpacity>
+          )}
 
           {/* Stepper Daily hours */}
           <View style={styles.row}>
@@ -532,24 +576,40 @@ export default function ProfileScreen(): React.JSX.Element {
           </View>
         </View>
 
-        {/* DATA SECTION */}
+        {/* DATA & PRIVACY SECTION */}
         <View style={styles.settingsSection}>
-          <Text style={styles.sectionTitle}>Data</Text>
+          <Text style={styles.sectionTitle}>Data & Privacy</Text>
 
           <TouchableOpacity style={styles.row} onPress={handleExportData} activeOpacity={0.7}>
             <View style={styles.rowLabelCol}>
-              <Text style={styles.rowTitle}>Export my data</Text>
-              <Text style={styles.rowSubtitle}>Download all metrics in JSON format</Text>
+              <Text style={styles.rowTitle}>Request Data Export</Text>
+              <Text style={styles.rowSubtitle}>Get a copy of all your data</Text>
             </View>
-            <Download size={18} color="#9B9BAF" />
+            <Upload size={18} color="#9B9BAF" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.row} onPress={handleDeleteAccount} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => Linking.openURL('mailto:support@lifetrackpro.com')}
+            activeOpacity={0.7}
+          >
             <View style={styles.rowLabelCol}>
-              <Text style={[styles.rowTitle, { color: '#E85858' }]}>Delete account</Text>
-              <Text style={styles.rowSubtitle}>Irreversibly delete account and data</Text>
+              <Text style={styles.rowTitle}>Contact Support</Text>
+              <Text style={styles.rowSubtitle}>Report an issue or get help</Text>
             </View>
-            <Trash2 size={18} color="#E85858" />
+            <MessageSquare size={18} color="#9B9BAF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => Linking.openURL('https://lifetrackpro.app/privacy')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.rowLabelCol}>
+              <Text style={styles.rowTitle}>Privacy Policy</Text>
+              <Text style={styles.rowSubtitle}>View how we protect your information</Text>
+            </View>
+            <Shield size={18} color="#9B9BAF" />
           </TouchableOpacity>
         </View>
 
@@ -561,19 +621,8 @@ export default function ProfileScreen(): React.JSX.Element {
             <View style={styles.rowLabelCol}>
               <Text style={styles.rowTitle}>Version</Text>
             </View>
-            <Text style={styles.rowVal}>1.0.0</Text>
+            <Text style={styles.rowVal}>1.0.1</Text>
           </View>
-
-          <TouchableOpacity
-            style={styles.row}
-            onPress={() => Linking.openURL('https://lifetrackpro.app/privacy')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.rowLabelCol}>
-              <Text style={styles.rowTitle}>Privacy Policy</Text>
-            </View>
-            <Shield size={18} color="#9B9BAF" />
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.row}
@@ -651,35 +700,6 @@ const styles = StyleSheet.create({
     fontFamily: 'InstrumentSerif',
     fontSize: 24,
     color: '#FFFFFF',
-    marginRight: 8,
-  },
-  editButton: {
-    padding: 4,
-  },
-  inlineEditContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '80%',
-    justifyContent: 'center',
-  },
-  nameInput: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    color: '#FFFFFF',
-    fontFamily: 'DMSans',
-    fontSize: 16,
-    flex: 1,
-    marginRight: 8,
-  },
-  inlineSaveButton: {
-    backgroundColor: '#5B4FE8',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   categoryPill: {
     backgroundColor: '#EAE8FD',
@@ -695,11 +715,6 @@ const styles = StyleSheet.create({
     color: '#5B4FE8',
     textTransform: 'capitalize',
   },
-  editPhotoText: {
-    fontFamily: 'DMSans',
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
-  },
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
@@ -713,6 +728,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    height: 80,
     borderWidth: 1,
     borderColor: '#E8E7E3',
     shadowColor: '#17172A',
@@ -733,6 +750,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9B9BAF',
     textAlign: 'center',
+  },
+  skeletonBlock: {
+    width: 45,
+    height: 24,
+    backgroundColor: '#EAEAEF',
+    borderRadius: 4,
+    marginBottom: 4,
   },
   settingsSection: {
     backgroundColor: '#FFFFFF',
@@ -781,6 +805,27 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans-Medium',
     fontSize: 14,
     color: '#5C5C70',
+  },
+  nameRowInput: {
+    backgroundColor: '#F7F6F3',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    color: '#17172A',
+    fontFamily: 'DMSans',
+    fontSize: 14,
+    marginTop: 6,
+    width: '100%',
+  },
+  inlineSaveButton: {
+    backgroundColor: '#5B4FE8',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   stepperContainer: {
     flexDirection: 'row',

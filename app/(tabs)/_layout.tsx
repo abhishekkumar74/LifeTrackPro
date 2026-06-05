@@ -2,7 +2,8 @@ import React from 'react';
 import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Home, Target, Timer, BookOpen, BarChart2 } from 'lucide-react-native';
-
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { tabScrollRefs, scrollToTop } from '@/lib/utils/tab-scroll';
 import { useDueRevisions } from '@/lib/hooks/use-notes';
 
 const ACTIVE_COLOR = '#5B4FE8';
@@ -11,6 +12,7 @@ const TAB_BG_COLOR = '#FFFFFF';
 const BORDER_COLOR = '#E8E7E3';
 
 export default function TabLayout(): React.JSX.Element {
+  const insets = useSafeAreaInsets();
   const dueRevisionsQuery = useDueRevisions();
   const dueCount = dueRevisionsQuery.data?.length || 0;
 
@@ -29,8 +31,8 @@ export default function TabLayout(): React.JSX.Element {
           backgroundColor: TAB_BG_COLOR,
           borderTopWidth: 1,
           borderTopColor: BORDER_COLOR,
-          height: Platform.OS === 'ios' ? 84 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+          height: 60 + (insets.bottom || 0),
+          paddingBottom: insets.bottom || 8,
           paddingTop: 8,
           elevation: 0, // remove Android shadow
           shadowOpacity: 0, // remove iOS shadow
@@ -45,6 +47,13 @@ export default function TabLayout(): React.JSX.Element {
             <Home size={20} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            if (navigation.isFocused()) {
+              scrollToTop(tabScrollRefs['home']);
+            }
+          },
+        })}
       />
       <Tabs.Screen
         name="goals"
@@ -54,6 +63,13 @@ export default function TabLayout(): React.JSX.Element {
             <Target size={20} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            if (navigation.isFocused()) {
+              scrollToTop(tabScrollRefs['goals']);
+            }
+          },
+        })}
       />
       <Tabs.Screen
         name="focus"
@@ -79,6 +95,13 @@ export default function TabLayout(): React.JSX.Element {
             fontFamily: 'DMSans-Bold',
           },
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            if (navigation.isFocused()) {
+              scrollToTop(tabScrollRefs['learn']);
+            }
+          },
+        })}
       />
       <Tabs.Screen
         name="stats"
@@ -88,6 +111,13 @@ export default function TabLayout(): React.JSX.Element {
             <BarChart2 size={20} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            if (navigation.isFocused()) {
+              scrollToTop(tabScrollRefs['stats']);
+            }
+          },
+        })}
       />
     </Tabs>
   );

@@ -13,7 +13,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import LoadingScreen from '@/components/shared/LoadingScreen';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Toast } from '@/components/shared/Toast';
-import { Platform, UIManager } from 'react-native';
+import { Platform, UIManager, View, Text, ActivityIndicator } from 'react-native';
 import { UserProfile } from '@/types/app.types';
 import { requestNotificationPermission, useNotificationResponse } from '@/lib/notifications';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
@@ -34,6 +34,17 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+function BrandedLoadingScreen() {
+  return (
+    <View style={{ flex: 1, backgroundColor: '#F7F6F3', justifyContent: 'center', alignItems: 'center' }}>
+      <Text style={{ fontFamily: 'InstrumentSerif', fontSize: 32, color: '#17172A' }}>
+        LifeTrack Pro
+      </Text>
+      <ActivityIndicator color="#5B4FE8" style={{ marginTop: 24 }} />
+    </View>
+  );
+}
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, profile, isLoading } = useAuthStore();
@@ -79,7 +90,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [session, profile, segments]);
 
   if (isLoading) {
-    return <LoadingScreen />;
+    return <BrandedLoadingScreen />;
   }
 
   return <>{children}</>;
@@ -273,7 +284,7 @@ export default function RootLayout() {
   }, [fontsLoaded, authInitialized]);
 
   if (!fontsLoaded || !authInitialized) {
-    return <LoadingScreen />;
+    return <BrandedLoadingScreen />;
   }
 
   return (

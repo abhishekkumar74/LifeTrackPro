@@ -7,11 +7,14 @@ import {
   TextInput,
   StatusBar,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase/client';
+import { useUiStore } from '@/lib/store/ui.store';
 
 // Custom Hooks & Stores
 import { useFocusStore, SoundKey, FocusPreset } from '@/lib/store/focus.store';
@@ -133,6 +136,8 @@ export default function FocusScreen(): React.JSX.Element {
       // Trigger success haptics
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+      useUiStore.getState().showToast('Session saved!', 'success');
+
       setShowSummary(false);
       resetSession();
       await ambient.stop();
@@ -230,7 +235,11 @@ export default function FocusScreen(): React.JSX.Element {
       <View style={styles.circle1} pointerEvents="none" />
       <View style={styles.circle2} pointerEvents="none" />
 
-      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         {/* Top bar (Section A) */}
         <View style={styles.topBar}>
           <TouchableOpacity
@@ -393,7 +402,8 @@ export default function FocusScreen(): React.JSX.Element {
             blockedCount={blockedAppsCount}
           />
         </View>
-      </SafeAreaView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
 
       {/* Completion Summary Sheet */}
       <SessionSummary

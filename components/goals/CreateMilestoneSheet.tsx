@@ -6,15 +6,15 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Keyboard,
-  ScrollView,
   Platform,
 } from 'react-native';
 import BottomSheet, {
-  BottomSheetView,
   BottomSheetTextInput,
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
+  BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
+import { useUiStore } from '@/lib/store/ui.store';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useCreateMilestone } from '@/lib/hooks/use-milestones';
 import { formatDeadline } from '@/lib/utils/date';
@@ -84,6 +84,7 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
         {
           onSuccess: () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            useUiStore.getState().showToast('Milestone created!', 'success');
             setTitle('');
             setDueDate(null);
             setSelectedSubject(null);
@@ -131,7 +132,7 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
         onChange={handleSheetChange}
         keyboardBehavior="interactive"
       >
-        <ScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
           <Text style={styles.sheetHeader}>New Milestone</Text>
 
           {/* Milestone Title */}
@@ -197,7 +198,7 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
               <Text style={styles.submitButtonText}>Add Milestone</Text>
             )}
           </TouchableOpacity>
-        </ScrollView>
+        </BottomSheetScrollView>
       </BottomSheet>
     );
   }

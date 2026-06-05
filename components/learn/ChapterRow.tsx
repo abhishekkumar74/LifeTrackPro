@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   LayoutAnimation,
   Alert,
+  ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import { ChevronRight, ChevronDown } from 'lucide-react-native';
 import { SyllabusTopic, SyllabusStatus } from '@/types/app.types';
@@ -21,6 +23,7 @@ interface ChapterRowProps {
   onToggleSelectTopic: (topicId: string) => void;
   onLongPressTopic: (topicId: string) => void;
   searchQuery?: string;
+  subjectColor?: string;
 }
 
 // Simple escape regex helper
@@ -65,17 +68,47 @@ export const getStatusSymbol = (status: SyllabusStatus): string => {
   }
 };
 
-// Map status to color dots
-export const getStatusColor = (status: SyllabusStatus): string => {
+// Map status to colors
+export const getStatusBgColor = (status: SyllabusStatus): string => {
   switch (status) {
     case 'not_started':
-      return '#E8E7E3';
+      return '#F2F1EE';
+    case 'in_progress':
+      return '#EAE8FD';
+    case 'done':
+      return '#E2F9F3';
+    case 'needs_revision':
+      return '#FEF3DC';
+    default:
+      return '#F2F1EE';
+  }
+};
+
+export const getStatusTextColor = (status: SyllabusStatus): string => {
+  switch (status) {
+    case 'not_started':
+      return '#5C5C70';
     case 'in_progress':
       return '#5B4FE8';
     case 'done':
       return '#00B894';
     case 'needs_revision':
       return '#E8A020';
+    default:
+      return '#5C5C70';
+  }
+};
+
+export const getStatusBorderColor = (status: SyllabusStatus): string => {
+  switch (status) {
+    case 'not_started':
+      return '#E8E7E3';
+    case 'in_progress':
+      return '#D6D1F9';
+    case 'done':
+      return '#B3F2E3';
+    case 'needs_revision':
+      return '#FCE8C3';
     default:
       return '#E8E7E3';
   }
@@ -92,9 +125,11 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
   onToggleSelectTopic,
   onLongPressTopic,
   searchQuery = '',
+  subjectColor = '#5B4FE8',
 }) => {
   const doneCount = topics.filter((t) => t.status === 'done').length;
   const totalCount = topics.length;
+  const completionPercent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
   const handleTogglePress = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -107,18 +142,37 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
       return;
     }
 
-    Alert.alert(
-      'Update Status',
-      `Set progress status for "${topic.topic}":`,
-      [
-        { text: 'Not Started (—)', onPress: () => onTopicStatusChange(topic.id, 'not_started') },
-        { text: 'In Progress (📖)', onPress: () => onTopicStatusChange(topic.id, 'in_progress') },
-        { text: 'Done (✓)', onPress: () => onTopicStatusChange(topic.id, 'done') },
-        { text: 'Needs Revision (↺)', onPress: () => onTopicStatusChange(topic.id, 'needs_revision') },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
+    const options = ['Cancel', 'Not Started', 'In Progress', 'Done ✓', 'Needs Revision ↺'];
+    const statusValues: SyllabusStatus[] = ['not_started', 'in_progress', 'done', 'needs_revision'];
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 0,
+          title: 'Update Status',
+          message: `Set progress status for "${topic.topic}":`,
+        },
+        (buttonIndex) => {
+          if (buttonIndex > 0) {
+            onTopicStatusChange(topic.id, statusValues[buttonIndex - 1]);
+          }
+        }
+      );
+    } else {
+      Alert.alert(
+        'Update Status',
+        `Set progress status for "${topic.topic}":`,
+        [
+          { text: 'Not Started', onPress: () => onTopicStatusChange(topic.id, 'not_started') },
+          { text: 'In Progress', onPress: () => onTopicStatusChange(topic.id, 'in_progress') },
+          { text: 'Done ✓', onPress: () => onTopicStatusChange(topic.id, 'done') },
+          { text: 'Needs Revision ↺', onPress: () => onTopicStatusChange(topic.id, 'needs_revision') },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+        { cancelable: true }
+      );
+    }
   };
 
   return (
@@ -129,16 +183,30 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
         style={styles.chapterHeader}
         activeOpacity={0.7}
       >
-        <View style={styles.leftRow}>
-          {isExpanded ? (
-            <ChevronDown size={14} color="#5C5C70" style={styles.chevron} />
-          ) : (
-            <ChevronRight size={14} color="#5C5C70" style={styles.chevron} />
-          )}
-          <HighlightText text={chapter} query={searchQuery} style={styles.chapterText} />
+        <View style={styles.chapterHeaderTop}>
+          <View style={styles.leftRow}>
+            {isExpanded ? (
+              <ChevronDown size={14} color="#5C5C70" style={styles.chevron} />
+            ) : (
+              <ChevronRight size={14} color="#5C5C70" style={styles.chevron} />
+            )}
+            <HighlightText text={chapter} query={searchQuery} style={styles.chapterText} />
+          </View>
+          <Text style={styles.countText}>{`${doneCount} / ${totalCount} topics complete`}</Text>
         </View>
 
-        <Text style={styles.countText}>{`${doneCount}/${totalCount}`}</Text>
+        {/* Mini progress bar */}
+        <View style={styles.miniProgressContainer}>
+          <View
+            style={[
+              styles.miniProgressBarFill,
+              {
+                backgroundColor: subjectColor,
+                width: `${completionPercent}%`,
+              },
+            ]}
+          />
+        </View>
       </TouchableOpacity>
 
       {/* Topics list */}
@@ -146,7 +214,9 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
         <View style={styles.topicsList}>
           {topics.map((topic) => {
             const isSelected = selectedTopicIds.includes(topic.id);
-            const statusColor = getStatusColor(topic.status as SyllabusStatus);
+            const statusBgColor = getStatusBgColor(topic.status as SyllabusStatus);
+            const statusTextColor = getStatusTextColor(topic.status as SyllabusStatus);
+            const statusBorderColor = getStatusBorderColor(topic.status as SyllabusStatus);
 
             return (
               <TouchableOpacity
@@ -156,7 +226,6 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
                   if (isMultiSelectMode) {
                     onToggleSelectTopic(topic.id);
                   } else {
-                    // Normal tap selects status
                     handleStatusSelectorPress(topic);
                   }
                 }}
@@ -178,7 +247,7 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
                   ) : (
                     /* Normal status dot */
                     <View
-                      style={[styles.statusDot, { backgroundColor: statusColor }]}
+                      style={[styles.statusDot, { backgroundColor: statusTextColor }]}
                     />
                   )}
                   <HighlightText
@@ -191,11 +260,17 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
                 {/* Status indicator pill */}
                 {!isMultiSelectMode && (
                   <TouchableOpacity
-                    style={styles.statusPill}
+                    style={[
+                      styles.statusPill,
+                      {
+                        backgroundColor: statusBgColor,
+                        borderColor: statusBorderColor,
+                      },
+                    ]}
                     onPress={() => handleStatusSelectorPress(topic)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.statusSymbolText}>
+                    <Text style={[styles.statusSymbolText, { color: statusTextColor }]}>
                       {getStatusSymbol(topic.status as SyllabusStatus)}
                     </Text>
                   </TouchableOpacity>
@@ -214,13 +289,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   chapterHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: '#F2F1EE',
+    backgroundColor: '#FFFFFF',
+  },
+  chapterHeaderTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
   leftRow: {
     flexDirection: 'row',
@@ -241,6 +320,17 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans',
     fontSize: 12,
     color: '#9B9BAF',
+  },
+  miniProgressContainer: {
+    height: 3,
+    backgroundColor: '#E8E7E3',
+    borderRadius: 1.5,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  miniProgressBarFill: {
+    height: '100%',
+    borderRadius: 1.5,
   },
   topicsList: {
     backgroundColor: '#FAF9F6',
@@ -301,20 +391,17 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   statusPill: {
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E8E7E3',
     borderRadius: 12,
-    minWidth: 28,
+    minWidth: 32,
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
   },
   statusSymbolText: {
     fontSize: 11,
-    color: '#5C5C70',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   highlightTextMatched: {
     backgroundColor: '#FFEB3B',
@@ -322,4 +409,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
+
 export default ChapterRow;

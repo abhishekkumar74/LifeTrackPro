@@ -1,6 +1,6 @@
-import { Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase/client';
+import { useUiStore } from '@/lib/store/ui.store';
 
 interface ToggleHabitParams {
   habitId: string;
@@ -60,11 +60,8 @@ export function useToggleHabit() {
       // Rollback optimistic state change
       onOptimisticUpdate(completedToday);
 
-      // Show alert message
-      Alert.alert(
-        'Failed to update habit',
-        'Please check your internet connection and try again.'
-      );
+      // Show toast error message
+      useUiStore.getState().showToast('Failed to update habit', 'error');
     }
   };
 

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, RefreshControl, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { tabScrollRefs } from '@/lib/utils/tab-scroll';
 
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useTodayStats } from '@/lib/hooks/use-today-stats';
@@ -33,6 +33,15 @@ export default function HomeDashboardScreen(): React.JSX.Element {
 
   const [taskSheetVisible, setTaskSheetVisible] = useState(false);
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false);
+
+  // Tab scroll registration
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    tabScrollRefs['home'] = scrollRef;
+    return () => {
+      delete tabScrollRefs['home'];
+    };
+  }, []);
 
   // Combine auth profile name and default fallback
   const userName = profile?.name || 'Achiever';
@@ -77,7 +86,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <StatusBar style={STATUS_BAR_STYLE} />
+      <StatusBar barStyle="dark-content" />
 
       {/* Sticky Home Header */}
       <HomeHeader
@@ -88,6 +97,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
 
       {/* Scrollable Dashboard zones */}
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={

@@ -9,8 +9,11 @@ import {
   RefreshControl,
   Dimensions,
   Share,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRef, useEffect } from 'react';
+import { tabScrollRefs } from '@/lib/utils/tab-scroll';
 import {
   Calendar,
   CheckSquare,
@@ -64,6 +67,15 @@ export default function StatsScreen(): React.JSX.Element {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('week');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
+
+  // Tab scroll registration
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    tabScrollRefs['stats'] = scrollRef;
+    return () => {
+      delete tabScrollRefs['stats'];
+    };
+  }, []);
 
   // Enhanced Stats Query
   const enhancedStatsQuery = useEnhancedStats();
@@ -409,6 +421,7 @@ Stay focused, track your goals! 🚀`;
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* Header Block */}
         <View style={styles.header}>
@@ -435,6 +448,7 @@ Stay focused, track your goals! 🚀`;
         </View>
 
         <ScrollView
+          ref={scrollRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
           refreshControl={
