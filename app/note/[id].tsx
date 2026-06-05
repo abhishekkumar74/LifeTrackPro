@@ -249,7 +249,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
 
   const handleAddTagSubmit = () => {
     const trimmed = newTag.trim().toLowerCase();
-    if (trimmed && !tags.includes(trimmed)) {
+    if (trimmed && trimmed.length <= 30 && tags.length < 10 && !tags.includes(trimmed)) {
       setTags([...tags, trimmed]);
     }
     setNewTag('');
@@ -467,7 +467,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
               placeholder="Note title..."
               placeholderTextColor="#9B9BAF"
               multiline={false}
-              maxLength={100}
+              maxLength={200}
               autoFocus={id === 'new'}
             />
 
@@ -574,7 +574,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
                     onSubmitEditing={handleAddTagSubmit}
                     onBlur={handleAddTagSubmit}
                     autoFocus
-                    maxLength={20}
+                    maxLength={30}
                   />
                 ) : (
                   <TouchableOpacity

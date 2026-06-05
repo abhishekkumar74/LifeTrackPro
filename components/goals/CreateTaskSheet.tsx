@@ -81,13 +81,17 @@ export const CreateTaskSheet = React.forwardRef<BottomSheet, CreateTaskSheetProp
     }, []);
 
     const handleCreate = () => {
-      if (!title.trim()) return;
+      const trimmedTitle = title.trim();
+      if (trimmedTitle.length === 0) return;
+      if (trimmedTitle.length > 100) return;
 
       const formattedDueDate = dueDate ? dueDate.toISOString().split('T')[0] : null;
+      const sanitizedTitle = trimmedTitle.replace(/[<>"';&]/g, '').trim();
+      if (sanitizedTitle.length === 0) return;
 
       createTaskMutation.mutate(
         {
-          title: title.trim(),
+          title: sanitizedTitle,
           subject: subject === 'Other' ? null : subject,
           priority,
           due_date: formattedDueDate,
@@ -154,6 +158,7 @@ export const CreateTaskSheet = React.forwardRef<BottomSheet, CreateTaskSheetProp
             placeholderTextColor="#9B9BAF"
             value={title}
             onChangeText={setTitle}
+            maxLength={100}
           />
 
           {/* Subject Selector */}

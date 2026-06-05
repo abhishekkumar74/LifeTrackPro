@@ -234,7 +234,9 @@ export default function OnboardingScreen(): React.JSX.Element {
 
       if (goalError) {
         // Log critical insertion error
-        console.error('Goal configuration insertion failed:', goalError);
+        if (__DEV__) {
+          console.error('Goal configuration insertion failed:', goalError);
+        }
         throw new Error(`Goal configuration failed: ${goalError.message}`);
       }
 
@@ -246,7 +248,9 @@ export default function OnboardingScreen(): React.JSX.Element {
           .eq('user_id', user.id);
 
         if (countError) {
-          console.error('Failed to check existing habits:', countError);
+          if (__DEV__) {
+            console.error('Failed to check existing habits:', countError);
+          }
         } else if (count === 0) {
           const defaultHabits = [
             { emoji: '⏰', title: 'Wake up on time',    order_index: 0 },
@@ -266,11 +270,15 @@ export default function OnboardingScreen(): React.JSX.Element {
           );
 
           if (seedError) {
-            console.error('Failed to seed default habits:', seedError);
+            if (__DEV__) {
+              console.error('Failed to seed default habits:', seedError);
+            }
           }
         }
       } catch (err) {
-        console.error('Unexpected error seeding habits:', err);
+        if (__DEV__) {
+          console.error('Unexpected error seeding habits:', err);
+        }
       }
 
       // On onboarding complete success
@@ -280,7 +288,9 @@ export default function OnboardingScreen(): React.JSX.Element {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to finalize profile setup.';
       setErrorMessage(msg);
-      console.error('Onboarding flow transaction failed:', err);
+      if (__DEV__) {
+        console.error('Onboarding flow transaction failed:', err);
+      }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setIsLoading(false);

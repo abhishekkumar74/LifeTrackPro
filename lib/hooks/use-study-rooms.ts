@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { StudyRoom } from '@/types/app.types';
@@ -247,7 +247,7 @@ export function useRoomChat(roomId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const { profile } = useAuthStore();
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
-  const [lastSentTime, setLastSentTime] = useState<number>(0);
+  const lastMessageTime = useRef<number>(0);
 
   useEffect(() => {
     const chatChannel = supabase.channel(`room_chat:${roomId}`, {
@@ -275,20 +275,43 @@ export function useRoomChat(roomId: string) {
   const sendMessage = async (text: string) => {
     if (!profile || !channel) return;
 
+    // 1. Must be authenticated
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // 2. Trim and validate not empty
     const trimmed = text.trim();
-    if (!trimmed || trimmed.length > 200) return;
-    if (trimmed.includes('http')) return;
+    if (!trimmed || trimmed.length === 0) return;
 
+    // 3. Max length
+    if (trimmed.length > 200) return;
+
+    // 4. Block URLs (prevent phishing)
+    const urlPattern = /https?:\/\/|www\.|\.com|\.in|\.net|\.org/i;
+    if (urlPattern.test(trimmed)) {
+      return; // Silently reject
+    }
+
+    // 5. Rate limiting (client-side)
     const now = Date.now();
-    if (now - lastSentTime < 2000) return;
+    if (now - lastMessageTime.current < 2000) {
+      return; // Max 1 message per 2 seconds
+    }
+    lastMessageTime.current = now;
 
-    const uuid = () => Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // 6. Sanitize: remove any HTML-like chars
+    const sanitized = trimmed.replace(/[<>]/g, '').trim();
+    if (!sanitized) return;
+
+    const generateId = () => Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const userInitials = profile.name ? profile.name.charAt(0).toUpperCase() : 'U';
+
     const messagePayload: ChatMessage = {
-      id: uuid(),
-      userId: profile.id,
-      userName: profile.name,
-      userInitials: profile.name[0] ? profile.name[0].toUpperCase() : 'U',
-      text: trimmed,
+      id: generateId(),
+      userId: user.id,
+      userName: userInitials, // Never send full name
+      userInitials,
+      text: sanitized,
       sentAt: new Date().toISOString(),
     };
 
@@ -296,7 +319,6 @@ export function useRoomChat(roomId: string) {
       if (prev.some((m) => m.id === messagePayload.id)) return prev;
       return [...prev, messagePayload];
     });
-    setLastSentTime(now);
 
     try {
       await channel.send({
@@ -305,7 +327,9 @@ export function useRoomChat(roomId: string) {
         payload: messagePayload,
       });
     } catch (e) {
-      if (__DEV__) console.warn('Failed to broadcast:', e);
+      if (__DEV__) {
+        console.warn('Failed to broadcast:', e);
+      }
     }
   };
 

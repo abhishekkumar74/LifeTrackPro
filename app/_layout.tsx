@@ -124,7 +124,9 @@ export default function RootLayout() {
           DMMono: require('../assets/fonts/DMMono-Regular.ttf'),
         });
       } catch (error) {
-        console.warn('Font loading warning (handled gracefully):', error);
+        if (__DEV__) {
+          console.warn('Font loading warning (handled gracefully):', error);
+        }
       } finally {
         setFontsLoaded(true);
       }
@@ -139,6 +141,17 @@ export default function RootLayout() {
   useEffect(() => {
     const handleUrl = async (url: string | null) => {
       if (!url) return;
+      
+      const ALLOWED_SCHEME = 'lifetrackpro://';
+      const ALLOWED_HTTPS = 'https://lifetrackpro.com';
+      
+      if (!url.startsWith(ALLOWED_SCHEME) && !url.startsWith(ALLOWED_HTTPS)) {
+        if (__DEV__) {
+          console.warn('Blocked unknown deep link:', url);
+        }
+        return;
+      }
+      
       if (__DEV__) {
         console.log('Incoming deep link captured');
       }

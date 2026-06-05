@@ -489,7 +489,9 @@ export default function LearnScreen(): React.JSX.Element {
                 Alert.alert('Success', `${template.name} syllabus loaded successfully!`);
               },
               onError: (error) => {
-                console.error('Syllabus template error:', error);
+                if (__DEV__) {
+                  console.error('Syllabus template error:', error);
+                }
                 Alert.alert('Error', 'Failed to load template topics.');
               },
             });

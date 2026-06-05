@@ -54,13 +54,17 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
     }, []);
 
     const handleCreate = () => {
-      if (!title.trim()) return;
+      const trimmedTitle = title.trim();
+      if (trimmedTitle.length === 0) return;
+      if (trimmedTitle.length > 120) return;
  
       const deadline = deadlineFromTimeline(timeline);
+      const sanitizedTitle = trimmedTitle.replace(/[<>"';&]/g, '').trim();
+      if (sanitizedTitle.length === 0) return;
  
       createGoalMutation.mutate(
         {
-          title: title.trim(),
+          title: sanitizedTitle,
           timeline,
           deadline,
           is_primary: isPrimary,
@@ -118,6 +122,7 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
             onChangeText={setTitle}
             multiline
             numberOfLines={2}
+            maxLength={120}
           />
  
           {/* Timeline Selector */}

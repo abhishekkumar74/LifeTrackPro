@@ -65,11 +65,14 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
     );
 
     const handleCreate = () => {
-      if (!title.trim() || !dueDate || !goalId) return;
+      const trimmedTitle = title.trim();
+      if (trimmedTitle.length === 0 || !dueDate || !goalId) return;
 
       const formattedDueDate = dueDate.toISOString().split('T')[0];
       const subjectPrefix = selectedSubject ? `[${selectedSubject}] ` : '';
-      const finalTitle = `${subjectPrefix}${title.trim()}`;
+      const sanitizedTitle = trimmedTitle.replace(/[<>"';&]/g, '').trim();
+      if (sanitizedTitle.length === 0) return;
+      const finalTitle = `${subjectPrefix}${sanitizedTitle}`;
 
       setErrorMsg(null);
 

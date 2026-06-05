@@ -193,7 +193,9 @@ Stay focused, track your goals! 🚀`;
     try {
       await Share.share({ message });
     } catch (error) {
-      console.error('Error sharing report:', error);
+      if (__DEV__) {
+        console.error('Error sharing report:', error);
+      }
     }
   };
 

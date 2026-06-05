@@ -54,11 +54,12 @@ export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
   }, [isVisible]);
 
   const handleCreate = () => {
-    if (!roomName.trim()) return;
+    const cleaned = roomName.replace(/[<>"';&]/g, '').trim();
+    if (cleaned.length === 0) return;
 
     createRoomMutation.mutate(
       {
-        name: roomName.trim(),
+        name: cleaned,
         subject: subject === 'None' ? null : subject,
         room_type: roomType,
         timer_minutes: timerMinutes,

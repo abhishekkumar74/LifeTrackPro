@@ -126,7 +126,12 @@ export const CreateHabitSheet: React.FC<CreateHabitSheetProps> = ({
   };
 
   const handleSave = () => {
-    if (!title.trim()) return;
+    const trimmedTitle = title.trim();
+    if (trimmedTitle.length === 0) return;
+    if (trimmedTitle.length > 40) return;
+
+    const sanitizedTitle = trimmedTitle.replace(/[<>"';&]/g, '').trim();
+    if (sanitizedTitle.length === 0) return;
 
     let finalFrequency = frequency;
     let finalCustomDays: number[] | null = null;
@@ -138,7 +143,7 @@ export const CreateHabitSheet: React.FC<CreateHabitSheetProps> = ({
     }
 
     const payload = {
-      title: title.trim(),
+      title: sanitizedTitle,
       emoji: selectedEmoji,
       frequency: finalFrequency,
       custom_days: finalCustomDays,

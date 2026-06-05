@@ -3,20 +3,40 @@
 # dependencies
 node_modules/
 
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+.env.staging
+*.env
+
 # Expo
 .expo/
 dist/
 web-build/
 expo-env.d.ts
 
+# Build artifacts
+*.ipa
+*.apk
+*.aab
+
+# Apple certificates (NEVER commit these)
+*.p8
+*.p12
+*.mobileprovision
+AuthKey_*.p8
+
+# Google Play key (NEVER commit this)
+google-play-key.json
+service-account*.json
+
 # Native
 .kotlin/
 *.orig.*
 *.jks
-*.p8
-*.p12
 *.key
-*.mobileprovision
 
 # Metro
 .metro-health-check*
@@ -30,14 +50,6 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env
-.env.local
-.env.production
-.env*.local
-.env.development.local
-.env.production.local
-
 # typescript
 *.tsbuildinfo
 
@@ -45,6 +57,7 @@ yarn-error.*
 /ios
 /android
 
-# local scratch scripts
-/scratch
-/test-types.ts
+# IDE and local scripts
+.vscode/settings.json
+scratch/
+test-types.ts
