@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { RoomWithHost, RoomMember } from '@/lib/hooks/use-study-rooms';
 import { AvatarStack } from './AvatarStack';
-import { getSubjectColor } from '@/components/learn/SubjectCard';
+import { getSubjectColor } from '@/lib/utils/subject-colors';
 
 interface RoomCardProps {
   room: RoomWithHost;

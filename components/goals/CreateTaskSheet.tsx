@@ -19,6 +19,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { Milestone, TaskPriority } from '@/types/app.types';
 import { useCreateTask } from '@/lib/hooks/use-tasks';
 import { formatDeadline } from '@/lib/utils/date';
+import { SubjectPicker } from '@/components/shared/SubjectPicker';
 
 // Constants
 const LABEL_TITLE = "Task Title";
@@ -146,28 +147,11 @@ export const CreateTaskSheet = React.forwardRef<BottomSheet, CreateTaskSheetProp
 
           {/* Subject Selector */}
           <Text style={styles.fieldLabel}>{LABEL_SUBJECT}</Text>
-          <View style={styles.subjectsRow}>
-            {SUBJECTS.map((sub) => {
-              const active = subject === sub;
-              return (
-                <TouchableOpacity
-                  key={sub}
-                  style={[styles.subjectChip, active && styles.subjectChipActive]}
-                  onPress={() => setSubject(sub)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.subjectChipText,
-                      active && styles.subjectChipTextActive,
-                    ]}
-                  >
-                    {sub}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <SubjectPicker
+            selectedSubject={subject === 'Other' ? null : subject}
+            onSelect={(s) => setSubject(s || 'Other')}
+            placeholder="Select subject..."
+          />
 
           {/* Priority Selector */}
           <Text style={styles.fieldLabel}>{LABEL_PRIORITY}</Text>

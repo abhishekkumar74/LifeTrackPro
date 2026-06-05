@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Pin } from 'lucide-react-native';
 import { Note } from '@/types/app.types';
-import { getSubjectColor } from './SubjectCard';
+import { getSubjectColor } from '@/lib/utils/subject-colors';
 
 interface NoteCardProps {
   note: Note;

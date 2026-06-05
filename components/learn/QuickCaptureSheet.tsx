@@ -14,6 +14,7 @@ import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+import { SubjectPicker } from '@/components/shared/SubjectPicker';
 
 interface QuickCaptureSheetProps {
   subjects: string[];
@@ -106,27 +107,11 @@ export const QuickCaptureSheet = forwardRef<QuickCaptureSheetRef, QuickCaptureSh
             {/* Subject Selector */}
             <View style={styles.subjectCol}>
               <Text style={styles.label}>LINK TO SUBJECT</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.subjectsScroll}
-              >
-                {mergedSubjects.map((sub) => {
-                  const active = selectedSubject === sub;
-                  return (
-                    <TouchableOpacity
-                      key={sub}
-                      style={[styles.subjectChip, active && styles.subjectChipActive]}
-                      onPress={() => setSelectedSubject(sub)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.subjectChipText, active && styles.subjectChipTextActive]}>
-                        {sub}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+              <SubjectPicker
+                selectedSubject={selectedSubject === 'Other' ? null : selectedSubject}
+                onSelect={(s) => setSelectedSubject(s || 'Other')}
+                placeholder="Select subject..."
+              />
             </View>
 
             {/* Save Button */}

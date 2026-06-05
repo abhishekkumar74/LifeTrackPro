@@ -11,6 +11,7 @@ import {
 import { Milestone, Task } from '@/types/app.types';
 import { useCompleteTask } from '@/lib/hooks/use-tasks';
 import { formatDeadline } from '@/lib/utils/date';
+import { getSubjectColor, getSubjectBgColor } from '@/lib/utils/subject-colors';
 
 // Constants
 const ADD_TASK_LABEL = "+ Add task";
@@ -103,7 +104,28 @@ export const MilestoneItem = React.memo<MilestoneItemProps>(({
 
         {/* Middle Section */}
         <View style={styles.middleArea}>
-          <Text style={styles.titleText}>{milestone.title}</Text>
+          {(() => {
+            const match = milestone.title.match(/^\[(.*?)\]\s*(.*)$/);
+            const subjectTag = match ? match[1] : null;
+            const cleanTitle = match ? match[2] : milestone.title;
+            return (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
+                {subjectTag && (
+                  <View
+                    style={[
+                      styles.subjectBadge,
+                      { backgroundColor: getSubjectBgColor(getSubjectColor(subjectTag)) },
+                    ]}
+                  >
+                    <Text style={[styles.subjectText, { color: getSubjectColor(subjectTag) }]}>
+                      {subjectTag}
+                    </Text>
+                  </View>
+                )}
+                <Text style={styles.titleText}>{cleanTitle}</Text>
+              </View>
+            );
+          })()}
           <View style={styles.progressBarBg}>
             <View
               style={[
@@ -308,6 +330,16 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans-Medium',
     fontSize: 12,
     color: '#5B4FE8',
+    fontWeight: '600',
+  },
+  subjectBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  subjectText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 9,
     fontWeight: '600',
   },
 });

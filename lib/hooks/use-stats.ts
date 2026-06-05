@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { DailyCheckin, FocusSession } from '@/types/app.types';
-import { getSubjectColor } from '@/components/learn/SubjectCard';
+import { getSubjectColor } from '@/lib/utils/subject-colors';
 
 // Helper to format Date object into local YYYY-MM-DD string
 export function getLocalDateStr(date: Date): string {

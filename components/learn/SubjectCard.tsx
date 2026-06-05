@@ -9,6 +9,7 @@ import {
   UIManager,
 } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
+import { getSubjectColor } from '@/lib/utils/subject-colors';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -24,16 +25,6 @@ interface SubjectCardProps {
   onToggle: () => void;
   children?: React.ReactNode;
 }
-
-// Subject color accessor
-export const getSubjectColor = (subject: string): string => {
-  const norm = subject.trim().toLowerCase();
-  if (norm.includes('physics')) return '#5B4FE8';
-  if (norm.includes('chemistry')) return '#00B894';
-  if (norm.includes('biology')) return '#E8A020';
-  if (norm.includes('math')) return '#E85858';
-  return '#9B9BAF';
-};
 
 export const SubjectCard: React.FC<SubjectCardProps> = ({
   subject,

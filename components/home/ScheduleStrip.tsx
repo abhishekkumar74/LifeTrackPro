@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { ScheduleBlock } from '@/types/app.types';
+import { getSubjectColor } from '@/lib/utils/subject-colors';
 
 // Constants
 const HEADER_TITLE = "Today's schedule";
@@ -16,14 +17,6 @@ const EMPTY_STATE = "No schedule today";
 const ADD_ROUTINE = "Add routine →";
 const SHADOW_COLOR = '#000000';
 const BORDER_COLOR = '#E8E7E3';
-
-const COLOR_MAP: Record<string, string> = {
-  Physics: '#5B4FE8',
-  Chemistry: '#00B894',
-  Biology: '#E8A020',
-  Math: '#E85858',
-  Default: '#9B9BAF',
-};
 
 interface ScheduleStripProps {
   blocks: ScheduleBlock[];
@@ -56,16 +49,6 @@ export const ScheduleStrip: React.FC<ScheduleStripProps> = ({
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
   }));
-
-  const getSubjectColor = (subject: string | null) => {
-    if (!subject) return COLOR_MAP.Default;
-    const normalized = subject.trim().toLowerCase();
-    if (normalized.includes('phys')) return COLOR_MAP.Physics;
-    if (normalized.includes('chem')) return COLOR_MAP.Chemistry;
-    if (normalized.includes('biol')) return COLOR_MAP.Biology;
-    if (normalized.includes('math')) return COLOR_MAP.Math;
-    return COLOR_MAP.Default;
-  };
 
   const formatTimeString = (timeStr: string) => {
     if (!timeStr) return '';

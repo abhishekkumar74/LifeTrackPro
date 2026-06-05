@@ -20,6 +20,7 @@ import { useCreateMilestone } from '@/lib/hooks/use-milestones';
 import { formatDeadline } from '@/lib/utils/date';
 import { COLORS, TYPOGRAPHY } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
+import { SubjectPicker } from '@/components/shared/SubjectPicker';
 
 interface CreateMilestoneSheetProps {
   isVisible: boolean;
@@ -34,7 +35,9 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
 
     const [title, setTitle] = useState('');
     const [dueDate, setDueDate] = useState<Date | null>(null);
+    const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     // Sync visibility state with bottom sheet expand/close
     const sheetRef = React.useRef<BottomSheet>(null);
@@ -45,6 +48,8 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
         sheetRef.current?.expand();
         setTitle('');
         setDueDate(null);
+        setSelectedSubject(null);
+        setErrorMsg(null);
       } else {
         sheetRef.current?.close();
       }
@@ -63,32 +68,40 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
       if (!title.trim() || !dueDate || !goalId) return;
 
       const formattedDueDate = dueDate.toISOString().split('T')[0];
+      const subjectPrefix = selectedSubject ? `[${selectedSubject}] ` : '';
+      const finalTitle = `${subjectPrefix}${title.trim()}`;
+
+      setErrorMsg(null);
 
       createMilestoneMutation.mutate(
         {
           goal_id: goalId,
-          title: title.trim(),
+          title: finalTitle,
           due_date: formattedDueDate,
           status: 'pending',
-          order_index: 0, // Appended by default
+          order_index: 0, // Handled dynamically in DB query hook
         },
         {
           onSuccess: () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
             setTitle('');
             setDueDate(null);
+            setSelectedSubject(null);
             Keyboard.dismiss();
             onClose();
             if (onSuccess) {
               onSuccess();
             }
           },
+          onError: (err: any) => {
+            setErrorMsg(err.message || 'Failed to create milestone');
+          },
         }
       );
     };
 
     const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-      setShowDatePicker(false);
+      setShowDatePicker(Platform.OS === 'ios');
       if (selectedDate) {
         setDueDate(selectedDate);
       }
@@ -112,7 +125,7 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
       <BottomSheet
         ref={sheetRef}
         index={-1}
-        snapPoints={['55%']}
+        snapPoints={['62%']}
         enablePanDownToClose={true}
         backdropComponent={renderBackdrop}
         onChange={handleSheetChange}
@@ -131,6 +144,14 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
             onChangeText={setTitle}
             maxLength={80}
             autoFocus={isVisible}
+          />
+
+          {/* Subject Link */}
+          <Text style={styles.fieldLabel}>Subject (Optional)</Text>
+          <SubjectPicker
+            selectedSubject={selectedSubject}
+            onSelect={setSelectedSubject}
+            placeholder="Link subject..."
           />
 
           {/* Due Date Selector */}
@@ -156,6 +177,11 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
               onChange={handleDateChange}
               minimumDate={tomorrow}
             />
+          )}
+
+          {/* Error Message */}
+          {errorMsg && (
+            <Text style={styles.sheetErrorText}>{errorMsg}</Text>
           )}
 
           {/* Submit Button */}
@@ -253,5 +279,12 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans-Medium',
     fontSize: 16,
     fontWeight: '600',
+  },
+  sheetErrorText: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#E85858',
+    marginTop: 12,
+    textAlign: 'center',
   },
 });

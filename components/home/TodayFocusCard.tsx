@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Task } from '@/types/app.types';
+import { getSubjectColor, getSubjectBgColor } from '@/lib/utils/subject-colors';
 
 // Constants
 const LABEL_TODAYS_FOCUS = "TODAY'S FOCUS";
@@ -16,14 +17,6 @@ const BTN_ADD_TASK = "+ Add today's task";
 const BTN_START = "▶ Start";
 const SHADOW_COLOR = '#000000';
 const BORDER_COLOR = '#E8E7E3';
-
-const SUBJECT_COLORS: Record<string, { text: string; bg: string }> = {
-  Physics: { text: '#5B4FE8', bg: '#EAE8FD' },
-  Chemistry: { text: '#00B894', bg: '#D4F5EE' },
-  Biology: { text: '#E8A020', bg: '#FEF3DC' },
-  Math: { text: '#E85858', bg: '#FDE8E8' },
-  Default: { text: '#5C5C70', bg: '#F5F5F7' },
-};
 
 interface TodayFocusCardProps {
   task: Task | null;
@@ -59,16 +52,6 @@ export const TodayFocusCard: React.FC<TodayFocusCardProps> = ({
     opacity: opacity.value,
   }));
 
-  const getSubjectColors = (subject: string | null) => {
-    if (!subject) return SUBJECT_COLORS.Default;
-    const normalized = subject.trim().toLowerCase();
-    if (normalized.includes('phys')) return SUBJECT_COLORS.Physics;
-    if (normalized.includes('chem')) return SUBJECT_COLORS.Chemistry;
-    if (normalized.includes('biol')) return SUBJECT_COLORS.Biology;
-    if (normalized.includes('math')) return SUBJECT_COLORS.Math;
-    return SUBJECT_COLORS.Default;
-  };
-
   if (isLoading) {
     return (
       <View style={styles.container}>
@@ -85,7 +68,9 @@ export const TodayFocusCard: React.FC<TodayFocusCardProps> = ({
     );
   }
 
-  const subjectTheme = task ? getSubjectColors(task.subject) : SUBJECT_COLORS.Default;
+  const subjectTheme = task && task.subject
+    ? { text: getSubjectColor(task.subject), bg: getSubjectBgColor(getSubjectColor(task.subject)) }
+    : { text: '#5C5C70', bg: '#F5F5F7' };
 
   return (
     <View style={styles.container}>

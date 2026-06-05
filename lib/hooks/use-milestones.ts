@@ -29,12 +29,22 @@ export function useCreateMilestone() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
+      // Fetch the count of existing milestones for this goal to set order_index
+      const { count, error: countError } = await supabase
+        .from('milestones')
+        .select('*', { count: 'exact', head: true })
+        .eq('goal_id', milestoneData.goal_id);
+
+      if (countError) throw countError;
+      const existingCount = count || 0;
+
       const { data, error } = await supabase
         .from('milestones')
         .insert({
           ...milestoneData,
           user_id: session.user.id,
           status: 'pending',
+          order_index: existingCount,
         })
         .select()
         .single();

@@ -22,6 +22,7 @@ import { TimerCircle } from '@/components/focus/TimerCircle';
 import { SoundPicker } from '@/components/focus/SoundPicker';
 import { BlockerToggle } from '@/components/focus/BlockerToggle';
 import { SessionSummary } from '@/components/focus/SessionSummary';
+import { SubjectPicker } from '@/components/shared/SubjectPicker';
 
 const SUBJECT_OPTIONS = ['Physics', 'Chemistry', 'Biology', 'Math', 'Other'];
 
@@ -322,7 +323,7 @@ export default function FocusScreen(): React.JSX.Element {
           </View>
         )}
 
-        {/* Timer Ring (Section D) */}
+        {/* Timer Ring (Section D) - Centered and takes all middle space */}
         <View style={styles.timerWrapper}>
           <TimerCircle
             secondsLeft={secondsLeft}
@@ -354,7 +355,7 @@ export default function FocusScreen(): React.JSX.Element {
             </Text>
           </TouchableOpacity>
 
-          {/* Right Skip Break OR Subject tag select */}
+          {/* Right Skip Break OR Subject Selector */}
           {currentMode !== 'focus' ? (
             <TouchableOpacity
               style={styles.controlCircleSmall}
@@ -364,19 +365,17 @@ export default function FocusScreen(): React.JSX.Element {
               <Text style={styles.controlIconSmall}>⏭</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity
-              style={[styles.subjectPill, styles.controlCircleSmall]}
-              onPress={cycleSubject}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.subjectTextChip} numberOfLines={1}>
-                {subjectTag || 'General'}
-              </Text>
-            </TouchableOpacity>
+            <SubjectPicker
+              selectedSubject={subjectTag}
+              onSelect={setSubjectTag}
+              placeholder="Subject"
+              isDark={true}
+              style={styles.focusSubjectPicker}
+            />
           )}
         </View>
 
-        {/* Sound Selector (Section F) */}
+        {/* Sound Selector (Section F) - BELOW Controls */}
         <View style={styles.pickerSection}>
           <SoundPicker
             activeSound={activeSound}
@@ -386,7 +385,7 @@ export default function FocusScreen(): React.JSX.Element {
           />
         </View>
 
-        {/* App Blocker (Section G) */}
+        {/* App Blocker (Section G) - VERY BOTTOM */}
         <View style={styles.blockerSection}>
           <BlockerToggle
             isActive={isBlockerActive}
@@ -443,7 +442,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 50,
+    height: 52,
   },
   closeButton: {
     width: 40,
@@ -481,7 +480,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    marginTop: 16,
+    marginVertical: 12,
   },
   goalHeaderLabel: {
     fontFamily: 'DMSans-Medium',
@@ -507,7 +506,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 16,
+    marginVertical: 8,
   },
   presetChip: {
     paddingHorizontal: 14,
@@ -556,13 +555,14 @@ const styles = StyleSheet.create({
   timerWrapper: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 20,
-    marginBottom: 16,
+    marginVertical: 16,
   },
   controlCircleSmall: {
     width: 56,
@@ -595,6 +595,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 28,
   },
+  focusSubjectPicker: {
+    width: 90,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   subjectPill: {
     paddingHorizontal: 8,
   },
@@ -606,9 +616,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   pickerSection: {
+    marginTop: 0,
     marginBottom: 12,
   },
   blockerSection: {
-    marginBottom: 20,
+    marginTop: 0,
+    marginBottom: 16,
   },
 });

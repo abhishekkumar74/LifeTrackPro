@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { Plus } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 import { useGoals, AssembledGoal } from '@/lib/hooks/use-goals';
 import { useUpdateMilestoneStatus } from '@/lib/hooks/use-milestones';
@@ -57,6 +59,39 @@ export default function GoalsScreen(): React.JSX.Element {
   const [isMilestoneSheetVisible, setIsMilestoneSheetVisible] = useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  const [isFabOpen, setIsFabOpen] = useState(false);
+  const animValue = useSharedValue(0);
+
+  useEffect(() => {
+    animValue.value = withTiming(isFabOpen ? 1 : 0, { duration: 200 });
+  }, [isFabOpen]);
+
+  const animatedMenuStyle = useAnimatedStyle(() => {
+    return {
+      opacity: animValue.value,
+      transform: [
+        {
+          translateY: (1 - animValue.value) * 20,
+        },
+      ],
+    };
+  });
+
+  const animatedIconStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        {
+          rotate: `${animValue.value * 45}deg`,
+        },
+      ],
+    };
+  });
+
+  const handleFabPress = useCallback(async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setIsFabOpen((prev) => !prev);
+  }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -420,15 +455,66 @@ export default function GoalsScreen(): React.JSX.Element {
         {selectedTab === 'achieved' && renderAchievedTab()}
       </View>
 
+      {/* Semi-transparent backdrop when FAB is open */}
+      {isFabOpen && (
+        <TouchableOpacity
+          style={styles.backdropOverlay}
+          activeOpacity={1}
+          onPress={() => setIsFabOpen(false)}
+        />
+      )}
+
       {/* Floating Action Button (FAB) only visible on Active tab */}
       {selectedTab === 'active' && (
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => handleOpenCreateTask(null)}
-          activeOpacity={0.8}
-        >
-          <Plus size={24} color="#FFFFFF" strokeWidth={2.5} />
-        </TouchableOpacity>
+        <View style={styles.fabContainer} pointerEvents="box-none">
+          {/* Action buttons (Option 1 & 2) */}
+          <Animated.View style={[styles.fabMenu, animatedMenuStyle]} pointerEvents={isFabOpen ? 'auto' : 'none'}>
+            {/* Option 2: New Task */}
+            <TouchableOpacity
+              style={styles.fabOptionRow}
+              onPress={() => {
+                setIsFabOpen(false);
+                handleOpenCreateTask(null);
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={styles.fabOptionLabelPill}>
+                <Text style={styles.fabOptionLabelText}>✅ New Task</Text>
+              </View>
+              <View style={[styles.fabOptionCircle, { backgroundColor: '#00B894' }]}>
+                <Plus size={16} color="#FFFFFF" strokeWidth={3} />
+              </View>
+            </TouchableOpacity>
+
+            {/* Option 1: New Goal */}
+            <TouchableOpacity
+              style={styles.fabOptionRow}
+              onPress={() => {
+                setIsFabOpen(false);
+                handleOpenCreateGoal();
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={styles.fabOptionLabelPill}>
+                <Text style={styles.fabOptionLabelText}>🎯 New Goal</Text>
+              </View>
+              <View style={[styles.fabOptionCircle, { backgroundColor: '#E8A020' }]}>
+                <Plus size={16} color="#FFFFFF" strokeWidth={3} />
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Main FAB Trigger Button */}
+          <TouchableOpacity
+            style={[styles.fab, isFabOpen && styles.fabOpen]}
+            onPress={handleFabPress}
+            activeOpacity={0.8}
+          >
+            <Animated.View style={animatedIconStyle}>
+              <Plus size={24} color="#FFFFFF" strokeWidth={2.5} />
+            </Animated.View>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Goal Creation Bottom Sheet */}
@@ -577,10 +663,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
   },
-  fab: {
+  backdropOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(23, 23, 42, 0.4)',
+    zIndex: 99,
+  },
+  fabContainer: {
     position: 'absolute',
     bottom: 30,
     right: 20,
+    alignItems: 'flex-end',
+    zIndex: 100,
+  },
+  fab: {
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -592,6 +687,50 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
+  },
+  fabOpen: {
+    backgroundColor: '#17172A',
+  },
+  fabMenu: {
+    alignItems: 'flex-end',
+    marginBottom: 16,
+    gap: 12,
+  },
+  fabOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  fabOptionLabelPill: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  fabOptionLabelText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#17172A',
+    fontWeight: '600',
+  },
+  fabOptionCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 2,
   },
   // Loaders & Empty states
   loadingContainer: {

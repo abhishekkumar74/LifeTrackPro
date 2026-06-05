@@ -18,6 +18,7 @@ import { useCreateTask } from '@/lib/hooks/use-tasks';
 import { getTodayLocal } from '@/lib/utils/date';
 import * as Haptics from 'expo-haptics';
 import { TaskPriority } from '@/types/app.types';
+import { SubjectPicker } from '@/components/shared/SubjectPicker';
 
 interface QuickAddTaskSheetProps {
   isVisible: boolean;
@@ -133,26 +134,14 @@ export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
 
         {/* Subject Select */}
         <Text style={styles.sectionLabel}>Subject (Optional)</Text>
-        <View style={styles.pillsRow}>
-          {SUBJECT_OPTIONS.map((opt) => {
-            const isSelected = selectedSubject === opt.value;
-            return (
-              <TouchableOpacity
-                key={opt.value}
-                style={[styles.pill, isSelected && styles.pillSelected]}
-                onPress={() => {
-                  setSelectedSubject(opt.value);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.pillText, isSelected && styles.pillTextSelected]}>
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <SubjectPicker
+          selectedSubject={selectedSubject}
+          onSelect={(s) => {
+            setSelectedSubject(s);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          }}
+          placeholder="Select subject..."
+        />
 
         {/* Priority Select */}
         <Text style={styles.sectionLabel}>Priority</Text>

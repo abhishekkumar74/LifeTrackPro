@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Task } from '@/types/app.types';
 import { formatDeadline } from '@/lib/utils/date';
+import { getSubjectColor, getSubjectBgColor } from '@/lib/utils/subject-colors';
 
 // Constants
 const ACTION_DONE = "✓ Done";
@@ -160,11 +161,25 @@ export const TaskItem = React.memo<TaskItemProps>(({
           >
             {task.title}
           </Text>
-          {task.due_date && (
-            <Text style={[styles.dateText, isOverdue && styles.overdueText]}>
-              {formatDeadline(task.due_date)}
-            </Text>
-          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            {task.due_date && (
+              <Text style={[styles.dateText, isOverdue && styles.overdueText, { marginTop: 0 }]}>
+                {formatDeadline(task.due_date)}
+              </Text>
+            )}
+            {task.subject && (
+              <View
+                style={[
+                  styles.subjectBadge,
+                  { backgroundColor: getSubjectBgColor(getSubjectColor(task.subject)) },
+                ]}
+              >
+                <Text style={[styles.subjectText, { color: getSubjectColor(task.subject) }]}>
+                  {task.subject}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Right Priority Dot */}
@@ -265,6 +280,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'DMSans-Medium',
     fontSize: 12,
+    fontWeight: '600',
+  },
+  subjectBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  subjectText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 9,
     fontWeight: '600',
   },
 });

@@ -22,6 +22,7 @@ import BottomSheet, {
   BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { ArrowLeft, MoreVertical, Plus, X, Sparkles, Check } from 'lucide-react-native';
+import { SubjectPicker } from '@/components/shared/SubjectPicker';
 
 import {
   useNote,
@@ -448,15 +449,16 @@ export default function NoteEditorScreen(): React.JSX.Element {
 
             {/* Subject & Chapter Link Selector Row */}
             <View style={styles.pillsRow}>
-              <TouchableOpacity
-                onPress={() => handleOpenPicker('subject')}
-                style={[styles.linkPill, subject && styles.linkPillActive]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.linkPillText, subject && styles.linkPillTextActive]}>
-                  {subject ? `📚 ${subject}` : '+ Subject'}
-                </Text>
-              </TouchableOpacity>
+              <SubjectPicker
+                selectedSubject={subject}
+                onSelect={(s) => {
+                  setSubject(s);
+                  setChapter(null); // Reset chapter if subject updates
+                }}
+                placeholder="+ Subject"
+                style={styles.subjectPickerPill}
+                textStyle={styles.subjectPickerPillText}
+              />
 
               {subject && (
                 <TouchableOpacity
@@ -847,6 +849,21 @@ const styles = StyleSheet.create({
   },
   linkPillTextActive: {
     color: '#5B4FE8',
+    fontWeight: '600',
+  },
+  subjectPickerPill: {
+    backgroundColor: '#F7F6F3',
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    height: undefined,
+    alignSelf: 'flex-start',
+  },
+  subjectPickerPillText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
     fontWeight: '600',
   },
   divider: {

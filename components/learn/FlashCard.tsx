@@ -11,7 +11,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Note } from '@/types/app.types';
-import { getSubjectColor } from './SubjectCard';
+import { getSubjectColor } from '@/lib/utils/subject-colors';
 
 interface FlashCardProps {
   note: Note;
