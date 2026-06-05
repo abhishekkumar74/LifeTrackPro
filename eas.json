@@ -13,6 +13,10 @@
     "production": {
       "ios": {
         "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://zvfeafmixnevqbelxnqp.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2ZmVhZm1peG5ldnFiZWx4bnFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzODM0MzMsImV4cCI6MjA5NTk1OTQzM30.fuo3NIPNqx69uApbDMqaWEl2qs8-DyCHHZOYoKUqFIo"
       }
     }
   },
