@@ -1,0 +1,192 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
+import { supabase } from '@/lib/supabase/client';
+import { Task } from '@/types/app.types';
+
+export function useTasks(milestoneId?: string) {
+  return useQuery<Task[]>({
+    queryKey: ['tasks', milestoneId || 'standalone'],
+    queryFn: async () => {
+      let query = supabase.from('tasks').select('*');
+      
+      if (milestoneId) {
+        query = query.eq('milestone_id', milestoneId);
+      } else {
+        query = query.is('milestone_id', null);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Sort locally: priority (urgent -> important -> normal), then due_date
+      return (data || []).sort((a, b) => {
+        const priorityWeight = (p: string) => {
+          switch (p) {
+            case 'urgent': return 1;
+            case 'important': return 2;
+            default: return 3;
+          }
+        };
+
+        const wA = priorityWeight(a.priority);
+        const wB = priorityWeight(b.priority);
+        if (wA !== wB) return wA - wB;
+
+        if (a.due_date && b.due_date) {
+          return a.due_date.localeCompare(b.due_date);
+        }
+        if (a.due_date) return -1;
+        if (b.due_date) return 1;
+        return 0;
+      }) as Task[];
+    },
+  });
+}
+
+export function useCompleteTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    Task,
+    Error,
+    { id: string; completed: boolean; milestoneId?: string | null },
+    { previousTasks: Task[] | undefined }
+  >({
+    mutationFn: async ({ id, completed }) => {
+      const completedAt = completed ? new Date().toISOString() : null;
+
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({ completed_at: completedAt })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as Task;
+    },
+    onMutate: async ({ id, completed, milestoneId }) => {
+      // Trigger haptics
+      try {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      } catch (e) {
+        // Silently catch in simulators
+      }
+
+      const cacheKey = ['tasks', milestoneId || 'standalone'];
+
+      // Cancel outgoing queries
+      await queryClient.cancelQueries({ queryKey: cacheKey });
+
+      // Snapshot previous state
+      const previousTasks = queryClient.getQueryData<Task[]>(cacheKey);
+
+      // Optimistically update
+      queryClient.setQueryData<Task[]>(cacheKey, (old) => {
+        if (!old) return [];
+        return old.map((t) =>
+          t.id === id
+            ? { ...t, completed_at: completed ? new Date().toISOString() : null }
+            : t
+        );
+      });
+
+      return { previousTasks };
+    },
+    onError: (_err, { milestoneId }, context) => {
+      const cacheKey = ['tasks', milestoneId || 'standalone'];
+      if (context?.previousTasks) {
+        queryClient.setQueryData(cacheKey, context.previousTasks);
+      }
+    },
+    onSettled: (_, __, { milestoneId }) => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', milestoneId || 'standalone'] });
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+    },
+  });
+}
+
+export function useCreateTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      taskData: Omit<Task, 'id' | 'user_id' | 'created_at'>
+    ) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert({
+          ...taskData,
+          user_id: session.user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      const cacheKey = ['tasks', data.milestone_id || 'standalone'];
+      queryClient.invalidateQueries({ queryKey: cacheKey });
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+    },
+  });
+}
+
+export function useRescheduleTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      newDate,
+    }: {
+      id: string;
+      newDate: string | null;
+      milestoneId?: string | null;
+    }) => {
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({ due_date: newDate })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      const cacheKey = ['tasks', data.milestone_id || 'standalone'];
+      queryClient.invalidateQueries({ queryKey: cacheKey });
+    },
+  });
+}
+
+export function useDeleteTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+    }: {
+      id: string;
+      milestoneId?: string | null;
+    }) => {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: (_, variables) => {
+      const cacheKey = ['tasks', variables.milestoneId || 'standalone'];
+      queryClient.invalidateQueries({ queryKey: cacheKey });
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+    },
+  });
+}

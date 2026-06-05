@@ -1,0 +1,1485 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+  Dimensions,
+  Share,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  Calendar,
+  CheckSquare,
+  Clock,
+  Share2,
+  Flame,
+  Zap,
+  Award,
+  Activity,
+  Smile,
+  Sparkles,
+  TrendingUp,
+} from 'lucide-react-native';
+import Svg, {
+  Path,
+  Circle,
+  Defs,
+  LinearGradient,
+  Stop,
+  Line,
+  Text as SvgText,
+} from 'react-native-svg';
+
+import { useQueryClient } from '@tanstack/react-query';
+
+// Custom Hooks & Stats Data Hooks
+import {
+  usePeriodStats,
+  useHeatmapData,
+  useBarChartData,
+  useSubjectBreakdown,
+  useTodayCheckin,
+  useLogCheckin,
+  useAchievements,
+  useEnhancedStats,
+} from '@/lib/hooks/use-stats';
+import { useTodayStats } from '@/lib/hooks/use-today-stats';
+import { Skeleton } from '@/components/shared/Skeleton';
+import { ErrorState } from '@/components/shared/ErrorState';
+
+// Custom Chart & Log Components
+import { HeatmapGrid } from '@/components/stats/HeatmapGrid';
+import { BarChart } from '@/components/stats/BarChart';
+import { DonutChart } from '@/components/stats/DonutChart';
+import { MoodPicker } from '@/components/stats/MoodPicker';
+import { AchievementCard } from '@/components/stats/AchievementCard';
+
+type PeriodType = 'day' | 'week' | 'month';
+
+export default function StatsScreen(): React.JSX.Element {
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('week');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Enhanced Stats Query
+  const enhancedStatsQuery = useEnhancedStats();
+  const enhancedStats = enhancedStatsQuery.data;
+
+  // Standard Queries
+  const periodStatsQuery = usePeriodStats(selectedPeriod);
+  const heatmapQuery = useHeatmapData();
+  const barChartQuery = useBarChartData();
+  const subjectBreakdownQuery = useSubjectBreakdown();
+  const todayCheckinQuery = useTodayCheckin();
+  const achievementsQuery = useAchievements();
+  const todayStats = useTodayStats(); // Pull streak count from here
+
+  // Mutations
+  const logCheckinMutation = useLogCheckin();
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['stats'] }),
+      todayStats.refetch(),
+    ]);
+    setIsRefreshing(false);
+  };
+
+  const handleLogCheckin = (mood: number, energy: number) => {
+    logCheckinMutation.mutate({ mood, energy });
+  };
+
+  const sortedAchievements = React.useMemo(() => {
+    const list = achievementsQuery.data || [];
+    return [...list].sort((a, b) => {
+      if (a.isUnlocked && !b.isUnlocked) return -1;
+      if (!a.isUnlocked && b.isUnlocked) return 1;
+      return 0;
+    });
+  }, [achievementsQuery.data]);
+
+  const unlockedCount = React.useMemo(() => {
+    const list = achievementsQuery.data || [];
+    return list.filter((a) => a.isUnlocked).length;
+  }, [achievementsQuery.data]);
+
+  // Aggregate daily average focus minutes for weekly focus
+  const dailyAverageFocusHours = React.useMemo(() => {
+    const barData = barChartQuery.data || [];
+    const activeDays = barData.filter((d) => !d.isFuture);
+    const totalMins = activeDays.reduce((sum, d) => sum + d.minutes, 0);
+    const avgMins = activeDays.length > 0 ? totalMins / activeDays.length : 0;
+    return (avgMins / 60).toFixed(1);
+  }, [barChartQuery.data]);
+
+  const totalWeeklyFocusMinutes = React.useMemo(() => {
+    const barData = barChartQuery.data || [];
+    return barData.reduce((sum, d) => sum + d.minutes, 0);
+  }, [barChartQuery.data]);
+
+  const renderTrend = (value: number) => {
+    if (value === 0) {
+      return <Text style={[styles.trendText, { color: '#9B9BAF' }]}>0% vs prev</Text>;
+    }
+    const isPositive = value > 0;
+    return (
+      <Text style={[styles.trendText, { color: isPositive ? '#00B894' : '#E85858' }]}>
+        {isPositive ? '↑' : '↓'} {isPositive ? '+' : ''}
+        {value}% vs prev
+      </Text>
+    );
+  };
+
+  const formatPeriodFocusHours = (mins: number) => {
+    return `${(mins / 60).toFixed(1)}h`;
+  };
+
+  // Determine if it is a completely new user with no focus history
+  const isNewUser = React.useMemo(() => {
+    const heatmap = heatmapQuery.data || [];
+    const totalFocus = heatmap.reduce((sum, d) => sum + d.minutes, 0);
+    return !heatmapQuery.isLoading && totalFocus === 0;
+  }, [heatmapQuery.data, heatmapQuery.isLoading]);
+
+  // Share Weekly Report Card
+  const handleShareReport = async () => {
+    if (!enhancedStats?.reportCard) return;
+    const {
+      monDate,
+      thisWeekHours,
+      focusDiffHours,
+      bestDayName,
+      bestDayHours,
+      habitConsistencyRate,
+      goalsCompletedThisWeek,
+    } = enhancedStats.reportCard;
+
+    const formattedMonDate = new Date(monDate).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+
+    const diffText =
+      focusDiffHours >= 0
+        ? `+${focusDiffHours.toFixed(1)}h more than last week`
+        : `${focusDiffHours.toFixed(1)}h less than last week`;
+
+    const message = `📊 My LifeTrack Pro Weekly Report (Week of ${formattedMonDate}):
+• Focus Time: ${thisWeekHours.toFixed(1)}h (${diffText})
+• Best Focus Day: ${bestDayName} (${bestDayHours.toFixed(1)}h)
+• Habits Consistency: ${habitConsistencyRate}%
+• Tasks Completed: ${goalsCompletedThisWeek}
+
+Stay focused, track your goals! 🚀`;
+
+    try {
+      await Share.share({ message });
+    } catch (error) {
+      console.error('Error sharing report:', error);
+    }
+  };
+
+  const formatTodayFocus = (mins: number) => {
+    if (mins === 0) return '0m';
+    if (mins < 60) return `${mins}m`;
+    return `${(mins / 60).toFixed(1)}h`;
+  };
+
+  const formatDateShort = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  // Render SVG Mood Curve
+  const renderMoodChart = (moodData: any[]) => {
+    const chartHeight = 100;
+    const paddingX = 20;
+    const paddingY = 15;
+    const screenWidth = Dimensions.get('window').width;
+    const cardWidth = screenWidth - 40; // padding of scrollview is 20 on each side
+    const chartWidth = cardWidth - 32; // section card padding is 16 on each side
+
+    // Map mood values (1 to 5) to coordinates
+    const points = moodData.map((d, idx) => {
+      const x = paddingX + (idx * (chartWidth - 2 * paddingX)) / 6;
+      if (d.mood === null) {
+        return { x, y: null, mood: null, dayLabel: d.dayLabel };
+      }
+      const y =
+        chartHeight - paddingY - ((d.mood - 1) * (chartHeight - 2 * paddingY)) / 4;
+      return { x, y, mood: d.mood, dayLabel: d.dayLabel };
+    });
+
+    const validPoints = points.filter((p) => p.y !== null);
+
+    if (validPoints.length === 0) {
+      return (
+        <View style={styles.chartEmptyState}>
+          <Smile size={24} color="#9B9BAF" />
+          <Text style={styles.chartEmptyText}>No mood check-ins logged this week</Text>
+        </View>
+      );
+    }
+
+    let pathD = '';
+    let fillD = '';
+
+    if (validPoints.length > 0) {
+      pathD = `M ${validPoints[0].x} ${validPoints[0].y}`;
+      for (let i = 1; i < validPoints.length; i++) {
+        pathD += ` L ${validPoints[i].x} ${validPoints[i].y}`;
+      }
+      fillD = `${pathD} L ${
+        validPoints[validPoints.length - 1].x
+      } ${chartHeight} L ${validPoints[0].x} ${chartHeight} Z`;
+    }
+
+    const MOOD_EMOJIS = ['', '😫', '😕', '😐', '🙂', '🔥'];
+
+    return (
+      <View style={styles.chartContainer}>
+        <Svg width={chartWidth} height={chartHeight}>
+          <Defs>
+            <LinearGradient id="moodGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0%" stopColor="#5B4FE8" stopOpacity={0.25} />
+              <Stop offset="100%" stopColor="#5B4FE8" stopOpacity={0.0} />
+            </LinearGradient>
+          </Defs>
+
+          {/* Grid lines */}
+          {[0, 1, 2, 3, 4].map((i) => {
+            const y = paddingY + (i * (chartHeight - 2 * paddingY)) / 4;
+            return (
+              <Line
+                key={i}
+                x1={paddingX}
+                y1={y}
+                x2={chartWidth - paddingX}
+                y2={y}
+                stroke="#F2F1EE"
+                strokeWidth={1}
+                strokeDasharray="4 4"
+              />
+            );
+          })}
+
+          {/* Filled Area */}
+          {validPoints.length > 1 && <Path d={fillD} fill="url(#moodGrad)" />}
+
+          {/* Connected Line */}
+          {validPoints.length > 1 && (
+            <Path
+              d={pathD}
+              fill="none"
+              stroke="#5B4FE8"
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+
+          {/* Single or multiple dots */}
+          {points.map((p, idx) => {
+            if (p.y === null) return null;
+            return (
+              <React.Fragment key={idx}>
+                <Circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={5}
+                  fill="#FFFFFF"
+                  stroke="#5B4FE8"
+                  strokeWidth={2}
+                />
+                <SvgText
+                  x={p.x}
+                  y={p.y - 8}
+                  fontSize={10}
+                  textAnchor="middle"
+                  fontFamily="DMSans"
+                >
+                  {MOOD_EMOJIS[p.mood || 0]}
+                </SvgText>
+              </React.Fragment>
+            );
+          })}
+        </Svg>
+
+        {/* X Axis Labels */}
+        <View style={styles.chartXAxis}>
+          {points.map((p, idx) => (
+            <Text
+              key={idx}
+              style={[styles.chartXLabel, p.y !== null && styles.chartXLabelActive]}
+            >
+              {p.dayLabel}
+            </Text>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
+  // Render Habit Grid Checklist
+  const renderHabitConsistency = (habitGrid: any[]) => {
+    if (habitGrid.length === 0) {
+      return (
+        <View style={styles.emptyGridState}>
+          <Text style={styles.emptyGridText}>No active habits to track</Text>
+        </View>
+      );
+    }
+
+    const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+    return (
+      <View>
+        {/* Headers */}
+        <View style={styles.habitGridHeaderRow}>
+          <Text style={styles.habitGridTitleLabel}>HABIT</Text>
+          <View style={styles.habitGridDaysLabelsContainer}>
+            {DAY_LABELS.map((day, idx) => (
+              <Text key={idx} style={styles.habitGridDayHeaderLabel}>
+                {day}
+              </Text>
+            ))}
+          </View>
+        </View>
+
+        {/* Rows */}
+        {habitGrid.map((hg) => (
+          <View key={hg.id} style={styles.habitGridRow}>
+            <View style={styles.habitGridInfo}>
+              <Text style={styles.habitGridEmoji}>{hg.emoji}</Text>
+              <Text style={styles.habitGridTitle} numberOfLines={1}>
+                {hg.title}
+              </Text>
+            </View>
+
+            <View style={styles.habitGridDaysContainer}>
+              {hg.statuses.map((status: any, idx: number) => {
+                let circleStyle: any = styles.habitCircleEmpty;
+                let isDone = status.done;
+
+                if (isDone) {
+                  circleStyle = styles.habitCircleCompleted;
+                } else if (status.isFuture) {
+                  circleStyle = styles.habitCircleFuture;
+                } else {
+                  circleStyle = styles.habitCircleMissed;
+                }
+
+                return (
+                  <View key={idx} style={[styles.habitCircleBase, circleStyle]}>
+                    {isDone && <Text style={styles.habitCheckIcon}>✓</Text>}
+                    {!isDone && !status.isFuture && <Text style={styles.habitMissIcon}>·</Text>}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+
+        {/* Summary Footer */}
+        <View style={styles.habitGridSummaryRow}>
+          <View style={styles.habitGridSummaryItem}>
+            <Text style={styles.habitGridSummaryLabel}>Best Habit</Text>
+            <Text style={styles.habitGridSummaryVal} numberOfLines={1}>
+              {enhancedStats?.habitConsistency.bestHabitName || 'None'}
+            </Text>
+          </View>
+          <View style={styles.verticalDividerSmall} />
+          <View style={styles.habitGridSummaryItem}>
+            <Text style={styles.habitGridSummaryLabel}>Needs Work</Text>
+            <Text style={styles.habitGridSummaryVal} numberOfLines={1}>
+              {enhancedStats?.habitConsistency.worstHabitName || 'None'}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {/* Header Block */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Progress</Text>
+
+          {/* Timeframe Segment Selector */}
+          <View style={styles.segmentContainer}>
+            {(['day', 'week', 'month'] as PeriodType[]).map((period) => {
+              const active = selectedPeriod === period;
+              return (
+                <TouchableOpacity
+                  key={period}
+                  style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                  onPress={() => setSelectedPeriod(period)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                    {period.charAt(0).toUpperCase() + period.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={['#5B4FE8']}
+              tintColor="#5B4FE8"
+            />
+          }
+        >
+          {isNewUser && (
+            <View style={styles.newUserBanner}>
+              <Text style={styles.newUserEmoji}>📊</Text>
+              <Text style={styles.newUserTitle}>Start focusing to see your stats</Text>
+              <Text style={styles.newUserSubtitle}>
+                Complete a study session in Focus Mode to unlock visual history, graphs, check-in insights, and achievements.
+              </Text>
+            </View>
+          )}
+
+          {/* ==========================================
+              TODAY'S SUMMARY ROW (Enhanced Stats Part 1)
+              ========================================== */}
+          {enhancedStatsQuery.isLoading ? (
+            <View style={[styles.sectionCard, styles.loaderCard]}>
+              <ActivityIndicator size="small" color="#5B4FE8" />
+            </View>
+          ) : (
+            <View style={styles.todaySummaryRow}>
+              {/* Card 1: Today Focus */}
+              <View style={styles.todaySummaryCard}>
+                <View style={styles.todayCardHeader}>
+                  <Clock size={12} color="#5B4FE8" />
+                  <Text style={styles.todayCardLabel}>Today Focus</Text>
+                </View>
+                <Text style={styles.todayCardValue}>
+                  {formatTodayFocus(enhancedStats?.todaySummary.focusMinsToday || 0)}
+                </Text>
+                <Text
+                  style={[
+                    styles.todayCardSubtext,
+                    enhancedStats?.todaySummary.hasBlockerToday
+                      ? { color: '#00B894', fontWeight: '600' }
+                      : { color: '#9B9BAF' },
+                  ]}
+                >
+                  {enhancedStats?.todaySummary.hasBlockerToday ? 'Deep block active' : 'No blocker'}
+                </Text>
+              </View>
+
+              {/* Card 2: Today Habits */}
+              <View style={styles.todaySummaryCard}>
+                <View style={styles.todayCardHeader}>
+                  <Award size={12} color="#00B894" />
+                  <Text style={styles.todayCardLabel}>Habits</Text>
+                </View>
+                <Text style={styles.todayCardValue}>
+                  {`${enhancedStats?.todaySummary.habitsDoneCount || 0}/${
+                    enhancedStats?.todaySummary.habitsTotalCount || 0
+                  }`}
+                </Text>
+                <Text style={styles.todayCardSubtext}>completed today</Text>
+              </View>
+
+              {/* Card 3: Today Tasks */}
+              <View style={styles.todaySummaryCard}>
+                <View style={styles.todayCardHeader}>
+                  <CheckSquare size={12} color="#FFB800" />
+                  <Text style={styles.todayCardLabel}>Tasks</Text>
+                </View>
+                <Text style={styles.todayCardValue}>
+                  {enhancedStats?.todaySummary.todayTasksDone || 0}
+                </Text>
+                <Text style={styles.todayCardSubtext}>tasks completed</Text>
+              </View>
+            </View>
+          )}
+
+          {/* ==========================================
+              WEEKLY REPORT CARD (Enhanced Stats Part 5)
+              ========================================== */}
+          {!enhancedStatsQuery.isLoading && enhancedStats?.reportCard && (
+            <View style={styles.reportCardContainer}>
+              <View style={styles.reportCardHeader}>
+                <View style={styles.reportHeaderLeft}>
+                  <Sparkles size={16} color="#FFB800" style={styles.sparkleIcon} />
+                  <Text style={styles.reportTitle}>This Week's Report</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.shareButton}
+                  onPress={handleShareReport}
+                  activeOpacity={0.7}
+                >
+                  <Share2 size={14} color="#FFFFFF" />
+                  <Text style={styles.shareButtonText}>Share</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.reportFocusMetric}>
+                <Text style={styles.reportFocusLabel}>Total Focus</Text>
+                <View style={styles.reportFocusHourRow}>
+                  <Text style={styles.reportFocusHours}>
+                    {enhancedStats.reportCard.thisWeekHours.toFixed(1)}h
+                  </Text>
+                  <View
+                    style={[
+                      styles.reportDiffBadge,
+                      enhancedStats.reportCard.focusDiffHours >= 0
+                        ? styles.badgePositive
+                        : styles.badgeNegative,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.reportDiffText,
+                        enhancedStats.reportCard.focusDiffHours >= 0
+                          ? { color: '#00B894' }
+                          : { color: '#E85858' },
+                      ]}
+                    >
+                      {enhancedStats.reportCard.focusDiffHours >= 0 ? '+' : ''}
+                      {enhancedStats.reportCard.focusDiffHours.toFixed(1)}h vs prev week
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.reportStatsGrid}>
+                {/* Grid Item 1: Best Day */}
+                <View style={styles.reportGridItem}>
+                  <Text style={styles.reportGridLabel}>Best Day</Text>
+                  <Text style={styles.reportGridValue}>
+                    {enhancedStats.reportCard.bestDayName}
+                  </Text>
+                  <Text style={styles.reportGridSub}>
+                    {enhancedStats.reportCard.bestDayHours.toFixed(1)}h focused
+                  </Text>
+                </View>
+
+                {/* Grid Item 2: Habit Rate */}
+                <View style={styles.reportGridItem}>
+                  <Text style={styles.reportGridLabel}>Habit Rate</Text>
+                  <Text style={styles.reportGridValue}>
+                    {enhancedStats.reportCard.habitConsistencyRate}%
+                  </Text>
+                  <Text style={styles.reportGridSub}>completed logs</Text>
+                </View>
+
+                {/* Grid Item 3: Tasks Done */}
+                <View style={styles.reportGridItem}>
+                  <Text style={styles.reportGridLabel}>Goals Met</Text>
+                  <Text style={styles.reportGridValue}>
+                    {enhancedStats.reportCard.goalsCompletedThisWeek}
+                  </Text>
+                  <Text style={styles.reportGridSub}>milestones done</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* SECTION 2: Mood Picker + Streak Card */}
+          <View style={styles.sectionCard}>
+            <View style={styles.moodStreakRow}>
+              {/* Left Column: Mood Log form */}
+              <View style={styles.moodCol}>
+                <MoodPicker
+                  todayCheckin={todayCheckinQuery.data || null}
+                  onLog={handleLogCheckin}
+                  isLoading={todayCheckinQuery.isLoading || logCheckinMutation.isPending}
+                />
+              </View>
+
+              {/* Middle vertical line divider */}
+              <View style={styles.verticalDivider} />
+
+              {/* Right Column: Streak Widget */}
+              <View style={styles.streakCol}>
+                <Text style={styles.streakLabel}>STREAK</Text>
+                <View style={styles.streakCircle}>
+                  <Text style={styles.streakEmoji}>🔥</Text>
+                  <Text style={styles.streakNumber}>
+                    {todayStats.isLoading ? '-' : todayStats.habitStreak}
+                  </Text>
+                  <Text style={styles.streakUnit}>days</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* ==========================================
+              HABIT CONSISTENCY SECTION (Enhanced Stats Part 2)
+              ========================================== */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeading}>Habit Consistency</Text>
+            <Text style={styles.sectionSubheading}>This week</Text>
+          </View>
+          <View style={styles.sectionCard}>
+            {enhancedStatsQuery.isLoading ? (
+              <ActivityIndicator color="#5B4FE8" size="small" />
+            ) : (
+              renderHabitConsistency(enhancedStats?.habitConsistency.grid || [])
+            )}
+          </View>
+
+          {/* ==========================================
+              MOOD TREND SECTION (Enhanced Stats Part 3)
+              ========================================== */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeading}>Mood Trend</Text>
+            {!enhancedStatsQuery.isLoading && enhancedStats?.moodTrend && (
+              <Text style={styles.sectionSubheading}>
+                {enhancedStats.moodTrend.moodTrendText}
+              </Text>
+            )}
+          </View>
+          <View style={styles.sectionCard}>
+            {enhancedStatsQuery.isLoading ? (
+              <ActivityIndicator color="#5B4FE8" size="small" />
+            ) : (
+              renderMoodChart(enhancedStats?.moodTrend.moodData || [])
+            )}
+          </View>
+
+          {/* ==========================================
+              PERSONAL RECORDS SECTION (Enhanced Stats Part 4)
+              ========================================== */}
+          {!enhancedStatsQuery.isLoading && enhancedStats?.personalRecords && (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionHeading}>Personal Records</Text>
+                <Text style={styles.sectionSubheading}>All-time bests</Text>
+              </View>
+              <View style={styles.sectionCard}>
+                <View style={styles.recordsList}>
+                  {/* Record 1: Streak */}
+                  <View style={styles.recordItem}>
+                    <View style={styles.recordLeft}>
+                      <View style={[styles.recordIconBg, { backgroundColor: '#FFF8E6' }]}>
+                        <Flame size={16} color="#FFB800" />
+                      </View>
+                      <View>
+                        <Text style={styles.recordLabelText}>Longest Habit Streak</Text>
+                        <Text style={styles.recordSubtext}>Consistency multiplier</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.recordValueText}>
+                      {enhancedStats.personalRecords.longestStreak} days
+                    </Text>
+                  </View>
+
+                  {/* Record 2: Focus Session */}
+                  <View style={styles.recordItem}>
+                    <View style={styles.recordLeft}>
+                      <View style={[styles.recordIconBg, { backgroundColor: '#EEECFD' }]}>
+                        <Clock size={16} color="#5B4FE8" />
+                      </View>
+                      <View>
+                        <Text style={styles.recordLabelText}>Longest Focus Session</Text>
+                        <Text style={styles.recordSubtext}>Single flow state</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.recordValueText}>
+                      {enhancedStats.personalRecords.longestSession}m
+                    </Text>
+                  </View>
+
+                  {/* Record 3: Best Focus Day */}
+                  {enhancedStats.personalRecords.bestFocusDayMins > 0 && (
+                    <View style={styles.recordItem}>
+                      <View style={styles.recordLeft}>
+                        <View style={[styles.recordIconBg, { backgroundColor: '#E6F8F4' }]}>
+                          <Zap size={16} color="#00B894" />
+                        </View>
+                        <View>
+                          <Text style={styles.recordLabelText}>Best Focus Day</Text>
+                          <Text style={styles.recordSubtext}>
+                            {formatDateShort(enhancedStats.personalRecords.bestFocusDayDate)}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.recordValueText}>
+                        {(enhancedStats.personalRecords.bestFocusDayMins / 60).toFixed(1)}h
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Record 4: Most Tasks */}
+                  {enhancedStats.personalRecords.bestTaskCount > 0 && (
+                    <View style={styles.recordItem}>
+                      <View style={styles.recordLeft}>
+                        <View style={[styles.recordIconBg, { backgroundColor: '#FDF3F3' }]}>
+                          <CheckSquare size={16} color="#E85858" />
+                        </View>
+                        <View>
+                          <Text style={styles.recordLabelText}>Most Tasks Done</Text>
+                          <Text style={styles.recordSubtext}>
+                            {formatDateShort(enhancedStats.personalRecords.bestTaskDate)}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.recordValueText}>
+                        {enhancedStats.personalRecords.bestTaskCount} tasks
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Record 5: Best Focus Week */}
+                  {enhancedStats.personalRecords.bestWeekMins > 0 && (
+                    <View style={[styles.recordItem, { borderBottomWidth: 0 }]}>
+                      <View style={styles.recordLeft}>
+                        <View style={[styles.recordIconBg, { backgroundColor: '#EEECFD' }]}>
+                          <TrendingUp size={16} color="#5B4FE8" />
+                        </View>
+                        <View>
+                          <Text style={styles.recordLabelText}>Best Weekly Total</Text>
+                          <Text style={styles.recordSubtext}>Highest weekly hours</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.recordValueText}>
+                        {(enhancedStats.personalRecords.bestWeekMins / 60).toFixed(1)}h
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </>
+          )}
+
+          {/* SECTION 1: Period Stats Breakdown */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeading}>Period Stats</Text>
+            <Text style={styles.sectionSubheading}>
+              {selectedPeriod === 'day'
+                ? 'Today'
+                : selectedPeriod === 'week'
+                ? 'This Week'
+                : 'This Month'}
+            </Text>
+          </View>
+          <View style={styles.statsRow}>
+            {/* Card 1 - Focus Time */}
+            <View style={styles.statsCard}>
+              <View style={styles.cardHeader}>
+                <Clock size={14} color="#9B9BAF" />
+                <Text style={styles.cardLabel}>Focus hours</Text>
+              </View>
+              {periodStatsQuery.isLoading ? (
+                <ActivityIndicator size="small" color="#5B4FE8" style={styles.cardLoader} />
+              ) : (
+                <View style={styles.cardBody}>
+                  <Text style={styles.bigNumber}>
+                    {formatPeriodFocusHours(periodStatsQuery.data?.focusMinutes || 0)}
+                  </Text>
+                  {renderTrend(periodStatsQuery.data?.focusChangePercent || 0)}
+                </View>
+              )}
+            </View>
+
+            {/* Card 2 - Tasks Done */}
+            <View style={styles.statsCard}>
+              <View style={styles.cardHeader}>
+                <CheckSquare size={14} color="#9B9BAF" />
+                <Text style={styles.cardLabel}>Tasks done</Text>
+              </View>
+              {periodStatsQuery.isLoading ? (
+                <ActivityIndicator size="small" color="#5B4FE8" style={styles.cardLoader} />
+              ) : (
+                <View style={styles.cardBody}>
+                  <Text style={styles.bigNumber}>
+                    {`${periodStatsQuery.data?.tasksDone || 0}/${
+                      periodStatsQuery.data?.tasksTotal || 0
+                    }`}
+                  </Text>
+                  {renderTrend(periodStatsQuery.data?.taskChangePercent || 0)}
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* SECTION 3: Activity Heatmap */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeading}>Activity</Text>
+            <Text style={styles.sectionSubheading}>90 days</Text>
+          </View>
+          <View style={styles.sectionCard}>
+            <HeatmapGrid data={heatmapQuery.data} isLoading={heatmapQuery.isLoading} />
+          </View>
+
+          {/* SECTION 4: Daily Focus Bar Chart */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeading}>Daily Focus</Text>
+            {!barChartQuery.isLoading && (
+              <Text style={styles.sectionSubheading}>Avg {dailyAverageFocusHours}h/day</Text>
+            )}
+          </View>
+          <View style={styles.sectionCard}>
+            <BarChart data={barChartQuery.data} isLoading={barChartQuery.isLoading} />
+          </View>
+
+          {/* SECTION 5: Subject Breakdown (Only show if focus minutes exist) */}
+          {!subjectBreakdownQuery.isLoading && totalWeeklyFocusMinutes > 0 && (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionHeading}>By Subject</Text>
+              </View>
+              <View style={styles.sectionCard}>
+                <DonutChart
+                  data={subjectBreakdownQuery.data}
+                  totalMinutes={totalWeeklyFocusMinutes}
+                  isLoading={subjectBreakdownQuery.isLoading}
+                />
+              </View>
+            </>
+          )}
+
+          {/* SECTION 6: Achievements */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeading}>Achievements</Text>
+            {!achievementsQuery.isLoading && (
+              <Text style={styles.sectionSubheading}>{`${unlockedCount}/8 unlocked`}</Text>
+            )}
+          </View>
+
+          {achievementsQuery.isLoading ? (
+            <View style={styles.achievementsGrid}>
+              <Skeleton width="100%" height={80} borderRadius={16} style={{ marginBottom: 10 }} />
+              <Skeleton width="100%" height={80} borderRadius={16} style={{ marginBottom: 10 }} />
+              <Skeleton width="100%" height={80} borderRadius={16} style={{ marginBottom: 10 }} />
+            </View>
+          ) : (
+            <View style={styles.achievementsGrid}>
+              {sortedAchievements.map((item) => (
+                <AchievementCard key={item.id} achievement={item} />
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F7F6F3',
+  },
+  safeArea: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    height: 54,
+  },
+  headerTitle: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 30,
+    color: '#17172A',
+  },
+  segmentContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F2F1EE',
+    borderRadius: 12,
+    padding: 2,
+    gap: 2,
+  },
+  segmentBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: 'transparent',
+  },
+  segmentBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segmentText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#9B9BAF',
+    fontWeight: '500',
+  },
+  segmentTextActive: {
+    color: '#17172A',
+    fontWeight: '600',
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+  newUserBanner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    padding: 20,
+    marginBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newUserEmoji: {
+    fontSize: 32,
+    marginBottom: 10,
+  },
+  newUserTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 15,
+    color: '#17172A',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  newUserSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9B9BAF',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  // Today's Summary Row
+  todaySummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 14,
+    gap: 10,
+  },
+  todaySummaryCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    padding: 12,
+    minHeight: 88,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  todayCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+  },
+  todayCardLabel: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#9B9BAF',
+    fontWeight: '500',
+  },
+  todayCardValue: {
+    fontFamily: 'DMMono',
+    fontSize: 22,
+    color: '#17172A',
+    fontWeight: 'bold',
+  },
+  todayCardSubtext: {
+    fontFamily: 'DMSans',
+    fontSize: 9,
+    color: '#9B9BAF',
+    marginTop: 4,
+  },
+  loaderCard: {
+    height: 88,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Weekly Report Card (Navy)
+  reportCardContainer: {
+    backgroundColor: '#17172A',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 18,
+    width: '100%',
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  reportCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  reportHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sparkleIcon: {
+    marginTop: -2,
+  },
+  reportTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 15,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#33334F',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  shareButtonText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  reportFocusMetric: {
+    marginBottom: 16,
+  },
+  reportFocusLabel: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9B9BAF',
+    marginBottom: 2,
+  },
+  reportFocusHourRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 10,
+  },
+  reportFocusHours: {
+    fontFamily: 'DMMono',
+    fontSize: 32,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  reportDiffBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  badgePositive: {
+    backgroundColor: '#00B89420',
+  },
+  badgeNegative: {
+    backgroundColor: '#E8585820',
+  },
+  reportDiffText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  reportStatsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#1E1E38',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+  },
+  reportGridItem: {
+    flex: 1,
+  },
+  reportGridLabel: {
+    fontFamily: 'DMSans',
+    fontSize: 9,
+    color: '#9B9BAF',
+    marginBottom: 4,
+  },
+  reportGridValue: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  reportGridSub: {
+    fontFamily: 'DMSans',
+    fontSize: 9,
+    color: '#9B9BAF',
+    marginTop: 2,
+  },
+  // Period Stats Row
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 14,
+    gap: 10,
+  },
+  statsCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    padding: 14,
+    minHeight: 100,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  cardLabel: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9B9BAF',
+  },
+  cardBody: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  cardLoader: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+  },
+  bigNumber: {
+    fontFamily: 'DMMono',
+    fontSize: 28,
+    color: '#17172A',
+    fontWeight: 'bold',
+  },
+  trendText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  // Section Card
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    padding: 16,
+    marginBottom: 18,
+    width: '100%',
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  moodStreakRow: {
+    flexDirection: 'row',
+    width: '100%',
+  },
+  moodCol: {
+    flex: 2.2,
+  },
+  verticalDivider: {
+    width: 1,
+    backgroundColor: '#F2F1EE',
+    marginHorizontal: 16,
+  },
+  streakCol: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streakLabel: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#9B9BAF',
+    letterSpacing: 1.2,
+    marginBottom: 6,
+  },
+  streakCircle: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    height: 70,
+    width: 70,
+  },
+  streakEmoji: {
+    position: 'absolute',
+    top: -12,
+    fontSize: 18,
+    zIndex: 2,
+  },
+  streakNumber: {
+    fontFamily: 'DMMono',
+    fontSize: 34,
+    color: '#17172A',
+    fontWeight: 'bold',
+    lineHeight: 38,
+  },
+  streakUnit: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9B9BAF',
+    marginTop: -2,
+  },
+  // Habit Consistency Grid styling
+  habitGridHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F1EE',
+  },
+  habitGridTitleLabel: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#9B9BAF',
+    fontWeight: '500',
+    letterSpacing: 0.8,
+  },
+  habitGridDaysLabelsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  habitGridDayHeaderLabel: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#9B9BAF',
+    fontWeight: '600',
+    width: 22,
+    textAlign: 'center',
+  },
+  habitGridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F7F6F3',
+  },
+  habitGridInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  habitGridEmoji: {
+    fontSize: 16,
+  },
+  habitGridTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#17172A',
+    fontWeight: '500',
+    flex: 1,
+  },
+  habitGridDaysContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  habitCircleBase: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  habitCircleEmpty: {
+    backgroundColor: '#F2F1EE',
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+  },
+  habitCircleCompleted: {
+    backgroundColor: '#00B894',
+  },
+  habitCircleFuture: {
+    borderWidth: 1,
+    borderColor: '#9B9BAF',
+    borderStyle: 'dashed',
+    backgroundColor: 'transparent',
+  },
+  habitCircleMissed: {
+    backgroundColor: '#FDF3F3',
+    borderWidth: 1,
+    borderColor: '#F8D7DA',
+  },
+  habitCheckIcon: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  habitMissIcon: {
+    color: '#E85858',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  habitGridSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F2F1EE',
+  },
+  habitGridSummaryItem: {
+    flex: 1,
+  },
+  habitGridSummaryLabel: {
+    fontFamily: 'DMSans',
+    fontSize: 10,
+    color: '#9B9BAF',
+    marginBottom: 2,
+  },
+  habitGridSummaryVal: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#17172A',
+    fontWeight: '600',
+  },
+  verticalDividerSmall: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#F2F1EE',
+    marginHorizontal: 16,
+  },
+  emptyGridState: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  emptyGridText: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9B9BAF',
+  },
+  // Mood Trend Chart Styling
+  chartContainer: {
+    alignItems: 'center',
+  },
+  chartXAxis: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 20,
+    marginTop: 8,
+  },
+  chartXLabel: {
+    fontFamily: 'DMSans',
+    fontSize: 10,
+    color: '#9B9BAF',
+    width: 20,
+    textAlign: 'center',
+  },
+  chartXLabelActive: {
+    color: '#17172A',
+    fontWeight: '500',
+  },
+  chartEmptyState: {
+    paddingVertical: 30,
+    alignItems: 'center',
+    gap: 8,
+  },
+  chartEmptyText: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9B9BAF',
+  },
+  // Personal Records List
+  recordsList: {
+    width: '100%',
+  },
+  recordItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F1EE',
+  },
+  recordLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  recordIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordLabelText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#17172A',
+    fontWeight: '500',
+  },
+  recordSubtext: {
+    fontFamily: 'DMSans',
+    fontSize: 10,
+    color: '#9B9BAF',
+    marginTop: 1,
+  },
+  recordValueText: {
+    fontFamily: 'DMMono',
+    fontSize: 14,
+    color: '#17172A',
+    fontWeight: 'bold',
+  },
+  // Section Headers
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  sectionHeading: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 14,
+    color: '#17172A',
+    fontWeight: '600',
+  },
+  sectionSubheading: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9B9BAF',
+  },
+  achievementsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 10,
+    width: '100%',
+  },
+  achievementsLoader: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    width: '100%',
+  },
+});
