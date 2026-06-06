@@ -309,6 +309,22 @@ const SSC_CGL_TOPICS: TemplateTopic[] = [
   })),
 ];
 
+const WORK_SKILLS_TOPICS: TemplateTopic[] = [
+  ...[
+    'Technical Skills',
+    'Soft Skills',
+    'Industry Knowledge',
+    'Leadership',
+    'Project Management',
+    'Communication',
+  ].map((subject, idx) => ({
+    subject,
+    chapter: 'General Improvement',
+    topic: `Core development in ${subject}`,
+    order_index: idx,
+  })),
+];
+
 export const SYLLABUS_TEMPLATES: Record<string, SyllabusTemplate> = {
   NEET: {
     name: 'NEET 2026',
@@ -333,5 +349,18 @@ export const SYLLABUS_TEMPLATES: Record<string, SyllabusTemplate> = {
     description: 'Adds Quantitative Aptitude, English Comprehension, General Awareness, and Reasoning.',
     subjects: ['Quant', 'English', 'GK', 'Reasoning'],
     topics: SSC_CGL_TOPICS,
+  },
+  WORK_SKILLS: {
+    name: 'Work Skills Development',
+    description: 'Add core subjects for professional and skill growth.',
+    subjects: [
+      'Technical Skills',
+      'Soft Skills',
+      'Industry Knowledge',
+      'Leadership',
+      'Project Management',
+      'Communication',
+    ],
+    topics: WORK_SKILLS_TOPICS,
   },
 };

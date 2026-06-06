@@ -61,3 +61,5 @@ yarn-error.*
 .vscode/settings.json
 scratch/
 test-types.ts
+coverage/
+

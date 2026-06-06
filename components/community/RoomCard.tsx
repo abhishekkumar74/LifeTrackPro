@@ -103,6 +103,7 @@ export const RoomCard = React.memo<RoomCardProps>(({
               style={styles.endButton}
               onPress={() => onEnd && onEnd(room.id)}
               activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.endButtonText}>End</Text>
             </TouchableOpacity>
@@ -111,6 +112,7 @@ export const RoomCard = React.memo<RoomCardProps>(({
               style={styles.joinButton}
               onPress={() => onJoin(room.id)}
               activeOpacity={0.8}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.joinButtonText}>Join</Text>
             </TouchableOpacity>

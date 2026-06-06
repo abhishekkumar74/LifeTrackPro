@@ -6,7 +6,8 @@ import { tabScrollRefs } from '@/lib/utils/tab-scroll';
 
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useTodayStats } from '@/lib/hooks/use-today-stats';
-import { useToggleHabit } from '@/lib/hooks/use-toggle-habit';
+import { toggleHabit } from '@/lib/hooks/use-toggle-habit';
+import { queryClient } from '@/lib/query-client';
 
 // Import Home Dashboard Components
 import { HomeHeader } from '@/components/home/HomeHeader';
@@ -27,9 +28,8 @@ const STATUS_BAR_STYLE = 'dark';
 
 export default function HomeDashboardScreen(): React.JSX.Element {
   const router = useRouter();
-  const profile = useAuthStore((state) => state.profile);
+  const { profile, user } = useAuthStore();
   const stats = useTodayStats();
-  const { toggleHabit } = useToggleHabit();
 
   const [taskSheetVisible, setTaskSheetVisible] = useState(false);
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false);
@@ -50,18 +50,25 @@ export default function HomeDashboardScreen(): React.JSX.Element {
     const habit = stats.habits.find((h) => h.id === habitId);
     if (!habit) return;
 
-    // Use timezone-safe local date
-    const todayStr = new Date().toLocaleDateString('en-CA');
-
-    // Optimistic UI updates are managed via useToggleHabit callback
-    await toggleHabit({
+    await toggleHabit(
       habitId,
-      date: todayStr,
-      completedToday: habit.completedToday,
-      onOptimisticUpdate: (newValue) => {
-        stats.updateHabitCompletedToday(habitId, newValue);
-      },
-    });
+      habit.completedToday,
+      (newDone) => {
+        stats.updateHabitCompletedToday(habitId, newDone);
+        // Update React Query cache optimistically
+        queryClient.setQueryData(
+          ['todayStats', user?.id],
+          (old: any) => ({
+            ...old,
+            habits: old?.habits?.map((h: any) =>
+              h.id === habitId 
+                ? { ...h, completedToday: newDone }
+                : h
+            ) ?? []
+          })
+        );
+      }
+    );
   };
 
   const handleStartFocus = () => {

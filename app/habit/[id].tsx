@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 import { supabase } from '@/lib/supabase/client';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
@@ -30,6 +31,7 @@ import { CreateHabitSheet } from '@/components/habits/CreateHabitSheet';
 import { Habit } from '@/types/app.types';
 
 export default function HabitDetailScreen() {
+  useAndroidBackHandler();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -357,7 +359,7 @@ export default function HabitDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <StatusBar style="dark" />
+      <StatusBar style="dark" backgroundColor="#F7F6F3" translucent={false} />
 
       {/* Header */}
       <View style={styles.header}>

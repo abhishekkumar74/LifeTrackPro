@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   StatusBar,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
@@ -276,7 +277,7 @@ export default function GoalsScreen(): React.JSX.Element {
         ref={activeListRef}
         data={activeGoals}
         keyExtractor={(item) => item.id}
-        removeClippedSubviews={true}
+        removeClippedSubviews={Platform.OS === 'android'}
         maxToRenderPerBatch={10}
         windowSize={5}
         initialNumToRender={8}
@@ -339,7 +340,7 @@ export default function GoalsScreen(): React.JSX.Element {
         ref={milestonesListRef}
         sections={milestoneSections}
         keyExtractor={(item) => item.id}
-        removeClippedSubviews={true}
+        removeClippedSubviews={Platform.OS === 'android'}
         maxToRenderPerBatch={10}
         windowSize={5}
         initialNumToRender={8}
@@ -423,7 +424,7 @@ export default function GoalsScreen(): React.JSX.Element {
         ref={achievedListRef}
         data={achievedGoals}
         keyExtractor={(item) => item.id}
-        removeClippedSubviews={true}
+        removeClippedSubviews={Platform.OS === 'android'}
         maxToRenderPerBatch={10}
         windowSize={5}
         initialNumToRender={8}
@@ -450,7 +451,7 @@ export default function GoalsScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       {/* Header Row */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>

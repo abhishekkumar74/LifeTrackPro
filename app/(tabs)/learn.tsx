@@ -511,6 +511,14 @@ export default function LearnScreen(): React.JSX.Element {
   }, [notesQuery.data]);
 
   const { profile } = useAuthStore();
+  const userCategory = profile?.category || '';
+  const userSubCategory = profile?.sub_category || [];
+
+  const isNeet = userSubCategory.some(s => s.toLowerCase().includes('neet'));
+  const isJee = userSubCategory.some(s => s.toLowerCase().includes('jee'));
+  const isUpsc = userSubCategory.some(s => s.toLowerCase().includes('upsc'));
+  const isSsc = userSubCategory.some(s => s.toLowerCase().includes('ssc'));
+
   const examName = useMemo(() => {
     if (profile?.sub_category && profile.sub_category.length > 0) {
       return profile.sub_category[0];
@@ -684,7 +692,7 @@ export default function LearnScreen(): React.JSX.Element {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* Screen Header */}
         <View style={styles.header}>
@@ -905,89 +913,198 @@ export default function LearnScreen(): React.JSX.Element {
               ) : (
                 /* Syllabus Setup Welcome Screen Flow (Syllabus empty) */
                 <ScrollView contentContainerStyle={styles.setupWelcomeContainer}>
-                  <Text style={styles.setupWelcomeTitle}>Set up your syllabus 📚</Text>
-                  <Text style={styles.setupWelcomeSubtitle}>
-                    Choose your exam or subjects to start tracking your preparation
-                  </Text>
+                  {userCategory === 'student' ? (
+                    <>
+                      <Text style={styles.setupWelcomeTitle}>Set up your syllabus 📚</Text>
+                      <Text style={styles.setupWelcomeSubtitle}>
+                        Choose your exam to load recommended template or add manually
+                      </Text>
 
-                  <View style={styles.templateCardsContainer}>
-                    {/* Setup Card: NEET */}
-                    <TouchableOpacity
-                      style={styles.templateCard}
-                      onPress={() => handleLoadSyllabusTemplate('NEET')}
-                      activeOpacity={0.85}
-                    >
-                      <View style={styles.templateCardHeader}>
-                        <Text style={styles.templateExamName}>NEET 2026</Text>
-                        <Award size={16} color="#00B894" />
+                      <View style={styles.templateCardsContainer}>
+                        {/* Setup Card: NEET */}
+                        <TouchableOpacity
+                          style={[
+                            styles.templateCard,
+                            isNeet && styles.templateCardHighlighted,
+                          ]}
+                          onPress={() => handleLoadSyllabusTemplate('NEET')}
+                          activeOpacity={0.85}
+                        >
+                          <View style={styles.templateCardHeader}>
+                            <Text style={styles.templateExamName}>NEET 2026</Text>
+                            {isNeet ? (
+                              <View style={styles.recommendedBadge}>
+                                <Text style={styles.recommendedText}>Recommended</Text>
+                              </View>
+                            ) : (
+                              <Award size={16} color="#00B894" />
+                            )}
+                          </View>
+                          <Text style={styles.templateExamSubjects}>Physics • Chemistry • Biology</Text>
+                          <Text style={styles.templateExamChapters}>
+                            96 standard chapters mapped to log medical prep.
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* Setup Card: JEE */}
+                        <TouchableOpacity
+                          style={[
+                            styles.templateCard,
+                            isJee && styles.templateCardHighlighted,
+                          ]}
+                          onPress={() => handleLoadSyllabusTemplate('JEE')}
+                          activeOpacity={0.85}
+                        >
+                          <View style={styles.templateCardHeader}>
+                            <Text style={styles.templateExamName}>JEE</Text>
+                            {isJee ? (
+                              <View style={styles.recommendedBadge}>
+                                <Text style={styles.recommendedText}>Recommended</Text>
+                              </View>
+                            ) : (
+                              <Award size={16} color="#5B4FE8" />
+                            )}
+                          </View>
+                          <Text style={styles.templateExamSubjects}>Physics • Chemistry • Math</Text>
+                          <Text style={styles.templateExamChapters}>
+                            74 core chapters for engineering entrance prep.
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* Setup Card: UPSC */}
+                        <TouchableOpacity
+                          style={[
+                            styles.templateCard,
+                            isUpsc && styles.templateCardHighlighted,
+                          ]}
+                          onPress={() => handleLoadSyllabusTemplate('UPSC')}
+                          activeOpacity={0.85}
+                        >
+                          <View style={styles.templateCardHeader}>
+                            <Text style={styles.templateExamName}>UPSC Civil Services</Text>
+                            {isUpsc ? (
+                              <View style={styles.recommendedBadge}>
+                                <Text style={styles.recommendedText}>Recommended</Text>
+                              </View>
+                            ) : (
+                              <Award size={16} color="#FFB800" />
+                            )}
+                          </View>
+                          <Text style={styles.templateExamSubjects}>GS Paper 1-4 • CSAT</Text>
+                          <Text style={styles.templateExamChapters}>
+                            24 subjects covering ethics, polity, history, and reasoning.
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* Setup Card: SSC CGL */}
+                        <TouchableOpacity
+                          style={[
+                            styles.templateCard,
+                            isSsc && styles.templateCardHighlighted,
+                          ]}
+                          onPress={() => handleLoadSyllabusTemplate('SSC_CGL')}
+                          activeOpacity={0.85}
+                        >
+                          <View style={styles.templateCardHeader}>
+                            <Text style={styles.templateExamName}>SSC CGL</Text>
+                            {isSsc ? (
+                              <View style={styles.recommendedBadge}>
+                                <Text style={styles.recommendedText}>Recommended</Text>
+                              </View>
+                            ) : (
+                              <Award size={16} color="#E85858" />
+                            )}
+                          </View>
+                          <Text style={styles.templateExamSubjects}>Quant • English • GK • Reasoning</Text>
+                          <Text style={styles.templateExamChapters}>
+                            30 chapters mapping syllabus topics.
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* Custom Setup Option */}
+                        <TouchableOpacity
+                          style={[styles.templateCard, styles.customSetupCard]}
+                          onPress={handleOpenAddTopic}
+                          activeOpacity={0.85}
+                        >
+                          <Plus size={20} color="#5B4FE8" style={styles.customSetupIcon} />
+                          <Text style={styles.customSetupTitle}>Manual Subject Entry</Text>
+                          <Text style={styles.customSetupDesc}>
+                            Start empty and type in your own subjects, chapters, and topics manually.
+                          </Text>
+                        </TouchableOpacity>
                       </View>
-                      <Text style={styles.templateExamSubjects}>Physics • Chemistry • Biology</Text>
-                      <Text style={styles.templateExamChapters}>
-                        96 standard chapters mapped to log medical prep.
+                    </>
+                  ) : userCategory === 'employee' ? (
+                    <>
+                      <Text style={styles.setupWelcomeTitle}>Set up your skill subjects 💼</Text>
+                      <Text style={styles.setupWelcomeSubtitle}>
+                        Load the work skills template or build your professional development topics manually
                       </Text>
-                    </TouchableOpacity>
 
-                    {/* Setup Card: JEE */}
-                    <TouchableOpacity
-                      style={styles.templateCard}
-                      onPress={() => handleLoadSyllabusTemplate('JEE')}
-                      activeOpacity={0.85}
-                    >
-                      <View style={styles.templateCardHeader}>
-                        <Text style={styles.templateExamName}>JEE</Text>
-                        <Award size={16} color="#5B4FE8" />
+                      <View style={styles.templateCardsContainer}>
+                        {/* Setup Card: Work Skills Template */}
+                        <TouchableOpacity
+                          style={[
+                            styles.templateCard,
+                            styles.templateCardHighlighted,
+                          ]}
+                          onPress={() => handleLoadSyllabusTemplate('WORK_SKILLS')}
+                          activeOpacity={0.85}
+                        >
+                          <View style={styles.templateCardHeader}>
+                            <Text style={styles.templateExamName}>Work Skills Development</Text>
+                            <View style={styles.recommendedBadge}>
+                              <Text style={styles.recommendedText}>Recommended</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.templateExamSubjects}>Technical • Soft Skills • Industry Knowledge • Leadership</Text>
+                          <Text style={styles.templateExamChapters}>
+                            Core subjects to log and track your professional learning.
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* Custom Setup Option */}
+                        <TouchableOpacity
+                          style={[styles.templateCard, styles.customSetupCard]}
+                          onPress={handleOpenAddTopic}
+                          activeOpacity={0.85}
+                        >
+                          <Plus size={20} color="#5B4FE8" style={styles.customSetupIcon} />
+                          <Text style={styles.customSetupTitle}>Manual Subject Entry</Text>
+                          <Text style={styles.customSetupDesc}>
+                            Start empty and type in your own subjects, chapters, and topics manually.
+                          </Text>
+                        </TouchableOpacity>
                       </View>
-                      <Text style={styles.templateExamSubjects}>Physics • Chemistry • Math</Text>
-                      <Text style={styles.templateExamChapters}>
-                        74 core chapters for engineering entrance prep.
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.setupWelcomeTitle}>Add your subjects manually 📚</Text>
+                      <Text style={styles.setupWelcomeSubtitle}>
+                        Type in your custom subjects, chapters, and topics to start tracking your learning
                       </Text>
-                    </TouchableOpacity>
 
-                    {/* Setup Card: UPSC */}
-                    <TouchableOpacity
-                      style={styles.templateCard}
-                      onPress={() => handleLoadSyllabusTemplate('UPSC')}
-                      activeOpacity={0.85}
-                    >
-                      <View style={styles.templateCardHeader}>
-                        <Text style={styles.templateExamName}>UPSC Civil Services</Text>
-                        <Award size={16} color="#FFB800" />
+                      <View style={styles.templateCardsContainer}>
+                        {/* Custom Setup Option */}
+                        <TouchableOpacity
+                          style={[
+                            styles.templateCard,
+                            styles.templateCardHighlighted,
+                            styles.customSetupCard,
+                          ]}
+                          onPress={handleOpenAddTopic}
+                          activeOpacity={0.85}
+                        >
+                          <Plus size={24} color="#5B4FE8" style={styles.customSetupIcon} />
+                          <Text style={styles.customSetupTitle}>Add Subject Topic</Text>
+                          <Text style={styles.customSetupDesc}>
+                            Create your own custom subject tracks and chapters manually.
+                          </Text>
+                        </TouchableOpacity>
                       </View>
-                      <Text style={styles.templateExamSubjects}>GS Paper 1-4 • CSAT</Text>
-                      <Text style={styles.templateExamChapters}>
-                        24 subjects covering ethics, polity, history, and reasoning.
-                      </Text>
-                    </TouchableOpacity>
-
-                    {/* Setup Card: SSC CGL */}
-                    <TouchableOpacity
-                      style={styles.templateCard}
-                      onPress={() => handleLoadSyllabusTemplate('SSC_CGL')}
-                      activeOpacity={0.85}
-                    >
-                      <View style={styles.templateCardHeader}>
-                        <Text style={styles.templateExamName}>SSC CGL</Text>
-                        <Award size={16} color="#E85858" />
-                      </View>
-                      <Text style={styles.templateExamSubjects}>Quant • English • GK • Reasoning</Text>
-                      <Text style={styles.templateExamChapters}>
-                        30 chapters mapping syllabus topics.
-                      </Text>
-                    </TouchableOpacity>
-
-                    {/* Custom Setup Option */}
-                    <TouchableOpacity
-                      style={[styles.templateCard, styles.customSetupCard]}
-                      onPress={handleOpenAddTopic}
-                      activeOpacity={0.85}
-                    >
-                      <Plus size={20} color="#5B4FE8" style={styles.customSetupIcon} />
-                      <Text style={styles.customSetupTitle}>Manual Subject Entry</Text>
-                      <Text style={styles.customSetupDesc}>
-                        Start empty and type in your own subjects, chapters, and topics manually.
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+                    </>
+                  )}
                 </ScrollView>
               )}
 
@@ -1100,7 +1217,7 @@ export default function LearnScreen(): React.JSX.Element {
                   ref={notesListRef}
                   data={filteredNotes}
                   keyExtractor={(item) => item.id}
-                  removeClippedSubviews={true}
+                  removeClippedSubviews={Platform.OS === 'android'}
                   maxToRenderPerBatch={10}
                   windowSize={5}
                   initialNumToRender={8}
@@ -1789,6 +1906,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 12,
     lineHeight: 16,
+  },
+  templateCardHighlighted: {
+    borderColor: '#5B4FE8',
+    borderWidth: 1.5,
+    backgroundColor: '#F7F6FF', // soft violet tint
+  },
+  recommendedBadge: {
+    backgroundColor: '#5B4FE8',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  recommendedText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   // Flashcard Deck
   deckContainer: {

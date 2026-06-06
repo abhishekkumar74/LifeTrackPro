@@ -264,6 +264,7 @@ export default function HabitsManagementScreen() {
                         style={[styles.checkbox, isDone && styles.checkboxChecked]}
                         onPress={() => handleToggleHabit(habit)}
                         activeOpacity={0.6}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         {isDone && <Text style={styles.checkmark}>✓</Text>}
                       </TouchableOpacity>

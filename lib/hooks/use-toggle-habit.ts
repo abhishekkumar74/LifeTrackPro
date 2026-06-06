@@ -1,69 +1,77 @@
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase/client';
 import { useUiStore } from '@/lib/store/ui.store';
+import { getTodayLocal } from '@/lib/utils/date';
+
+export async function toggleHabit(
+  habitId: string,
+  currentlyDone: boolean,
+  onOptimisticUpdate: (done: boolean) => void,
+  date?: string
+) {
+  const newDone = !currentlyDone;
+  
+  // 1. Optimistic update immediately
+  onOptimisticUpdate(newDone);
+
+  // 2. Get user
+  const { data: { user }, error: authError } = 
+    await supabase.auth.getUser();
+  if (!user || authError) {
+    // Rollback
+    onOptimisticUpdate(currentlyDone);
+    if (__DEV__) console.error('No user in toggleHabit');
+    return;
+  }
+  
+  const targetDate = date || getTodayLocal();
+  
+  // 3. Haptic feedback
+  await Haptics.impactAsync(
+    Haptics.ImpactFeedbackStyle.Light
+  ).catch(() => {});
+  
+  // 4. Upsert to database
+  const { error } = await supabase
+    .from('habit_logs')
+    .upsert(
+      {
+        habit_id: habitId,
+        user_id: user.id,
+        date: targetDate,
+        done: newDone,
+      },
+      { onConflict: 'habit_id,date' }
+    );
+  
+  // 5. Rollback on error
+  if (error) {
+    onOptimisticUpdate(currentlyDone); // revert
+    useUiStore.getState().showToast(
+      'Could not update habit. Try again.',
+      'error'
+    );
+    if (__DEV__) console.error('Habit toggle error:', error);
+  }
+}
 
 interface ToggleHabitParams {
   habitId: string;
-  date: string;
+  date?: string;
   completedToday: boolean;
   onOptimisticUpdate: (newValue: boolean) => void;
 }
 
 export function useToggleHabit() {
-  const toggleHabit = async ({
+  const toggle = async ({
     habitId,
     date,
     completedToday,
     onOptimisticUpdate,
   }: ToggleHabitParams) => {
-    // 1. Optimistic Update (Flip instantly in the UI)
-    const newCompletedState = !completedToday;
-    onOptimisticUpdate(newCompletedState);
-
-    // 2. Trigger Haptics
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch (e) {
-      // Fail silently on simulators or unsupported devices
-    }
-
-    // 3. Sync to Supabase habit_logs table
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Not authenticated');
-      }
-
-      // Upsert habit log record
-      const { error } = await supabase
-        .from('habit_logs')
-        .upsert(
-          {
-            habit_id: habitId,
-            user_id: session.user.id,
-            date: date,
-            done: newCompletedState,
-          },
-          {
-            onConflict: 'habit_id,date',
-          }
-        );
-
-      if (error) {
-        throw error;
-      }
-    } catch (err) {
-      if (__DEV__) {
-        console.error('Failed to sync habit toggle:', err);
-      }
-
-      // Rollback optimistic state change
-      onOptimisticUpdate(completedToday);
-
-      // Show toast error message
-      useUiStore.getState().showToast('Failed to update habit', 'error');
-    }
+    await toggleHabit(habitId, completedToday, onOptimisticUpdate, date);
   };
 
-  return { toggleHabit };
+  return { toggleHabit: toggle };
 }
+

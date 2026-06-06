@@ -146,6 +146,7 @@ export const TaskItem = React.memo<TaskItemProps>(({
           ]}
           onPress={() => onComplete(task.id)}
           activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           {isCompleted && <Text style={styles.checkIcon}>✓</Text>}
         </TouchableOpacity>

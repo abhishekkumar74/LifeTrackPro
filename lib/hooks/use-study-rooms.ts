@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase/client';
 import { StudyRoom } from '@/types/app.types';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { useUiStore } from '@/lib/store/ui.store';
 
 export interface RoomWithHost extends StudyRoom {
   host_name: string;
@@ -85,6 +86,9 @@ export function useRoomPresence(roomId: string) {
         presence: {
           key: profile.id,
         },
+        broadcast: {
+          self: true,
+        },
       },
     });
 
@@ -104,7 +108,7 @@ export function useRoomPresence(roomId: string) {
 
     channel
       .on('presence', { event: 'sync' }, handleSync)
-      .subscribe(async (status) => {
+      .subscribe(async (status, err) => {
         if (status === 'SUBSCRIBED') {
           await channel.track({
             userId: profile.id,
@@ -113,6 +117,13 @@ export function useRoomPresence(roomId: string) {
             joinedAt: new Date().toISOString(),
             currentSubject: null,
           });
+        }
+        if (status === 'CHANNEL_ERROR') {
+          if (__DEV__) console.error('Channel error:', err);
+          useUiStore.getState().showToast('Could not connect to room', 'error');
+        }
+        if (status === 'TIMED_OUT') {
+          setTimeout(() => channel.subscribe(), 2000);
         }
       });
 

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { Goal, Milestone, Task } from '@/types/app.types';
+import { useAuthStore } from '@/lib/store/auth.store';
 
 export type AssembledGoal = Goal & {
   totalTasks: number;
@@ -9,8 +10,9 @@ export type AssembledGoal = Goal & {
 };
 
 export function useGoals(status: 'active' | 'achieved' = 'active') {
+  const { user } = useAuthStore();
   return useQuery<AssembledGoal[]>({
-    queryKey: ['goals', status],
+    queryKey: ['goals', user?.id, status],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -56,6 +58,7 @@ export function useGoals(status: 'active' | 'achieved' = 'active') {
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       }) as AssembledGoal[];
     },
+    enabled: !!user?.id,
   });
 }
 
@@ -91,7 +94,8 @@ export function useCreateGoal() {
       return data as Goal;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
     },
   });
 }
@@ -128,14 +132,15 @@ export function useUpdateGoal() {
       return data as Goal;
     },
     onMutate: async ({ id, updates }) => {
+      const user = useAuthStore.getState().user;
       // Cancel outgoing queries
-      await queryClient.cancelQueries({ queryKey: ['goals'] });
+      await queryClient.cancelQueries({ queryKey: ['goals', user?.id] });
 
       // Snapshot previous state
-      const previousGoals = queryClient.getQueryData<AssembledGoal[]>(['goals', 'active']);
+      const previousGoals = queryClient.getQueryData<AssembledGoal[]>(['goals', user?.id, 'active']);
 
       // Optimistically update
-      queryClient.setQueryData<AssembledGoal[]>(['goals', 'active'], (old) => {
+      queryClient.setQueryData<AssembledGoal[]>(['goals', user?.id, 'active'], (old) => {
         if (!old) return [];
         return old.map((g) =>
           g.id === id ? { ...g, ...updates } : g
@@ -145,12 +150,14 @@ export function useUpdateGoal() {
       return { previousGoals };
     },
     onError: (_err, _variables, context) => {
+      const user = useAuthStore.getState().user;
       if (context?.previousGoals) {
-        queryClient.setQueryData(['goals', 'active'], context.previousGoals);
+        queryClient.setQueryData(['goals', user?.id, 'active'], context.previousGoals);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
     },
   });
 }
@@ -171,7 +178,8 @@ export function useDeleteGoal() {
       return data as Goal;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
     },
   });
 }

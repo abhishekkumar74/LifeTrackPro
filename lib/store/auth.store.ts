@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { User, Session } from '@supabase/supabase-js';
 import { UserProfile } from '@/types/app.types';
 import { supabase } from '@/lib/supabase/client';
+import { queryClient } from '@/lib/query-client';
 
 interface AuthState {
   user: User | null;
@@ -36,6 +37,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     }),
   signOut: async () => {
     await supabase.auth.signOut();
+    // CRITICAL: clear all cached data
+    queryClient.clear();
+    useAuthStore.setState({
+      user: null,
+      session: null,
+      profile: null,
+    });
   },
 }));
 

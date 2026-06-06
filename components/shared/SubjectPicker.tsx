@@ -103,6 +103,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
           isDark ? styles.triggerDark : styles.triggerLight,
           style,
         ]}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
         <View style={styles.triggerContent}>
           <View style={[styles.colorDot, { backgroundColor: selectedColor }]} />
@@ -161,6 +162,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                   style={[styles.optionItem, !selectedSubject && styles.optionItemActive]}
                   onPress={() => handleSelect(null)}
                   activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <View style={styles.optionLeft}>
                     <View style={[styles.colorDot, { backgroundColor: '#9B9BAF' }]} />
@@ -181,6 +183,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                       style={[styles.optionItem, isSelected && styles.optionItemActive]}
                       onPress={() => handleSelect(sub)}
                       activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <View style={styles.optionLeft}>
                         <View style={[styles.colorDot, { backgroundColor: color }]} />
@@ -199,6 +202,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                     style={styles.customAddRow}
                     onPress={handleAddNewSubject}
                     activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Plus size={16} color="#5B4FE8" />
                     <Text style={styles.customAddText}>
@@ -213,6 +217,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                     style={styles.addCustomTrigger}
                     onPress={() => setIsAddingNew(true)}
                     activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Plus size={16} color="#5B4FE8" />
                     <Text style={styles.addCustomTriggerText}>Add Custom Subject</Text>
@@ -238,6 +243,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                       onPress={handleAddNewSubject}
                       disabled={!newSubjectName.trim() || addSubjectMutation.isPending}
                       activeOpacity={0.8}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       {addSubjectMutation.isPending ? (
                         <ActivityIndicator size="small" color="#FFFFFF" />

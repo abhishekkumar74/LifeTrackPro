@@ -3,10 +3,12 @@ import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase/client';
 import { Task } from '@/types/app.types';
 import { useUiStore } from '@/lib/store/ui.store';
+import { useAuthStore } from '@/lib/store/auth.store';
 
 export function useTasks(milestoneId?: string) {
+  const { user } = useAuthStore();
   return useQuery<Task[]>({
-    queryKey: ['tasks', milestoneId || 'standalone'],
+    queryKey: ['tasks', user?.id, milestoneId || 'standalone'],
     queryFn: async () => {
       let query = supabase.from('tasks').select('*');
       
@@ -41,6 +43,7 @@ export function useTasks(milestoneId?: string) {
         return 0;
       }) as Task[];
     },
+    enabled: !!user?.id,
   });
 }
 
@@ -74,7 +77,8 @@ export function useCompleteTask() {
         // Silently catch in simulators
       }
 
-      const cacheKey = ['tasks', milestoneId || 'standalone'];
+      const user = useAuthStore.getState().user;
+      const cacheKey = ['tasks', user?.id, milestoneId || 'standalone'];
 
       // Cancel outgoing queries
       await queryClient.cancelQueries({ queryKey: cacheKey });
@@ -95,15 +99,17 @@ export function useCompleteTask() {
       return { previousTasks };
     },
     onError: (_err, { milestoneId }, context) => {
-      const cacheKey = ['tasks', milestoneId || 'standalone'];
+      const user = useAuthStore.getState().user;
+      const cacheKey = ['tasks', user?.id, milestoneId || 'standalone'];
       if (context?.previousTasks) {
         queryClient.setQueryData(cacheKey, context.previousTasks);
       }
       useUiStore.getState().showToast('Task completion failed', 'error');
     },
     onSettled: (_, __, { milestoneId }) => {
-      queryClient.invalidateQueries({ queryKey: ['tasks', milestoneId || 'standalone'] });
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['tasks', user?.id, milestoneId || 'standalone'] });
+      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
     },
   });
 }
@@ -131,9 +137,10 @@ export function useCreateTask() {
       return data;
     },
     onSuccess: (data) => {
-      const cacheKey = ['tasks', data.milestone_id || 'standalone'];
+      const user = useAuthStore.getState().user;
+      const cacheKey = ['tasks', user?.id, data.milestone_id || 'standalone'];
       queryClient.invalidateQueries({ queryKey: cacheKey });
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
     },
   });
 }
@@ -161,7 +168,8 @@ export function useRescheduleTask() {
       return data;
     },
     onSuccess: (data) => {
-      const cacheKey = ['tasks', data.milestone_id || 'standalone'];
+      const user = useAuthStore.getState().user;
+      const cacheKey = ['tasks', user?.id, data.milestone_id || 'standalone'];
       queryClient.invalidateQueries({ queryKey: cacheKey });
     },
   });
@@ -186,9 +194,10 @@ export function useDeleteTask() {
       return id;
     },
     onSuccess: (_, variables) => {
-      const cacheKey = ['tasks', variables.milestoneId || 'standalone'];
+      const user = useAuthStore.getState().user;
+      const cacheKey = ['tasks', user?.id, variables.milestoneId || 'standalone'];
       queryClient.invalidateQueries({ queryKey: cacheKey });
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
     },
   });
 }

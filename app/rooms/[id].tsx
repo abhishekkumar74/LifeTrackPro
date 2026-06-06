@@ -114,7 +114,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   if (isRoomLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="light-content" backgroundColor="#17172A" translucent={false} />
         <ActivityIndicator size="large" color="#5B4FE8" />
       </View>
     );
@@ -123,7 +123,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   if (roomError || !room) {
     return (
       <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="light-content" backgroundColor="#17172A" translucent={false} />
         <Text style={styles.errorText}>Room not found</Text>
         <TouchableOpacity style={styles.leaveButton} onPress={handleLeave}>
           <Text style={styles.leaveButtonText}>Leave Room</Text>
@@ -144,7 +144,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor="#17172A" translucent={false} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -178,6 +178,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
             keyExtractor={(item) => item.userId}
             numColumns={4}
             columnWrapperStyle={styles.membersGridRow}
+            removeClippedSubviews={Platform.OS === 'android'}
             renderItem={({ item }) => (
               <MemberBubble member={item} formatTimeAgo={formatTimeAgo} />
             )}
@@ -199,6 +200,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               data={[...messages].reverse()}
               keyExtractor={(item) => item.id}
               inverted
+              removeClippedSubviews={Platform.OS === 'android'}
               renderItem={({ item }) => (
                 <MessageRow message={item} />
               )}

@@ -25,10 +25,10 @@ import { TimerCircle } from '@/components/focus/TimerCircle';
 import { SoundPicker } from '@/components/focus/SoundPicker';
 import { BlockerToggle } from '@/components/focus/BlockerToggle';
 import { SessionSummary } from '@/components/focus/SessionSummary';
-
-const SUBJECT_OPTIONS = ['Physics', 'Chemistry', 'Biology', 'Math', 'Other'];
+import { useSubjects } from '@/lib/hooks/use-subjects';
 
 export default function FocusScreen(): React.JSX.Element {
+  const { data: subjects = [] } = useSubjects();
   const [showSummary, setShowSummary] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [tempGoal, setTempGoal] = useState('');
@@ -190,10 +190,12 @@ export default function FocusScreen(): React.JSX.Element {
 
   const cycleSubject = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const currentIndex = SUBJECT_OPTIONS.indexOf(subjectTag || 'Other');
-    const nextIndex = (currentIndex + 1) % SUBJECT_OPTIONS.length;
-    const nextSubject = SUBJECT_OPTIONS[nextIndex];
-    setSubjectTag(nextSubject === 'Other' ? null : nextSubject);
+    const options = subjects.length > 0 ? [...subjects, 'General'] : ['Physics', 'Chemistry', 'Biology', 'Math', 'Other'];
+    const currentSubject = subjectTag || 'General';
+    const currentIndex = options.indexOf(currentSubject);
+    const nextIndex = (currentIndex + 1) % options.length;
+    const nextSubject = options[nextIndex];
+    setSubjectTag(nextSubject === 'General' ? null : nextSubject);
   };
 
   const handleSoundSelect = async (key: SoundKey | null) => {
@@ -228,7 +230,7 @@ export default function FocusScreen(): React.JSX.Element {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor="#17172A" translucent={false} />
 
       {/* Background circles */}
       <View style={styles.circle1} pointerEvents="none" />

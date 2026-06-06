@@ -98,6 +98,7 @@ export const MilestoneItem = React.memo<MilestoneItemProps>(({
           style={[styles.statusDotContainer, { backgroundColor: statusTheme.ring }]}
           onPress={handleStatusDotPress}
           activeOpacity={0.6}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <View style={[styles.statusDot, { backgroundColor: statusTheme.fill }]} />
         </TouchableOpacity>
@@ -166,6 +167,7 @@ export const MilestoneItem = React.memo<MilestoneItemProps>(({
                     })
                   }
                   activeOpacity={0.6}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   {isTaskDone && <Text style={styles.checkIcon}>✓</Text>}
                 </TouchableOpacity>
@@ -197,6 +199,7 @@ export const MilestoneItem = React.memo<MilestoneItemProps>(({
             style={styles.addTaskButton}
             onPress={() => onAddTask(milestone.id)}
             activeOpacity={0.6}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={styles.addTaskText}>{ADD_TASK_LABEL}</Text>
           </TouchableOpacity>

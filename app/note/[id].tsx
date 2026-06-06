@@ -25,6 +25,7 @@ import BottomSheet, {
 import { ArrowLeft, MoreVertical, Plus, X, Sparkles, Check } from 'lucide-react-native';
 import { SubjectPicker } from '@/components/shared/SubjectPicker';
 import { useUiStore } from '@/lib/store/ui.store';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 import {
   useNote,
@@ -62,6 +63,7 @@ const NOTE_TEMPLATES = {
 };
 
 export default function NoteEditorScreen(): React.JSX.Element {
+  useAndroidBackHandler();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 

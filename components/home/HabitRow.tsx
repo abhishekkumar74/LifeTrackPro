@@ -116,6 +116,7 @@ export const HabitRow: React.FC<HabitRowProps> = ({
                   router.push(`/habit/${habit.id}`);
                 }}
                 activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 {isDone ? (
                   <>

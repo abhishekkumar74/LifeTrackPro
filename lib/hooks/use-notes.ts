@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { Note } from '@/types/app.types';
 import { calculateNextReview } from '@/lib/utils/spaced-rep';
+import { useAuthStore } from '@/lib/store/auth.store';
 
 // Map to track debounce timeouts per note ID for auto-save debouncing
 const debounceTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -40,8 +41,9 @@ const debouncedUpdate = (id: string, updates: Partial<Note>): Promise<Note> => {
 };
 
 export function useNotes(subject?: string) {
+  const { user } = useAuthStore();
   return useQuery<Note[]>({
-    queryKey: ['notes', subject],
+    queryKey: ['notes', user?.id, subject],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -60,12 +62,14 @@ export function useNotes(subject?: string) {
       if (error) throw error;
       return data as Note[];
     },
+    enabled: !!user?.id,
   });
 }
 
 export function useDueRevisions() {
+  const { user } = useAuthStore();
   return useQuery<Note[]>({
-    queryKey: ['notes', 'due'],
+    queryKey: ['notes', user?.id, 'due'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -87,12 +91,14 @@ export function useDueRevisions() {
       if (error) throw error;
       return data as Note[];
     },
+    enabled: !!user?.id,
   });
 }
 
 export function useNote(id: string) {
+  const { user } = useAuthStore();
   return useQuery<Note>({
-    queryKey: ['note', id],
+    queryKey: ['note', user?.id, id],
     queryFn: async () => {
       if (id === 'new') {
         // Return a mock default note structure for new notes
@@ -126,7 +132,7 @@ export function useNote(id: string) {
       if (error) throw error;
       return data as Note;
     },
-    enabled: !!id,
+    enabled: !!user?.id && !!id,
   });
 }
 
@@ -164,9 +170,10 @@ export function useCreateNote() {
       return data as Note;
     },
     onSuccess: (newNote) => {
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['notes', user?.id] });
       // Pre-warm the cache for this new note ID
-      queryClient.setQueryData(['note', newNote.id], newNote);
+      queryClient.setQueryData(['note', user?.id, newNote.id], newNote);
     },
   });
 }
@@ -181,22 +188,23 @@ export function useUpdateNote() {
       return debouncedUpdate(id, updates);
     },
     onMutate: async ({ id, updates }) => {
+      const user = useAuthStore.getState().user;
       // Cancel outgoing queries to avoid overwriting optimistic updates
-      await queryClient.cancelQueries({ queryKey: ['notes'] });
-      await queryClient.cancelQueries({ queryKey: ['note', id] });
+      await queryClient.cancelQueries({ queryKey: ['notes', user?.id] });
+      await queryClient.cancelQueries({ queryKey: ['note', user?.id, id] });
 
-      const previousNotes = queryClient.getQueryData<Note[]>(['notes']);
-      const previousNote = queryClient.getQueryData<Note>(['note', id]);
+      const previousNotes = queryClient.getQueryData<Note[]>(['notes', user?.id]);
+      const previousNote = queryClient.getQueryData<Note>(['note', user?.id, id]);
 
       // Optimistically update the list queries
-      queryClient.setQueryData<Note[]>(['notes'], (old) => {
+      queryClient.setQueryData<Note[]>(['notes', user?.id], (old) => {
         if (!old) return [];
         return old.map((n) => (n.id === id ? { ...n, ...updates } : n));
       });
 
       // Optimistically update the single note query cache
       if (previousNote) {
-        queryClient.setQueryData<Note>(['note', id], {
+        queryClient.setQueryData<Note>(['note', user?.id, id], {
           ...previousNote,
           ...updates,
         });
@@ -205,20 +213,23 @@ export function useUpdateNote() {
       return { previousNotes, previousNote };
     },
     onError: (_err, variables, context) => {
+      const user = useAuthStore.getState().user;
       // Rollback cache state on error
       if (context?.previousNotes) {
-        queryClient.setQueryData(['notes'], context.previousNotes);
+        queryClient.setQueryData(['notes', user?.id], context.previousNotes);
       }
       if (context?.previousNote) {
-        queryClient.setQueryData(['note', variables.id], context.previousNote);
+        queryClient.setQueryData(['note', user?.id, variables.id], context.previousNote);
       }
     },
     onSuccess: (updatedNote) => {
-      queryClient.setQueryData(['note', updatedNote.id], updatedNote);
+      const user = useAuthStore.getState().user;
+      queryClient.setQueryData(['note', user?.id, updatedNote.id], updatedNote);
     },
     onSettled: (updatedNote) => {
+      const user = useAuthStore.getState().user;
       if (updatedNote) {
-        queryClient.invalidateQueries({ queryKey: ['notes'] });
+        queryClient.invalidateQueries({ queryKey: ['notes', user?.id] });
       }
     },
   });
@@ -238,8 +249,9 @@ export function useDeleteNote() {
       return id;
     },
     onSuccess: (deletedId) => {
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      queryClient.removeQueries({ queryKey: ['note', deletedId] });
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['notes', user?.id] });
+      queryClient.removeQueries({ queryKey: ['note', user?.id, deletedId] });
     },
   });
 }
@@ -284,8 +296,9 @@ export function useReviewNote() {
       return updatedNote as Note;
     },
     onSuccess: (updatedNote) => {
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      queryClient.setQueryData(['note', updatedNote.id], updatedNote);
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['notes', user?.id] });
+      queryClient.setQueryData(['note', user?.id, updatedNote.id], updatedNote);
     },
   });
 }

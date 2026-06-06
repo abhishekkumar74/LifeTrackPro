@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { DailyCheckin, FocusSession } from '@/types/app.types';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
+import { useAuthStore } from '@/lib/store/auth.store';
 
 // Helper to format Date object into local YYYY-MM-DD string
 export function getLocalDateStr(date: Date): string {
@@ -56,8 +57,9 @@ export interface Achievement {
 
 // 1. usePeriodStats Hook
 export function usePeriodStats(period: 'day' | 'week' | 'month') {
+  const { user } = useAuthStore();
   return useQuery<PeriodStats>({
-    queryKey: ['stats', 'period', period],
+    queryKey: ['stats', user?.id, 'period', period],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -192,8 +194,9 @@ export function usePeriodStats(period: 'day' | 'week' | 'month') {
 
 // 2. useHeatmapData Hook
 export function useHeatmapData() {
+  const { user } = useAuthStore();
   return useQuery<HeatmapDay[]>({
-    queryKey: ['stats', 'heatmap'],
+    queryKey: ['stats', user?.id, 'heatmap'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -248,8 +251,9 @@ export function useHeatmapData() {
 
 // Shared Hook to fetch focus sessions for the current week (to be shared between BarChart and DonutChart)
 function useWeeklyFocusSessions() {
+  const { user } = useAuthStore();
   return useQuery<FocusSession[]>({
-    queryKey: ['stats', 'weekly-sessions'],
+    queryKey: ['stats', user?.id, 'weekly-sessions'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -277,9 +281,10 @@ function useWeeklyFocusSessions() {
 // 3. useBarChartData Hook
 export function useBarChartData() {
   const { data: sessions, isLoading, error } = useWeeklyFocusSessions();
+  const { user } = useAuthStore();
 
   const chartData = useQuery<BarDay[]>({
-    queryKey: ['stats', 'bar-chart', sessions?.length],
+    queryKey: ['stats', user?.id, 'bar-chart', sessions?.length],
     queryFn: async () => {
       const today = new Date();
       const todayStr = getLocalDateStr(today);
@@ -334,9 +339,10 @@ export function useBarChartData() {
 // 4. useSubjectBreakdown Hook
 export function useSubjectBreakdown() {
   const { data: sessions, isLoading, error } = useWeeklyFocusSessions();
+  const { user } = useAuthStore();
 
   const breakdownData = useQuery<SubjectSlice[]>({
-    queryKey: ['stats', 'subject-breakdown', sessions?.length],
+    queryKey: ['stats', user?.id, 'subject-breakdown', sessions?.length],
     queryFn: async () => {
       if (!sessions || sessions.length === 0) return [];
 
@@ -378,8 +384,9 @@ export function useSubjectBreakdown() {
 
 // 5. useMoodHistory Hook
 export function useMoodHistory() {
+  const { user } = useAuthStore();
   return useQuery<DailyCheckin[]>({
-    queryKey: ['stats', 'mood-history'],
+    queryKey: ['stats', user?.id, 'mood-history'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -404,8 +411,9 @@ export function useMoodHistory() {
 
 // 6. useTodayCheckin Hook
 export function useTodayCheckin() {
+  const { user } = useAuthStore();
   return useQuery<DailyCheckin | null>({
-    queryKey: ['stats', 'today-checkin'],
+    queryKey: ['stats', user?.id, 'today-checkin'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -455,10 +463,11 @@ export function useLogCheckin() {
       return data as DailyCheckin;
     },
     onMutate: async ({ mood, energy }) => {
-      await queryClient.cancelQueries({ queryKey: ['stats', 'today-checkin'] });
-      await queryClient.cancelQueries({ queryKey: ['stats', 'mood-history'] });
+      const user = useAuthStore.getState().user;
+      await queryClient.cancelQueries({ queryKey: ['stats', user?.id, 'today-checkin'] });
+      await queryClient.cancelQueries({ queryKey: ['stats', user?.id, 'mood-history'] });
 
-      const previousCheckin = queryClient.getQueryData<DailyCheckin | null>(['stats', 'today-checkin']);
+      const previousCheckin = queryClient.getQueryData<DailyCheckin | null>(['stats', user?.id, 'today-checkin']);
 
       const todayStr = getLocalDateStr(new Date());
       const mockCheckin: DailyCheckin = {
@@ -472,27 +481,30 @@ export function useLogCheckin() {
       };
 
       // Optimistically update today checkin
-      queryClient.setQueryData(['stats', 'today-checkin'], mockCheckin);
+      queryClient.setQueryData(['stats', user?.id, 'today-checkin'], mockCheckin);
 
       return { previousCheckin };
     },
     onError: (_err, _variables, context) => {
+      const user = useAuthStore.getState().user;
       if (context) {
-        queryClient.setQueryData(['stats', 'today-checkin'], context.previousCheckin);
+        queryClient.setQueryData(['stats', user?.id, 'today-checkin'], context.previousCheckin);
       }
     },
     onSuccess: (newCheckin) => {
-      queryClient.setQueryData(['stats', 'today-checkin'], newCheckin);
-      queryClient.invalidateQueries({ queryKey: ['stats', 'mood-history'] });
+      const user = useAuthStore.getState().user;
+      queryClient.setQueryData(['stats', user?.id, 'today-checkin'], newCheckin);
+      queryClient.invalidateQueries({ queryKey: ['stats', user?.id, 'mood-history'] });
     },
   });
 }
 
 // 8. useAchievements Hook
 export function useAchievements() {
+  const { user } = useAuthStore();
   // Query all user focus sessions, goals and habit logs in parallel
   return useQuery<Achievement[]>({
-    queryKey: ['stats', 'achievements'],
+    queryKey: ['stats', user?.id, 'achievements'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -707,8 +719,9 @@ export function useAchievements() {
 
 // 9. useEnhancedStats Hook
 export function useEnhancedStats() {
+  const { user } = useAuthStore();
   return useQuery({
-    queryKey: ['stats', 'enhanced'],
+    queryKey: ['stats', user?.id, 'enhanced'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');

@@ -24,10 +24,13 @@
       "package": "com.lifetrackpro.app",
       "versionCode": 1,
       "permissions": [
+        "android.permission.INTERNET",
         "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
         "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.RECEIVE_BOOT_COMPLETED",
-        "NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -64,6 +67,7 @@
       "eas": {
         "projectId": "f9f5a5fa-ec1b-4533-90bd-066c6913f67e"
       }
-    }
+    },
+    "owner": "abhishek74"
   }
 }

@@ -37,6 +37,7 @@ export interface OnboardingState {
   name: string;
   category: UserCategory | null;
   subcategories: string[];
+  customSubcategory?: string;
   goalText: string;
   timeline: string | null;
   hours: number;
@@ -47,6 +48,7 @@ const INITIAL_STATE: OnboardingState = {
   name: '',
   category: null,
   subcategories: [],
+  customSubcategory: '',
   goalText: '',
   timeline: null,
   hours: 4,
@@ -101,13 +103,10 @@ export default function OnboardingScreen(): React.JSX.Element {
       const nextState = { ...prev, ...updates };
       if (updates.category !== undefined && updates.category !== prev.category) {
         nextState.subcategories = [];
+        nextState.customSubcategory = '';
       }
       return nextState;
     });
-  };
-
-  const isSkipStep2 = (cat: UserCategory | null): boolean => {
-    return cat === 'entrepreneur' || cat === 'educator' || cat === 'aspirant';
   };
 
   const isStepValid = (): boolean => {
@@ -115,6 +114,9 @@ export default function OnboardingScreen(): React.JSX.Element {
       case 1:
         return state.name.trim().length > 1 && state.category !== null;
       case 2:
+        if (state.subcategories.includes('Other')) {
+          return !!state.customSubcategory && state.customSubcategory.trim().length > 2;
+        }
         return state.subcategories.length >= 1;
       case 3:
         return state.goalText.trim().length > 10 && state.timeline !== null;
@@ -136,11 +138,7 @@ export default function OnboardingScreen(): React.JSX.Element {
     if (!isStepValid() || isLoading) return;
 
     if (currentStep === 1) {
-      if (isSkipStep2(state.category)) {
-        navigateToStep(3);
-      } else {
-        navigateToStep(2);
-      }
+      navigateToStep(2);
     } else if (currentStep === 2) {
       navigateToStep(3);
     } else if (currentStep === 3) {
@@ -156,11 +154,7 @@ export default function OnboardingScreen(): React.JSX.Element {
     if (isLoading) return;
 
     if (currentStep === 3) {
-      if (isSkipStep2(state.category)) {
-        navigateToStep(1);
-      } else {
-        navigateToStep(2);
-      }
+      navigateToStep(2);
     } else if (currentStep > 1) {
       navigateToStep(currentStep - 1);
     }
@@ -187,11 +181,15 @@ export default function OnboardingScreen(): React.JSX.Element {
       }
 
       // 2. Perform Profile details insertion
+      const finalSubcategories = state.subcategories.includes('Other') && state.customSubcategory
+        ? [...state.subcategories, state.customSubcategory.trim()]
+        : state.subcategories;
+
       const profileData = {
         id: user.id,
         name: state.name.trim(),
         category: state.category!,
-        sub_category: state.subcategories,
+        sub_category: finalSubcategories,
         daily_hours: state.hours,
         peak_time: state.peakTime!,
       };

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { Habit } from '@/types/app.types';
 import { getTodayLocal } from '@/lib/utils/date';
+import { useAuthStore } from '@/lib/store/auth.store';
 
 export interface HabitWithStatus extends Habit {
   completedToday: boolean;
@@ -30,11 +31,12 @@ interface HabitDbRow extends Habit {
 
 // 1. Fetch active habits for current user with today's completion status
 export function useHabits() {
+  const { user } = useAuthStore();
   return useQuery<HabitWithStatus[]>({
-    queryKey: ['habits'],
+    queryKey: ['habits', user?.id],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error('Not authenticated');
 
       const today = getTodayLocal();
       const { data, error } = await supabase
@@ -45,6 +47,7 @@ export function useHabits() {
             id, done, date
           )
         `)
+        .eq('user_id', currentUser.id)
         .eq('is_active', true)
         .eq('habit_logs.date', today)
         .order('order_index', { ascending: true });
@@ -57,36 +60,41 @@ export function useHabits() {
         logId: h.habit_logs?.[0]?.id ?? null,
       })) as HabitWithStatus[];
     },
+    enabled: !!user?.id,
   });
 }
 
 // Extra: Fetch archived habits
 export function useArchivedHabits() {
+  const { user } = useAuthStore();
   return useQuery<Habit[]>({
-    queryKey: ['habits', 'archived'],
+    queryKey: ['habits', user?.id, 'archived'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
         .from('habits')
         .select('*')
+        .eq('user_id', currentUser.id)
         .eq('is_active', false)
         .order('order_index', { ascending: true });
 
       if (error) throw error;
       return data as Habit[];
     },
+    enabled: !!user?.id,
   });
 }
 
 // 2. Fetch last N days of logs for a specific habit (fills missing with done: false)
 export function useHabitHistory(habitId: string, days: number) {
+  const { user } = useAuthStore();
   return useQuery<{ date: string; done: boolean }[]>({
-    queryKey: ['habitHistory', habitId, days],
+    queryKey: ['habitHistory', user?.id, habitId, days],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error('Not authenticated');
 
       const dates = getLastNDaysLocal(days);
       const oldestDate = dates[dates.length - 1];
@@ -95,7 +103,7 @@ export function useHabitHistory(habitId: string, days: number) {
         .from('habit_logs')
         .select('date, done')
         .eq('habit_id', habitId)
-        .eq('user_id', session.user.id)
+        .eq('user_id', currentUser.id)
         .gte('date', oldestDate)
         .order('date', { ascending: false });
 
@@ -111,6 +119,7 @@ export function useHabitHistory(habitId: string, days: number) {
         done: logMap.get(date) ?? false,
       }));
     },
+    enabled: !!user?.id && !!habitId,
   });
 }
 
@@ -184,13 +193,13 @@ export function useCreateHabit() {
       custom_days?: number[] | null;
       best_time?: 'morning' | 'afternoon' | 'evening' | null;
     }) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
 
       const { data: existing, error: countError } = await supabase
         .from('habits')
         .select('order_index')
-        .eq('user_id', session.user.id)
+        .eq('user_id', user.id)
         .order('order_index', { ascending: false })
         .limit(1);
 
@@ -200,7 +209,7 @@ export function useCreateHabit() {
       const { data, error } = await supabase
         .from('habits')
         .insert({
-          user_id: session.user.id,
+          user_id: user.id,
           title: habitData.title,
           emoji: habitData.emoji,
           frequency: habitData.frequency ?? 'daily',
@@ -216,7 +225,8 @@ export function useCreateHabit() {
       return data as Habit;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
     },
   });
 }
@@ -228,14 +238,18 @@ export function useUpdateHabit() {
   return useMutation<
     Habit,
     Error,
-    { id: string; updates: Partial<Omit<Habit, 'id' | 'user_id' | 'created_at'>> },
+    { id: string; updates: Partial<Omit<Habit, 'id' | 'user_id' | 'created_at' | 'updated_at'>> },
     { previousHabits: HabitWithStatus[] | undefined }
   >({
     mutationFn: async ({ id, updates }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
       const { data, error } = await supabase
         .from('habits')
         .update(updates)
         .eq('id', id)
+        .eq('user_id', user.id)
         .select()
         .single();
 
@@ -243,11 +257,12 @@ export function useUpdateHabit() {
       return data as Habit;
     },
     onMutate: async ({ id, updates }) => {
-      await queryClient.cancelQueries({ queryKey: ['habits'] });
-      const previousHabits = queryClient.getQueryData<HabitWithStatus[]>(['habits']);
+      const user = useAuthStore.getState().user;
+      await queryClient.cancelQueries({ queryKey: ['habits', user?.id] });
+      const previousHabits = queryClient.getQueryData<HabitWithStatus[]>(['habits', user?.id]);
 
       if (previousHabits) {
-        queryClient.setQueryData<HabitWithStatus[]>(['habits'], (old) => {
+        queryClient.setQueryData<HabitWithStatus[]>(['habits', user?.id], (old) => {
           if (!old) return [];
           return old.map((h) => (h.id === id ? { ...h, ...updates } : h));
         });
@@ -256,15 +271,17 @@ export function useUpdateHabit() {
       return { previousHabits };
     },
     onError: (_err, _variables, context) => {
+      const user = useAuthStore.getState().user;
       if (context?.previousHabits) {
-        queryClient.setQueryData(['habits'], context.previousHabits);
+        queryClient.setQueryData(['habits', user?.id], context.previousHabits);
       }
     },
     onSettled: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
       if (data) {
-        queryClient.invalidateQueries({ queryKey: ['habitStreak', data.id] });
-        queryClient.invalidateQueries({ queryKey: ['habitHistory', data.id] });
+        queryClient.invalidateQueries({ queryKey: ['habitStreak', user?.id, data.id] });
+        queryClient.invalidateQueries({ queryKey: ['habitHistory', user?.id, data.id] });
       }
     },
   });
@@ -276,14 +293,14 @@ export function useArchiveHabit() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
         .from('habits')
         .update({ is_active: false })
         .eq('id', id)
-        .eq('user_id', session.user.id)
+        .eq('user_id', user.id)
         .select()
         .single();
 
@@ -291,7 +308,8 @@ export function useArchiveHabit() {
       return data as Habit;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
     },
   });
 }
@@ -302,14 +320,14 @@ export function useRestoreHabit() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
         .from('habits')
         .update({ is_active: true })
         .eq('id', id)
-        .eq('user_id', session.user.id)
+        .eq('user_id', user.id)
         .select()
         .single();
 
@@ -317,8 +335,9 @@ export function useRestoreHabit() {
       return data as Habit;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['habits'] });
-      queryClient.invalidateQueries({ queryKey: ['habits', 'archived'] });
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['habits', user?.id, 'archived'] });
     },
   });
 }
@@ -329,15 +348,15 @@ export function useReorderHabits() {
 
   return useMutation({
     mutationFn: async ({ habitIds }: { habitIds: string[] }) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
 
       const promises = habitIds.map((id, index) =>
         supabase
           .from('habits')
           .update({ order_index: index })
           .eq('id', id)
-          .eq('user_id', session.user.id)
+          .eq('user_id', user.id)
       );
 
       const results = await Promise.all(promises);
@@ -347,8 +366,9 @@ export function useReorderHabits() {
       return habitIds;
     },
     onMutate: async ({ habitIds }) => {
-      await queryClient.cancelQueries({ queryKey: ['habits'] });
-      const previousHabits = queryClient.getQueryData<HabitWithStatus[]>(['habits']);
+      const user = useAuthStore.getState().user;
+      await queryClient.cancelQueries({ queryKey: ['habits', user?.id] });
+      const previousHabits = queryClient.getQueryData<HabitWithStatus[]>(['habits', user?.id]);
 
       if (previousHabits) {
         const orderMap = new Map<string, number>();
@@ -356,7 +376,7 @@ export function useReorderHabits() {
           orderMap.set(id, index);
         });
 
-        queryClient.setQueryData<HabitWithStatus[]>(['habits'], (old) => {
+        queryClient.setQueryData<HabitWithStatus[]>(['habits', user?.id], (old) => {
           if (!old) return [];
           return [...old]
             .map((h) => {
@@ -370,12 +390,14 @@ export function useReorderHabits() {
       return { previousHabits };
     },
     onError: (_err, _variables, context) => {
+      const user = useAuthStore.getState().user;
       if (context?.previousHabits) {
-        queryClient.setQueryData(['habits'], context.previousHabits);
+        queryClient.setQueryData(['habits', user?.id], context.previousHabits);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
     },
   });
 }

@@ -4,7 +4,8 @@ import { Stack, router, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Linking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '@/lib/query-client';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { theme } from '@/constants/theme';
 import { CONFIG } from '@/constants/config';
@@ -25,15 +26,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 // Ensure the splash screen stays visible during bootstrapping
 SplashScreen.preventAutoHideAsync();
 
-// Initialize the TanStack Query Client for server-state caching
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
 
 function BrandedLoadingScreen() {
   return (
