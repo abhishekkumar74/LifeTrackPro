@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Task, Habit, ScheduleBlock, Goal } from '@/types/app.types';
 import { getTodayLocal } from '@/lib/utils/date';
+import { handleSupabaseError } from '@/lib/utils/handle-error';
 
 export interface TodayStats {
   topTask: Task | null;
@@ -301,9 +302,7 @@ export function useTodayStats(): TodayStats {
         primaryGoal,
       });
     } catch (err) {
-      if (__DEV__) {
-        console.error('Error fetching today stats:', err);
-      }
+      handleSupabaseError(err, 'fetch_today_stats');
       setError('Failed to fetch dashboard stats');
     } finally {
       setIsLoading(false);

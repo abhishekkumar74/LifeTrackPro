@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -116,13 +116,15 @@ export const ScheduleStrip: React.FC<ScheduleStripProps> = ({
   }
 
   // Sort active blocks to the top
-  const sortedBlocks = [...blocks].sort((a, b) => {
-    const aActive = isBlockActiveNow(a.start_time, a.end_time);
-    const bActive = isBlockActiveNow(b.start_time, b.end_time);
-    if (aActive && !bActive) return -1;
-    if (!aActive && bActive) return 1;
-    return a.start_time.localeCompare(b.start_time);
-  });
+  const sortedBlocks = useMemo(() => {
+    return [...blocks].sort((a, b) => {
+      const aActive = isBlockActiveNow(a.start_time, a.end_time);
+      const bActive = isBlockActiveNow(b.start_time, b.end_time);
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      return a.start_time.localeCompare(b.start_time);
+    });
+  }, [blocks]);
 
   return (
     <View style={styles.outerContainer}>

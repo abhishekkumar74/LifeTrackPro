@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase/client';
-import { useUiStore } from '@/lib/store/ui.store';
 import { getTodayLocal } from '@/lib/utils/date';
+import { handleSupabaseError } from '@/lib/utils/handle-error';
 
 export async function toggleHabit(
   habitId: string,
@@ -20,7 +20,7 @@ export async function toggleHabit(
   if (!user || authError) {
     // Rollback
     onOptimisticUpdate(currentlyDone);
-    if (__DEV__) console.error('No user in toggleHabit');
+    handleSupabaseError(authError || new Error('No user in toggleHabit'), 'habit_toggle_auth');
     return;
   }
   
@@ -47,11 +47,7 @@ export async function toggleHabit(
   // 5. Rollback on error
   if (error) {
     onOptimisticUpdate(currentlyDone); // revert
-    useUiStore.getState().showToast(
-      'Could not update habit. Try again.',
-      'error'
-    );
-    if (__DEV__) console.error('Habit toggle error:', error);
+    handleSupabaseError(error, 'habit_toggle');
   }
 }
 

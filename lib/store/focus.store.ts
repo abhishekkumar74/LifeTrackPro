@@ -10,6 +10,7 @@ export interface FocusState {
   secondsLeft: number;
   totalSeconds: number;
   elapsedSeconds: number;
+  sessionStartTimestamp: number | null;
 
   // Session
   sessionGoal: string;
@@ -71,6 +72,7 @@ export const useFocusStore = create<FocusState>((set, get) => ({
   secondsLeft: DEFAULT_FOCUS_MINUTES * 60,
   totalSeconds: DEFAULT_FOCUS_MINUTES * 60,
   elapsedSeconds: 0,
+  sessionStartTimestamp: null,
 
   // Initial Session States
   sessionGoal: '',
@@ -127,15 +129,27 @@ export const useFocusStore = create<FocusState>((set, get) => ({
   setLinkedTaskId: (id) => set({ linkedTaskId: id }),
 
   start: () => {
-    set({ isRunning: true, isPaused: false });
+    set({ 
+      isRunning: true, 
+      isPaused: false, 
+      sessionStartTimestamp: Date.now() 
+    });
   },
 
   pause: () => {
-    set({ isRunning: false, isPaused: true });
+    set({ 
+      isRunning: false, 
+      isPaused: true, 
+      sessionStartTimestamp: null 
+    });
   },
 
   resume: () => {
-    set({ isRunning: true, isPaused: false });
+    set({ 
+      isRunning: true, 
+      isPaused: false, 
+      sessionStartTimestamp: Date.now() - (get().elapsedSeconds * 1000) 
+    });
   },
 
   stop: () => {
@@ -154,6 +168,7 @@ export const useFocusStore = create<FocusState>((set, get) => ({
       secondsLeft: duration,
       totalSeconds: duration,
       elapsedSeconds: 0,
+      sessionStartTimestamp: null,
     });
   },
 
@@ -188,6 +203,7 @@ export const useFocusStore = create<FocusState>((set, get) => ({
         totalSeconds: duration,
         isRunning: false, // User manually triggers the start of breaks/focus sessions
         isPaused: false,
+        sessionStartTimestamp: null,
       });
     } else {
       // Normal countdown tick
@@ -223,6 +239,7 @@ export const useFocusStore = create<FocusState>((set, get) => ({
       currentMode: 'focus',
       isBlockerActive: false,
       blockedAppsCount: 0,
+      sessionStartTimestamp: null,
     });
   },
 }));

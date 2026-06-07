@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase/client';
 import { Habit } from '@/types/app.types';
 import { getTodayLocal } from '@/lib/utils/date';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { handleSupabaseError } from '@/lib/utils/handle-error';
 
 export interface HabitWithStatus extends Habit {
   completedToday: boolean;
@@ -228,6 +229,9 @@ export function useCreateHabit() {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
     },
+    onError: (err) => {
+      handleSupabaseError(err, 'create_habit');
+    },
   });
 }
 
@@ -270,11 +274,12 @@ export function useUpdateHabit() {
 
       return { previousHabits };
     },
-    onError: (_err, _variables, context) => {
+    onError: (err, _variables, context) => {
       const user = useAuthStore.getState().user;
       if (context?.previousHabits) {
         queryClient.setQueryData(['habits', user?.id], context.previousHabits);
       }
+      handleSupabaseError(err, 'update_habit');
     },
     onSettled: (data) => {
       const user = useAuthStore.getState().user;
@@ -311,6 +316,9 @@ export function useArchiveHabit() {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
     },
+    onError: (err) => {
+      handleSupabaseError(err, 'archive_habit');
+    },
   });
 }
 
@@ -338,6 +346,9 @@ export function useRestoreHabit() {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['habits', user?.id, 'archived'] });
+    },
+    onError: (err) => {
+      handleSupabaseError(err, 'restore_habit');
     },
   });
 }
@@ -389,11 +400,12 @@ export function useReorderHabits() {
 
       return { previousHabits };
     },
-    onError: (_err, _variables, context) => {
+    onError: (err, _variables, context) => {
       const user = useAuthStore.getState().user;
       if (context?.previousHabits) {
         queryClient.setQueryData(['habits', user?.id], context.previousHabits);
       }
+      handleSupabaseError(err, 'reorder_habits');
     },
     onSettled: () => {
       const user = useAuthStore.getState().user;

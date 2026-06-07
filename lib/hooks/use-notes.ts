@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase/client';
 import { Note } from '@/types/app.types';
 import { calculateNextReview } from '@/lib/utils/spaced-rep';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { handleSupabaseError } from '@/lib/utils/handle-error';
 
 // Map to track debounce timeouts per note ID for auto-save debouncing
 const debounceTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -175,6 +176,9 @@ export function useCreateNote() {
       // Pre-warm the cache for this new note ID
       queryClient.setQueryData(['note', user?.id, newNote.id], newNote);
     },
+    onError: (err) => {
+      handleSupabaseError(err, 'create_note');
+    },
   });
 }
 
@@ -212,7 +216,7 @@ export function useUpdateNote() {
 
       return { previousNotes, previousNote };
     },
-    onError: (_err, variables, context) => {
+    onError: (err, variables, context) => {
       const user = useAuthStore.getState().user;
       // Rollback cache state on error
       if (context?.previousNotes) {
@@ -221,6 +225,7 @@ export function useUpdateNote() {
       if (context?.previousNote) {
         queryClient.setQueryData(['note', user?.id, variables.id], context.previousNote);
       }
+      handleSupabaseError(err, 'update_note');
     },
     onSuccess: (updatedNote) => {
       const user = useAuthStore.getState().user;
@@ -252,6 +257,9 @@ export function useDeleteNote() {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['notes', user?.id] });
       queryClient.removeQueries({ queryKey: ['note', user?.id, deletedId] });
+    },
+    onError: (err) => {
+      handleSupabaseError(err, 'delete_note');
     },
   });
 }
@@ -299,6 +307,9 @@ export function useReviewNote() {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['notes', user?.id] });
       queryClient.setQueryData(['note', user?.id, updatedNote.id], updatedNote);
+    },
+    onError: (err) => {
+      handleSupabaseError(err, 'review_note');
     },
   });
 }

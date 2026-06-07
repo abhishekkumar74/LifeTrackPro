@@ -5,6 +5,7 @@ import { StudyRoom } from '@/types/app.types';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { useUiStore } from '@/lib/store/ui.store';
+import { handleSupabaseError } from '@/lib/utils/handle-error';
 
 export interface RoomWithHost extends StudyRoom {
   host_name: string;
@@ -119,8 +120,7 @@ export function useRoomPresence(roomId: string) {
           });
         }
         if (status === 'CHANNEL_ERROR') {
-          if (__DEV__) console.error('Channel error:', err);
-          useUiStore.getState().showToast('Could not connect to room', 'error');
+          handleSupabaseError(err || new Error('Presence channel error'), 'room_presence_channel');
         }
         if (status === 'TIMED_OUT') {
           setTimeout(() => channel.subscribe(), 2000);
@@ -183,6 +183,9 @@ export function useCreateRoom() {
       queryClient.invalidateQueries({ queryKey: ['activeRooms'] });
       queryClient.invalidateQueries({ queryKey: ['myRooms'] });
     },
+    onError: (err) => {
+      handleSupabaseError(err, 'create_room');
+    },
   });
 }
 
@@ -209,6 +212,9 @@ export function useEndRoom() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['activeRooms'] });
       queryClient.invalidateQueries({ queryKey: ['myRooms'] });
+    },
+    onError: (err) => {
+      handleSupabaseError(err, 'end_room');
     },
   });
 }

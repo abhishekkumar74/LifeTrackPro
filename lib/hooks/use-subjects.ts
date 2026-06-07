@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDefaultSubjectsForProfile } from '@/lib/utils/profile-subjects';
+import { captureError } from '../sentry';
 
 // Always show these even for new users:
 export const DEFAULT_SUBJECTS = [
@@ -118,9 +119,7 @@ export function useSubjects() {
           storedList.forEach(addUniqueSubject);
         }
       } catch (err) {
-        if (__DEV__) {
-          console.error('Failed to parse stored custom subjects:', err);
-        }
+        captureError(err, { context: 'parse_custom_subjects' });
       }
 
       // Return sorted alphabetically

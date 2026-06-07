@@ -7,6 +7,8 @@
     "icon": "./assets/images/icon.png",
     "scheme": "lifetrackpro",
     "userInterfaceStyle": "automatic",
+    "jsEngine": "hermes",
+
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.lifetrackpro.app",
@@ -57,7 +59,14 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "your-org-slug",
+          "project": "lifetrack-pro"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

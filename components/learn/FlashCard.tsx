@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -30,21 +30,24 @@ export const FlashCard = React.memo<FlashCardProps>(({
   const accentColor = getSubjectColor(subject);
 
   // Parse JSON content if it is a flashcard
-  const isFlashcardTag = note.tags && note.tags.includes('flashcard');
-  let frontText = note.title || 'Untitled Note';
-  let backText = note.content || 'No content';
+  const { frontText, backText } = useMemo(() => {
+    const isFlashcardTag = note.tags && note.tags.includes('flashcard');
+    let front = note.title || 'Untitled Note';
+    let back = note.content || 'No content';
 
-  if (isFlashcardTag && note.content) {
-    try {
-      const parsed = JSON.parse(note.content);
-      if (parsed && typeof parsed === 'object') {
-        frontText = parsed.front || frontText;
-        backText = parsed.back || backText;
+    if (isFlashcardTag && note.content) {
+      try {
+        const parsed = JSON.parse(note.content);
+        if (parsed && typeof parsed === 'object') {
+          front = parsed.front || front;
+          back = parsed.back || back;
+        }
+      } catch (e) {
+        // Fallback
       }
-    } catch (e) {
-      // Fallback
     }
-  }
+    return { frontText: front, backText: back };
+  }, [note]);
 
   // Rotation value for Y-axis flipping
   const rotatedVal = useSharedValue(0);

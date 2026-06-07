@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Audio } from 'expo-av';
 import { SoundKey } from '@/lib/store/focus.store';
+import { captureError } from '@/lib/sentry';
 
 const SOUND_FILES = {
   rain: require('../../assets/sounds/rain.mp3'),
@@ -59,9 +60,7 @@ export function useAmbientSound(): AmbientSoundHook {
       soundRef.current = sound;
       setActiveSound(key);
     } catch (err) {
-      if (__DEV__) {
-        console.error(`Failed to load or play ambient sound "${key}":`, err);
-      }
+      captureError(err, { context: 'ambient_play', soundKey: key });
       setActiveSound(null);
     } finally {
       setIsLoading(false);
@@ -76,9 +75,7 @@ export function useAmbientSound(): AmbientSoundHook {
         soundRef.current = null;
       }
     } catch (err) {
-      if (__DEV__) {
-        console.error('Failed to stop ambient sound:', err);
-      }
+      captureError(err, { context: 'ambient_stop' });
     } finally {
       setActiveSound(null);
     }
@@ -90,9 +87,7 @@ export function useAmbientSound(): AmbientSoundHook {
         await soundRef.current.setVolumeAsync(vol);
       }
     } catch (err) {
-      if (__DEV__) {
-        console.error('Failed to adjust volume:', err);
-      }
+      captureError(err, { context: 'ambient_volume' });
     }
   };
 
@@ -101,10 +96,10 @@ export function useAmbientSound(): AmbientSoundHook {
     return () => {
       if (soundRef.current) {
         soundRef.current.stopAsync().catch((err: unknown) => {
-          if (__DEV__) console.error('Cleanup stop failed:', err);
+          captureError(err, { context: 'ambient_cleanup_stop' });
         });
         soundRef.current.unloadAsync().catch((err: unknown) => {
-          if (__DEV__) console.error('Cleanup unload failed:', err);
+          captureError(err, { context: 'ambient_cleanup_unload' });
         });
       }
     };

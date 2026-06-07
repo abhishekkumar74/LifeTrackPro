@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Pin } from 'lucide-react-native';
 import { Note } from '@/types/app.types';
@@ -124,9 +124,11 @@ export const NoteCard = React.memo<NoteCardProps>(({ note, onPress, onPin, searc
   const readTimeText = getReadTime(note.content);
 
   // If a search query is active, extract a keyword-focused snippet, otherwise use default preview
-  const previewText = searchQuery.trim()
-    ? getNoteSnippet(note.content, searchQuery)
-    : getNotePreview(note.content);
+  const previewText = useMemo(() => {
+    return searchQuery.trim()
+      ? getNoteSnippet(note.content, searchQuery)
+      : getNotePreview(note.content);
+  }, [note.content, searchQuery]);
 
   return (
     <TouchableOpacity

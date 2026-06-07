@@ -15,8 +15,7 @@ import BottomSheet, {
   BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useMutation } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase/client';
+import { useCreateScheduleBlock } from '@/lib/hooks/use-schedule';
 import { COLORS, TYPOGRAPHY } from '@/constants/theme';
 import { getTodayLocal } from '@/lib/utils/date';
 import * as Haptics from 'expo-haptics';
@@ -88,34 +87,7 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
     [onClose]
   );
 
-  // Mutation to create a schedule block
-  const createBlockMutation = useMutation({
-    mutationFn: async (blockData: {
-      title: string;
-      subject: string | null;
-      color: string;
-      start_time: string;
-      end_time: string;
-      days: number[];
-      specific_date: string | null;
-      is_active: boolean;
-    }) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-
-      const { data, error } = await supabase
-        .from('schedule_blocks')
-        .insert({
-          ...blockData,
-          user_id: session.user.id,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    },
-  });
+  const createBlockMutation = useCreateScheduleBlock();
 
   const getSubjectColor = (subject: string | null) => {
     if (!subject) return '#9B9BAF';

@@ -2,8 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase/client';
 import { Task } from '@/types/app.types';
-import { useUiStore } from '@/lib/store/ui.store';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { handleSupabaseError } from '@/lib/utils/handle-error';
 
 export function useTasks(milestoneId?: string) {
   const { user } = useAuthStore();
@@ -98,14 +98,14 @@ export function useCompleteTask() {
 
       return { previousTasks };
     },
-    onError: (_err, { milestoneId }, context) => {
-      const user = useAuthStore.getState().user;
-      const cacheKey = ['tasks', user?.id, milestoneId || 'standalone'];
-      if (context?.previousTasks) {
-        queryClient.setQueryData(cacheKey, context.previousTasks);
-      }
-      useUiStore.getState().showToast('Task completion failed', 'error');
-    },
+    onError: (err, { milestoneId }, context) => {
+       const user = useAuthStore.getState().user;
+       const cacheKey = ['tasks', user?.id, milestoneId || 'standalone'];
+       if (context?.previousTasks) {
+         queryClient.setQueryData(cacheKey, context.previousTasks);
+       }
+       handleSupabaseError(err, 'complete_task');
+     },
     onSettled: (_, __, { milestoneId }) => {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['tasks', user?.id, milestoneId || 'standalone'] });

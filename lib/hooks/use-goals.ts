@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { Goal, Milestone, Task } from '@/types/app.types';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { handleSupabaseError } from '@/lib/utils/handle-error';
 
 export type AssembledGoal = Goal & {
   totalTasks: number;
@@ -97,6 +98,9 @@ export function useCreateGoal() {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
     },
+    onError: (err) => {
+      handleSupabaseError(err, 'create_goal');
+    },
   });
 }
 
@@ -149,11 +153,12 @@ export function useUpdateGoal() {
 
       return { previousGoals };
     },
-    onError: (_err, _variables, context) => {
+    onError: (err, _variables, context) => {
       const user = useAuthStore.getState().user;
       if (context?.previousGoals) {
         queryClient.setQueryData(['goals', user?.id, 'active'], context.previousGoals);
       }
+      handleSupabaseError(err, 'update_goal');
     },
     onSettled: () => {
       const user = useAuthStore.getState().user;
@@ -180,6 +185,9 @@ export function useDeleteGoal() {
     onSuccess: () => {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
+    },
+    onError: (err) => {
+      handleSupabaseError(err, 'delete_goal');
     },
   });
 }

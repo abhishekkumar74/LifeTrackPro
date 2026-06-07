@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 // Polyfill WebSocket for Server-Side Rendering (SSR) pre-rendering in Node.js
 if (typeof WebSocket === 'undefined') {
@@ -402,6 +403,25 @@ export const supabase = createClient<Database>(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
+    },
+    global: {
+      headers: {
+        'x-app-version': Constants.expoConfig?.version ?? '1.0.0',
+      },
+      // Custom fetch with timeout
+      fetch: (url, options = {}) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(
+          () => controller.abort(),
+          15000  // 15 second timeout
+        );
+        return fetch(url, {
+          ...options,
+          signal: controller.signal,
+        }).finally(() => {
+          clearTimeout(timeoutId);
+        });
+      },
     },
   }
 );

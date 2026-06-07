@@ -4,9 +4,11 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  FlatList,
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -166,7 +168,13 @@ export default function HabitsManagementScreen() {
           <Skeleton width="100%" height={80} borderRadius={16} style={{ marginBottom: 12 }} />
         </View>
       ) : (
-        <ScrollView
+        <FlatList
+          data={habits}
+          keyExtractor={(item) => item.id}
+          removeClippedSubviews={Platform.OS === 'android'}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          initialNumToRender={8}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContainer}
           refreshControl={
@@ -177,142 +185,144 @@ export default function HabitsManagementScreen() {
               tintColor={COLORS.violet}
             />
           }
-        >
-          {/* Completion Summary Card */}
-          {habits.length > 0 && (
-            <View style={[styles.summaryCard, SHADOWS.card.ios]}>
-              <Text style={styles.summaryText}>
-                {doneHabits}/{totalHabits} habits done today
-              </Text>
-              <View style={styles.progressBarBg}>
-                <View
-                  style={[styles.progressBarFill, { width: `${completionPercent}%` }]}
-                />
-              </View>
-            </View>
-          )}
-
-          {/* Empty State */}
-          {habits.length === 0 && (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>No habits yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Add daily or weekly habits to start building your streak.
-              </Text>
-              <TouchableOpacity
-                style={styles.emptyCreateBtn}
-                onPress={() => setCreateSheetVisible(true)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.emptyCreateBtnText}>Create your first habit</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Habits list */}
-          <View style={styles.listContainer}>
-            {habits.map((habit, index) => {
-              const isDone = habit.completedToday;
-              return (
-                <View key={habit.id} style={styles.rowWrapper}>
-                  {/* Left drag-handle / reorder arrow section */}
-                  {isEditMode && (
-                    <View style={styles.reorderControls}>
-                      <Text style={styles.dragHandle}>⠿</Text>
-                      <View style={styles.arrowGroup}>
-                        <TouchableOpacity
-                          style={[styles.arrowBtn, index === 0 && styles.arrowBtnDisabled]}
-                          disabled={index === 0}
-                          onPress={() => handleMove(index, 'up')}
-                        >
-                          <Text style={styles.arrowText}>▲</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.arrowBtn,
-                            index === habits.length - 1 && styles.arrowBtnDisabled,
-                          ]}
-                          disabled={index === habits.length - 1}
-                          onPress={() => handleMove(index, 'down')}
-                        >
-                          <Text style={styles.arrowText}>▼</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
-
-                  <TouchableOpacity
-                    style={styles.habitRow}
-                    onPress={() => router.push(`/habit/${habit.id}`)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.habitEmoji}>{habit.emoji}</Text>
-                    <View style={styles.habitDetails}>
-                      <Text
-                        style={[styles.habitTitle, isDone && styles.habitTitleDone]}
-                        numberOfLines={1}
-                      >
-                        {habit.title}
-                      </Text>
-                      {/* Placeholder Streak count (for actual count we'd fetch streak or calculate, but let's show simple streak if available, or fetch) */}
-                      <Text style={styles.streakBadge}>🔥 Daily</Text>
-                    </View>
-
-                    {/* Checkbox toggle (only when not in edit mode) */}
-                    {!isEditMode && (
-                      <TouchableOpacity
-                        style={[styles.checkbox, isDone && styles.checkboxChecked]}
-                        onPress={() => handleToggleHabit(habit)}
-                        activeOpacity={0.6}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        {isDone && <Text style={styles.checkmark}>✓</Text>}
-                      </TouchableOpacity>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Archived section */}
-          {archivedHabits.length > 0 && (
-            <View style={styles.archivedWrapper}>
-              <TouchableOpacity
-                style={styles.archivedHeader}
-                onPress={() => setArchivedExpanded(!archivedExpanded)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.archivedHeaderTitle}>
-                  Archived ({archivedHabits.length})
-                </Text>
-                <Text style={styles.archivedHeaderArrow}>
-                  {archivedExpanded ? '▲' : '▼'}
-                </Text>
-              </TouchableOpacity>
-
-              {archivedExpanded && (
-                <View style={styles.archivedList}>
-                  {archivedHabits.map((habit) => (
-                    <View key={habit.id} style={styles.archivedRow}>
-                      <Text style={styles.archivedEmoji}>{habit.emoji}</Text>
-                      <Text style={styles.archivedTitle} numberOfLines={1}>
-                        {habit.title}
-                      </Text>
-                      <TouchableOpacity
-                        style={styles.restoreBtn}
-                        onPress={() => handleRestore(habit.id)}
-                        activeOpacity={0.6}
-                      >
-                        <Text style={styles.restoreBtnText}>Restore</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+          ListHeaderComponent={
+            <>
+              {/* Completion Summary Card */}
+              {habits.length > 0 && (
+                <View style={[styles.summaryCard, SHADOWS.card.ios]}>
+                  <Text style={styles.summaryText}>
+                    {doneHabits}/{totalHabits} habits done today
+                  </Text>
+                  <View style={styles.progressBarBg}>
+                    <View
+                      style={[styles.progressBarFill, { width: `${completionPercent}%` }]}
+                    />
+                  </View>
                 </View>
               )}
-            </View>
-          )}
-        </ScrollView>
+
+              {/* Empty State */}
+              {habits.length === 0 && (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyTitle}>No habits yet</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Add daily or weekly habits to start building your streak.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.emptyCreateBtn}
+                    onPress={() => setCreateSheetVisible(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.emptyCreateBtnText}>Create your first habit</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          }
+          renderItem={({ item: habit, index }) => {
+            const isDone = habit.completedToday;
+            return (
+              <View style={styles.rowWrapper}>
+                {/* Left drag-handle / reorder arrow section */}
+                {isEditMode && (
+                  <View style={styles.reorderControls}>
+                    <Text style={styles.dragHandle}>⠿</Text>
+                    <View style={styles.arrowGroup}>
+                      <TouchableOpacity
+                        style={[styles.arrowBtn, index === 0 && styles.arrowBtnDisabled]}
+                        disabled={index === 0}
+                        onPress={() => handleMove(index, 'up')}
+                      >
+                        <Text style={styles.arrowText}>▲</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.arrowBtn,
+                          index === habits.length - 1 && styles.arrowBtnDisabled,
+                        ]}
+                        disabled={index === habits.length - 1}
+                        onPress={() => handleMove(index, 'down')}
+                      >
+                        <Text style={styles.arrowText}>▼</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={styles.habitRow}
+                  onPress={() => router.push(`/habit/${habit.id}`)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.habitEmoji}>{habit.emoji}</Text>
+                  <View style={styles.habitDetails}>
+                    <Text
+                      style={[styles.habitTitle, isDone && styles.habitTitleDone]}
+                      numberOfLines={1}
+                    >
+                      {habit.title}
+                    </Text>
+                    {/* Placeholder Streak count */}
+                    <Text style={styles.streakBadge}>🔥 Daily</Text>
+                  </View>
+
+                  {/* Checkbox toggle (only when not in edit mode) */}
+                  {!isEditMode && (
+                    <TouchableOpacity
+                      style={[styles.checkbox, isDone && styles.checkboxChecked]}
+                      onPress={() => handleToggleHabit(habit)}
+                      activeOpacity={0.6}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      {isDone && <Text style={styles.checkmark}>✓</Text>}
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </View>
+            );
+          }}
+          ListFooterComponent={
+            <>
+              {/* Archived section */}
+              {archivedHabits.length > 0 && (
+                <View style={styles.archivedWrapper}>
+                  <TouchableOpacity
+                    style={styles.archivedHeader}
+                    onPress={() => setArchivedExpanded(!archivedExpanded)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.archivedHeaderTitle}>
+                      Archived ({archivedHabits.length})
+                    </Text>
+                    <Text style={styles.archivedHeaderArrow}>
+                      {archivedExpanded ? '▲' : '▼'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {archivedExpanded && (
+                    <View style={styles.archivedList}>
+                      {archivedHabits.map((habit) => (
+                        <View key={habit.id} style={styles.archivedRow}>
+                          <Text style={styles.archivedEmoji}>{habit.emoji}</Text>
+                          <Text style={styles.archivedTitle} numberOfLines={1}>
+                            {habit.title}
+                          </Text>
+                          <TouchableOpacity
+                            style={styles.restoreBtn}
+                            onPress={() => handleRestore(habit.id)}
+                            activeOpacity={0.6}
+                          >
+                            <Text style={styles.restoreBtnText}>Restore</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
+            </>
+          }
+        />
       )}
 
       {/* Create Bottom Sheet */}

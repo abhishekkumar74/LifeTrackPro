@@ -1,3 +1,11 @@
+import * as Sentry from '@sentry/react-native';
+import { initSentry, setSentryUser, clearSentryUser } from '@/lib/sentry';
+import { checkForUpdate } from '@/lib/update-checker';
+import { useAppLifecycle } from '@/lib/hooks/use-app-lifecycle';
+
+// Call immediately on module load
+initSentry();
+
 import React, { useEffect, useState } from 'react';
 import * as Font from 'expo-font';
 import { Stack, router, useSegments } from 'expo-router';
@@ -88,7 +96,15 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-export default function RootLayout() {
+function RootLayout() {
+  // Check for OTA updates on start
+  useEffect(() => {
+    checkForUpdate();
+  }, []);
+
+  // Listen for lifecycle changes globally
+  useAppLifecycle();
+
   // Listen for notification taps globally
   useNotificationResponse();
 
@@ -250,6 +266,7 @@ export default function RootLayout() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
+        setSentryUser(session.user.id);
         fetchProfile(session.user.id);
       } else {
         setProfile(null);
@@ -261,14 +278,17 @@ export default function RootLayout() {
     // 2. Track authentication session state mutations
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
+        clearSentryUser();
         useAuthStore.getState().clearAuth();
         queryClient.clear();
         router.replace('/login');
       } else {
         setSession(session);
         if (session) {
+          setSentryUser(session.user.id);
           fetchProfile(session.user.id);
         } else {
+          clearSentryUser();
           setProfile(null);
           setLoading(false);
         }
@@ -317,3 +337,5 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default Sentry.wrap(RootLayout);
