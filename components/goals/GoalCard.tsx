@@ -91,6 +91,10 @@ export const GoalCard = React.memo<GoalCardProps>(({
       ]}
       onPress={handlePress}
       activeOpacity={0.9}
+      accessibilityLabel={`Goal: ${goal.title}`}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: isExpanded }}
+      accessibilityHint="Double tap to expand or collapse milestones"
     >
       {/* Top Row */}
       <View style={styles.topRow}>
@@ -192,6 +196,9 @@ export const GoalCard = React.memo<GoalCardProps>(({
               style={styles.addMilestoneRow}
               onPress={() => onAddMilestone(goal.id)}
               activeOpacity={0.7}
+              accessibilityLabel="Add Milestone"
+              accessibilityRole="button"
+              accessibilityHint="Add a new milestone to this goal"
             >
               <Text style={styles.addMilestoneText}>+ Add Milestone</Text>
             </TouchableOpacity>

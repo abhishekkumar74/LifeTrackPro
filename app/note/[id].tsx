@@ -64,7 +64,6 @@ const NOTE_TEMPLATES = {
 };
 
 export default function NoteEditorScreen(): React.JSX.Element {
-  useAndroidBackHandler();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
@@ -111,6 +110,21 @@ export default function NoteEditorScreen(): React.JSX.Element {
   const [fcFront, setFcFront] = useState('');
   const [fcBack, setFcBack] = useState('');
   const [isCreatingFlashcard, setIsCreatingFlashcard] = useState(false);
+
+  const handleBack = useCallback(() => {
+    if (saveStatus === 'SAVING...') {
+      Alert.alert(
+        'Saving Note',
+        'Please wait a moment while we finish saving your changes...',
+        [{ text: 'OK' }]
+      );
+      return true;
+    }
+    router.back();
+    return true;
+  }, [saveStatus]);
+
+  useAndroidBackHandler(handleBack);
 
   // Synchronize local states when note is retrieved
   useEffect(() => {
@@ -500,7 +514,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
         >
           {/* Editor Header */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
+            <TouchableOpacity onPress={handleBack} style={styles.backBtn} activeOpacity={0.7}>
               <ArrowLeft size={22} color="#17172A" />
             </TouchableOpacity>
 

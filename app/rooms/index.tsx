@@ -17,6 +17,7 @@ import { CreateRoomSheet } from '@/components/community/CreateRoomSheet';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { ArrowLeft, Plus } from 'lucide-react-native';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
+import { Skeleton } from '@/components/shared/Skeleton';
 
 export default function RoomsScreen(): React.JSX.Element {
   useAndroidBackHandler();
@@ -65,7 +66,8 @@ export default function RoomsScreen(): React.JSX.Element {
 
   const renderActiveEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Text style={styles.emptyTitle}>No rooms live right now 🌙</Text>
+      <Text style={{ fontSize: 40, marginBottom: 12 }}>🌙</Text>
+      <Text style={styles.emptyTitle}>No rooms live right now</Text>
       <Text style={styles.emptySubtitle}>Be the first to start a session!</Text>
       <TouchableOpacity
         style={styles.emptyButton}
@@ -79,6 +81,7 @@ export default function RoomsScreen(): React.JSX.Element {
 
   const renderMyEmpty = () => (
     <View style={styles.emptyContainer}>
+      <Text style={{ fontSize: 40, marginBottom: 12 }}>🎓</Text>
       <Text style={styles.emptyTitle}>You haven't created any rooms yet</Text>
       <Text style={styles.emptySubtitle}>Start your first study group to invite others.</Text>
       <TouchableOpacity
@@ -166,8 +169,10 @@ export default function RoomsScreen(): React.JSX.Element {
 
       {/* CONTENT LIST */}
       {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#5B4FE8" />
+        <View style={styles.listContent}>
+          <Skeleton width="100%" height={110} borderRadius={16} style={{ marginBottom: 12 }} />
+          <Skeleton width="100%" height={110} borderRadius={16} style={{ marginBottom: 12 }} />
+          <Skeleton width="100%" height={110} borderRadius={16} style={{ marginBottom: 12 }} />
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>

@@ -41,6 +41,7 @@ import {
   cancelAllNotifications,
 } from '@/lib/notifications';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
+import { useNotificationPermission } from '@/lib/hooks/use-permissions';
 
 const CATEGORIES: UserCategory[] = ['student', 'employee', 'creator', 'entrepreneur', 'educator', 'aspirant'];
 const PEAK_TIMES: ('morning' | 'afternoon' | 'night')[] = ['morning', 'afternoon', 'night'];
@@ -51,6 +52,7 @@ export default function ProfileScreen(): React.JSX.Element {
   const queryClient = useQueryClient();
   const { profile, setProfile } = useAuthStore();
   const showToast = useUiStore((state) => state.showToast);
+  const { request: requestNotificationPermission } = useNotificationPermission();
 
   // Tab scroll registration
   const scrollRef = useRef<ScrollView>(null);
@@ -255,6 +257,13 @@ export default function ProfileScreen(): React.JSX.Element {
 
   // Toggle handlers for notifications
   const handleToggleMorningBrief = async (value: boolean) => {
+    if (value) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        setMorningBriefEnabled(false);
+        return;
+      }
+    }
     setMorningBriefEnabled(value);
     await AsyncStorage.setItem('pref_morning_brief', String(value));
     if (value) {
@@ -271,6 +280,13 @@ export default function ProfileScreen(): React.JSX.Element {
   };
 
   const handleToggleStreakAlerts = async (value: boolean) => {
+    if (value) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        setStreakAlertsEnabled(false);
+        return;
+      }
+    }
     setStreakAlertsEnabled(value);
     await AsyncStorage.setItem('pref_streak_alerts', String(value));
     if (value) {
@@ -281,6 +297,13 @@ export default function ProfileScreen(): React.JSX.Element {
   };
 
   const handleToggleHabitReminders = async (value: boolean) => {
+    if (value) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        setHabitRemindersEnabled(false);
+        return;
+      }
+    }
     setHabitRemindersEnabled(value);
     await AsyncStorage.setItem('pref_habit_reminders', String(value));
   };

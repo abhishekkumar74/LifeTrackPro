@@ -368,6 +368,25 @@ export default function GoalsScreen(): React.JSX.Element {
     const activeGoals = activeGoalsQuery.data || [];
     const standaloneTasks = standaloneTasksQuery.data || [];
 
+    if (activeGoals.length === 0 && standaloneTasks.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={{ fontSize: 40, marginBottom: 12 }}>🏔</Text>
+          <Text style={styles.emptyText}>Your goal vault is empty</Text>
+          <Text style={styles.emptySubText}>Set your first big goal and break it into daily steps</Text>
+          <TouchableOpacity
+            style={styles.emptyButton}
+            onPress={() => createGoalSheetRef.current?.expand()}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Create First Goal"
+          >
+            <Text style={styles.emptyButtonText}>Create First Goal</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
       <FlatList
         ref={activeListRef}
@@ -463,8 +482,18 @@ export default function GoalsScreen(): React.JSX.Element {
     if (achievedGoals.length === 0) {
       return (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>{EMPTY_ACHIEVED}</Text>
-          <Text style={styles.emptySubText}>{EMPTY_ACHIEVED_SUB}</Text>
+          <Text style={{ fontSize: 40, marginBottom: 12 }}>🎯</Text>
+          <Text style={styles.emptyText}>No achieved goals yet</Text>
+          <Text style={styles.emptySubText}>Complete your first goal to see it here</Text>
+          <TouchableOpacity
+            style={styles.emptyButton}
+            onPress={() => setSelectedTab('active')}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="View Active Goals"
+          >
+            <Text style={styles.emptyButtonText}>View Active Goals</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -867,5 +896,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9B9BAF',
     textAlign: 'center',
+  },
+  emptyButton: {
+    backgroundColor: '#5B4FE8',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 18,
+  },
+  emptyButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

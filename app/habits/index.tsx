@@ -137,6 +137,9 @@ export default function HabitsManagementScreen() {
                 style={[styles.arrowBtn, index === 0 && styles.arrowBtnDisabled]}
                 disabled={index === 0}
                 onPress={() => handleMove(index, 'up')}
+                accessibilityLabel="Move habit up"
+                accessibilityRole="button"
+                accessibilityHint="Move this habit higher in the listing order"
               >
                 <Text style={styles.arrowText}>▲</Text>
               </TouchableOpacity>
@@ -147,6 +150,9 @@ export default function HabitsManagementScreen() {
                 ]}
                 disabled={index === habits.length - 1}
                 onPress={() => handleMove(index, 'down')}
+                accessibilityLabel="Move habit down"
+                accessibilityRole="button"
+                accessibilityHint="Move this habit lower in the listing order"
               >
                 <Text style={styles.arrowText}>▼</Text>
               </TouchableOpacity>
@@ -158,6 +164,9 @@ export default function HabitsManagementScreen() {
           style={styles.habitRow}
           onPress={() => router.push(`/habit/${habit.id}`)}
           activeOpacity={0.7}
+          accessibilityLabel={`Habit: ${habit.title}`}
+          accessibilityRole="button"
+          accessibilityHint="Double tap to open habit calendar and streak history"
         >
           <Text style={styles.habitEmoji}>{habit.emoji}</Text>
           <View style={styles.habitDetails}>
@@ -178,6 +187,10 @@ export default function HabitsManagementScreen() {
               onPress={() => handleToggleHabit(habit)}
               activeOpacity={0.6}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityState={{ checked: isDone }}
+              accessibilityRole="checkbox"
+              accessibilityLabel={`${habit.title} habit, ${isDone ? 'completed' : 'not completed'}`}
+              accessibilityHint="Double tap to toggle completion status"
             >
               {isDone && <Text style={styles.checkmark}>✓</Text>}
             </TouchableOpacity>

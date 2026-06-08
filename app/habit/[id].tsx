@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
+import { Skeleton } from '@/components/shared/Skeleton';
 
 import { supabase } from '@/lib/supabase/client';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
@@ -334,8 +334,18 @@ export default function HabitDetailScreen() {
   if (isDataLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.violet} />
+        <View style={{ padding: 20 }}>
+          {/* Header Skeleton */}
+          <Skeleton width="60%" height={30} borderRadius={8} style={{ marginBottom: 20 }} />
+          {/* Streak Card Skeletons */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
+            <Skeleton width="48%" height={100} borderRadius={16} />
+            <Skeleton width="48%" height={100} borderRadius={16} />
+          </View>
+          {/* Calendar Grid Skeleton */}
+          <Skeleton width="100%" height={240} borderRadius={16} style={{ marginBottom: 20 }} />
+          {/* History List Skeleton */}
+          <Skeleton width="100%" height={60} borderRadius={12} style={{ marginBottom: 12 }} />
         </View>
       </SafeAreaView>
     );

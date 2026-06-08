@@ -351,6 +351,9 @@ export default function FocusScreen(): React.JSX.Element {
             style={styles.controlCircleSmall}
             onPress={handleReset}
             activeOpacity={0.8}
+            accessibilityLabel="Reset timer"
+            accessibilityRole="button"
+            accessibilityHint="Resets the focus timer duration"
           >
             <Text style={styles.controlIconSmall}>↺</Text>
           </TouchableOpacity>
@@ -360,6 +363,10 @@ export default function FocusScreen(): React.JSX.Element {
             style={styles.controlCircleMain}
             onPress={handlePlayPause}
             activeOpacity={0.8}
+            accessibilityLabel={isRunning ? 'Pause timer' : 'Start timer'}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isRunning }}
+            accessibilityHint="Start or pause the focus session"
           >
             <Text style={styles.controlIconMain}>
               {isRunning ? '⏸' : '▶'}
@@ -372,6 +379,9 @@ export default function FocusScreen(): React.JSX.Element {
               style={styles.controlCircleSmall}
               onPress={handleSkipBreak}
               activeOpacity={0.8}
+              accessibilityLabel="Skip break"
+              accessibilityRole="button"
+              accessibilityHint="Skips the current break interval and returns to focus"
             >
               <Text style={styles.controlIconSmall}>⏭</Text>
             </TouchableOpacity>
@@ -380,6 +390,9 @@ export default function FocusScreen(): React.JSX.Element {
               style={[styles.subjectPill, styles.controlCircleSmall]}
               onPress={cycleSubject}
               activeOpacity={0.8}
+              accessibilityLabel={`Subject: ${subjectTag || 'General'}`}
+              accessibilityRole="button"
+              accessibilityHint="Double tap to cycle focus subjects"
             >
               <Text style={styles.subjectTextChip} numberOfLines={1}>
                 {subjectTag || 'General'}

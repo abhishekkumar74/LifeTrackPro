@@ -9,6 +9,7 @@ module.exports = {
     'native-base|react-native-svg)'
   ],
   setupFilesAfterEnv: [
-    '@testing-library/jest-native/extend-expect'
+    '@testing-library/jest-native/extend-expect',
+    '<rootDir>/jest-setup.js'
   ]
 };

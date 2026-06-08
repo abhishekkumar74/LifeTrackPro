@@ -93,6 +93,9 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({ name, streakCount, isLoa
           style={styles.avatarContainer}
           onPress={() => router.push('/profile' as Href)}
           activeOpacity={0.7}
+          accessibilityLabel="Profile"
+          accessibilityRole="button"
+          accessibilityHint="Navigate to profile settings"
         >
           <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
             <Defs>
@@ -113,7 +116,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({ name, streakCount, isLoa
       </View>
 
       <View style={styles.rightSide}>
-        <View style={styles.streakPill}>
+        <View style={styles.streakPill} accessibilityLabel={`${streakCount} day streak`}>
           <Text style={styles.streakText}>
             {FIRE_EMOJI} {streakCount}
           </Text>
@@ -123,11 +126,20 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({ name, streakCount, isLoa
           style={styles.roomsButton}
           onPress={() => router.push('/rooms' as Href)}
           activeOpacity={0.7}
+          accessibilityLabel="Study Rooms"
+          accessibilityRole="button"
+          accessibilityHint="Navigate to active study rooms"
         >
           <Text style={{ fontSize: 16 }}>👥</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.notificationButton} activeOpacity={0.7}>
+        <TouchableOpacity 
+          style={styles.notificationButton} 
+          activeOpacity={0.7}
+          accessibilityLabel="Notifications"
+          accessibilityRole="button"
+          accessibilityHint="View notifications"
+        >
           <Bell size={18} color="#17172A" />
         </TouchableOpacity>
       </View>

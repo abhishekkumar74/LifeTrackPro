@@ -86,7 +86,13 @@ export const HabitRow = React.memo<HabitRowProps>(({
             </Text>
           )}
         </View>
-        <TouchableOpacity onPress={onEdit} activeOpacity={0.6}>
+        <TouchableOpacity 
+          onPress={onEdit} 
+          activeOpacity={0.6}
+          accessibilityLabel="Edit habits"
+          accessibilityRole="button"
+          accessibilityHint="Open habit management screen"
+        >
           <Text style={styles.editText}>{EDIT_LABEL}</Text>
         </TouchableOpacity>
       </View>
@@ -117,6 +123,12 @@ export const HabitRow = React.memo<HabitRowProps>(({
                 }}
                 activeOpacity={0.7}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityState={{
+                  checked: isDone
+                }}
+                accessibilityRole="checkbox"
+                accessibilityLabel={`${habit.title} habit, ${isDone ? 'completed' : 'not completed'}`}
+                accessibilityHint="Double tap to toggle completion status, long press to view habit history and stats"
               >
                 {isDone ? (
                   <>

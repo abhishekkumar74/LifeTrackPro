@@ -37,6 +37,7 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 
+import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 // Custom Hooks & Stats Data Hooks
@@ -469,6 +470,13 @@ Stay focused, track your goals! 🚀`;
               <Text style={styles.newUserSubtitle}>
                 Complete a study session in Focus Mode to unlock visual history, graphs, check-in insights, and achievements.
               </Text>
+              <TouchableOpacity
+                style={styles.newUserCTA}
+                onPress={() => router.push('/focus')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.newUserCTAText}>⏱️ Start Focus Session</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -476,8 +484,19 @@ Stay focused, track your goals! 🚀`;
               TODAY'S SUMMARY ROW (Enhanced Stats Part 1)
               ========================================== */}
           {enhancedStatsQuery.isLoading ? (
-            <View style={[styles.sectionCard, styles.loaderCard]}>
-              <ActivityIndicator size="small" color="#5B4FE8" />
+            <View style={styles.todaySummaryRow}>
+              <View style={[styles.todaySummaryCard, { alignItems: 'center', justifyContent: 'center', paddingVertical: 16 }]}>
+                <Skeleton width={50} height={20} style={{ marginBottom: 8 }} />
+                <Skeleton width={30} height={14} />
+              </View>
+              <View style={[styles.todaySummaryCard, { alignItems: 'center', justifyContent: 'center', paddingVertical: 16 }]}>
+                <Skeleton width={50} height={20} style={{ marginBottom: 8 }} />
+                <Skeleton width={30} height={14} />
+              </View>
+              <View style={[styles.todaySummaryCard, { alignItems: 'center', justifyContent: 'center', paddingVertical: 16 }]}>
+                <Skeleton width={50} height={20} style={{ marginBottom: 8 }} />
+                <Skeleton width={30} height={14} />
+              </View>
             </View>
           ) : (
             <View style={styles.todaySummaryRow}>
@@ -650,7 +669,11 @@ Stay focused, track your goals! 🚀`;
           </View>
           <View style={styles.sectionCard}>
             {enhancedStatsQuery.isLoading ? (
-              <ActivityIndicator color="#5B4FE8" size="small" />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10 }}>
+                {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                  <Skeleton key={i} width={30} height={30} borderRadius={6} />
+                ))}
+              </View>
             ) : (
               renderHabitConsistency(enhancedStats?.habitConsistency.grid || [])
             )}
@@ -669,7 +692,7 @@ Stay focused, track your goals! 🚀`;
           </View>
           <View style={styles.sectionCard}>
             {enhancedStatsQuery.isLoading ? (
-              <ActivityIndicator color="#5B4FE8" size="small" />
+              <Skeleton width="100%" height={150} borderRadius={12} />
             ) : (
               renderMoodChart(enhancedStats?.moodTrend.moodData || [])
             )}
@@ -799,7 +822,10 @@ Stay focused, track your goals! 🚀`;
                 <Text style={styles.cardLabel}>Focus hours</Text>
               </View>
               {periodStatsQuery.isLoading ? (
-                <ActivityIndicator size="small" color="#5B4FE8" style={styles.cardLoader} />
+                <View style={{ marginTop: 8 }}>
+                  <Skeleton width={80} height={28} borderRadius={6} style={{ marginBottom: 4 }} />
+                  <Skeleton width={40} height={12} borderRadius={4} />
+                </View>
               ) : (
                 <View style={styles.cardBody}>
                   <Text style={styles.bigNumber}>
@@ -817,7 +843,10 @@ Stay focused, track your goals! 🚀`;
                 <Text style={styles.cardLabel}>Tasks done</Text>
               </View>
               {periodStatsQuery.isLoading ? (
-                <ActivityIndicator size="small" color="#5B4FE8" style={styles.cardLoader} />
+                <View style={{ marginTop: 8 }}>
+                  <Skeleton width={80} height={28} borderRadius={6} style={{ marginBottom: 4 }} />
+                  <Skeleton width={40} height={12} borderRadius={4} />
+                </View>
               ) : (
                 <View style={styles.cardBody}>
                   <Text style={styles.bigNumber}>
@@ -977,6 +1006,22 @@ const styles = StyleSheet.create({
     color: '#9B9BAF',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  newUserCTA: {
+    backgroundColor: '#5B4FE8',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginTop: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  newUserCTAText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   // Today's Summary Row
   todaySummaryRow: {

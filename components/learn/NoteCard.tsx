@@ -135,6 +135,9 @@ export const NoteCard = React.memo<NoteCardProps>(({ note, onPress, onPin, searc
       style={[styles.container, isDue && styles.containerDue]}
       onPress={onPress}
       activeOpacity={0.7}
+      accessibilityLabel={`Note: ${note.title || 'Untitled'}. Subject: ${subject}. ${isDue ? 'Due for revision.' : ''}`}
+      accessibilityRole="button"
+      accessibilityHint="Double tap to open note details and edit"
     >
       {/* Subject accent left bar */}
       <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
@@ -154,6 +157,10 @@ export const NoteCard = React.memo<NoteCardProps>(({ note, onPress, onPin, searc
                 onPress={() => onPin(note.id)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 activeOpacity={0.7}
+                accessibilityLabel="Pin note"
+                accessibilityRole="button"
+                accessibilityState={{ checked: true }}
+                accessibilityHint="Double tap to unpin this note"
               >
                 <Pin size={12} color="#5B4FE8" fill="#5B4FE8" style={styles.pinIcon} />
               </TouchableOpacity>

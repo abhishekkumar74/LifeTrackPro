@@ -1,5 +1,6 @@
 import { useUiStore } from '../store/ui.store';
 import { captureError } from '../sentry';
+import NetInfo from '@react-native-community/netinfo';
 
 export function handleSupabaseError(
   error: unknown,
@@ -30,10 +31,23 @@ export function handleSupabaseError(
     return 'Something went wrong';
   })();
 
-  // Show toast to user
-  useUiStore.getState().showToast(
-    userMessage, 'error'
-  );
+  // Check connectivity dynamically
+  NetInfo.fetch().then((state) => {
+    if (!state.isConnected) {
+      useUiStore.getState().showToast(
+        'No internet connection. Changes will sync when online.',
+        'info'
+      );
+    } else {
+      useUiStore.getState().showToast(
+        userMessage,
+        'error'
+      );
+    }
+  }).catch(() => {
+    // Fallback if NetInfo check fails
+    useUiStore.getState().showToast(userMessage, 'error');
+  });
 
   // Log to Sentry
   captureError(error, { context });

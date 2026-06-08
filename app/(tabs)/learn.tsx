@@ -1246,9 +1246,10 @@ export default function LearnScreen(): React.JSX.Element {
                   renderItem={renderNoteItem}
                   ListEmptyComponent={
                     <View style={styles.emptyContainer}>
-                      <Text style={styles.emptyTitle}>No notes found 📝</Text>
+                      <Text style={{ fontSize: 40, marginBottom: 12 }}>📝</Text>
+                      <Text style={styles.emptyTitle}>No notes yet</Text>
                       <Text style={styles.emptySubtitle}>
-                        Create notes to log your concepts and set spaced repetition review timers.
+                        Capture ideas, formulas, and concepts from your studies
                       </Text>
                       <TouchableOpacity
                         style={styles.emptyActionBtn}

@@ -28,6 +28,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
+import { Skeleton } from '@/components/shared/Skeleton';
 
 // Deterministic colors for member avatars
 const MEMBER_COLORS = ['#5B4FE8', '#00B894', '#E8A020', '#E85858', '#8B6FE8', '#0EA5E9'];
@@ -113,10 +114,41 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
   if (isRoomLoading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={[styles.container, { paddingHorizontal: 16 }]} edges={['top', 'bottom']}>
         <StatusBar barStyle="light-content" backgroundColor="#17172A" translucent={false} />
-        <ActivityIndicator size="large" color="#5B4FE8" />
-      </View>
+        {/* Top bar skeleton */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1E1E38', marginBottom: 20 }}>
+          <Skeleton width={70} height={30} borderRadius={8} />
+          <Skeleton width={120} height={20} borderRadius={8} />
+          <Skeleton width={80} height={24} borderRadius={12} />
+        </View>
+
+        {/* Timer skeleton */}
+        <View style={{ alignItems: 'center', marginVertical: 24 }}>
+          <Skeleton width={160} height={50} borderRadius={12} style={{ marginBottom: 8 }} />
+          <Skeleton width={100} height={14} borderRadius={6} />
+        </View>
+
+        {/* Members skeleton */}
+        <View style={{ marginVertical: 16 }}>
+          <Skeleton width={90} height={14} borderRadius={6} style={{ marginBottom: 12 }} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginVertical: 8 }}>
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} width={50} height={50} borderRadius={25} />
+            ))}
+          </View>
+        </View>
+
+        {/* Chat skeleton */}
+        <View style={{ flex: 1, justifyContent: 'flex-end', marginBottom: 20 }}>
+          <Skeleton width={100} height={14} borderRadius={6} style={{ marginBottom: 12 }} />
+          <View style={{ gap: 12 }}>
+            <Skeleton width="60%" height={36} borderRadius={8} />
+            <Skeleton width="75%" height={36} borderRadius={8} style={{ alignSelf: 'flex-end' }} />
+            <Skeleton width="45%" height={36} borderRadius={8} />
+          </View>
+        </View>
+      </SafeAreaView>
     );
   }
 
