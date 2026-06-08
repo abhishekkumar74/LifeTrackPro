@@ -40,7 +40,7 @@ const COLORS = {
   4: '#5B4FE8',
 };
 
-export const HeatmapGrid: React.FC<HeatmapGridProps> = ({ data = [], isLoading }) => {
+export const HeatmapGrid = React.memo<HeatmapGridProps>(({ data = [], isLoading }) => {
   const { width: screenWidth } = Dimensions.get('window');
   const cellSize = (screenWidth - margin - (numCols - 1) * gap) / numCols;
   const gridHeight = numRows * (cellSize + gap) - gap;
@@ -248,7 +248,7 @@ export const HeatmapGrid: React.FC<HeatmapGridProps> = ({ data = [], isLoading }
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

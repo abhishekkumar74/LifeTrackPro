@@ -57,6 +57,17 @@ type TabType = 'active' | 'milestones' | 'achieved';
 type MilestoneSectionItem = (Milestone & { tasks: Task[] }) | { id: string; isPlaceholder: true; goal_id: string };
 
 export default function GoalsScreen(): React.JSX.Element {
+  // Query Hooks
+  const activeGoalsQuery = useGoals('active');
+  const achievedGoalsQuery = useGoals('achieved');
+  const standaloneTasksQuery = useTasks();
+
+  // Mutation Hooks
+  const { mutate: updateMilestoneStatus } = useUpdateMilestoneStatus();
+  const { mutate: completeTask } = useCompleteTask();
+  const { mutate: rescheduleTask } = useRescheduleTask();
+  const { mutate: deleteTask } = useDeleteTask();
+
   const [selectedTab, setSelectedTab] = useState<TabType>('active');
   const [defaultMilestoneId, setDefaultMilestoneId] = useState<string | null>(null);
   const [isMilestoneSheetVisible, setIsMilestoneSheetVisible] = useState(false);
@@ -130,7 +141,7 @@ export default function GoalsScreen(): React.JSX.Element {
     setIsFabOpen((prev) => !prev);
   }, []);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await Promise.all([
       activeGoalsQuery.refetch(),
@@ -138,22 +149,11 @@ export default function GoalsScreen(): React.JSX.Element {
       standaloneTasksQuery.refetch(),
     ]);
     setIsRefreshing(false);
-  };
+  }, [activeGoalsQuery, achievedGoalsQuery, standaloneTasksQuery]);
 
   // Bottom Sheet Refs
   const createGoalSheetRef = useRef<BottomSheet>(null);
   const createTaskSheetRef = useRef<BottomSheet>(null);
-
-  // Query Hooks
-  const activeGoalsQuery = useGoals('active');
-  const achievedGoalsQuery = useGoals('achieved');
-  const standaloneTasksQuery = useTasks();
-
-  // Mutation Hooks
-  const { mutate: updateMilestoneStatus } = useUpdateMilestoneStatus();
-  const { mutate: completeTask } = useCompleteTask();
-  const { mutate: rescheduleTask } = useRescheduleTask();
-  const { mutate: deleteTask } = useDeleteTask();
 
   // Assemble milestones with goal metadata for grouping in Milestones tab
   const milestoneSections = useMemo(() => {
@@ -246,6 +246,105 @@ export default function GoalsScreen(): React.JSX.Element {
     setIsMilestoneSheetVisible(true);
   }, []);
 
+  const handleRetryActiveQuery = useCallback(() => {
+    activeGoalsQuery.refetch();
+    standaloneTasksQuery.refetch();
+  }, [activeGoalsQuery, standaloneTasksQuery]);
+
+  const handleCompleteTask = useCallback((id: string) => {
+    const allStandalone = standaloneTasksQuery.data || [];
+    const foundStandalone = allStandalone.find(t => t.id === id);
+    if (foundStandalone) {
+      completeTask({
+        id,
+        completed: foundStandalone.completed_at === null,
+        milestoneId: null,
+      });
+      return;
+    }
+
+    const allGoals = activeGoalsQuery.data || [];
+    for (const goal of allGoals) {
+      for (const milestone of goal.milestones) {
+        const found = milestone.tasks.find(t => t.id === id);
+        if (found) {
+          completeTask({
+            id,
+            completed: found.completed_at === null,
+            milestoneId: milestone.id,
+          });
+          return;
+        }
+      }
+    }
+  }, [completeTask, standaloneTasksQuery.data, activeGoalsQuery.data]);
+
+  const handleMilestoneStatusChange = useCallback((id: string, status: 'pending' | 'completed') => {
+    const activeGoals = activeGoalsQuery.data || [];
+    for (const goal of activeGoals) {
+      const found = goal.milestones.find(m => m.id === id);
+      if (found) {
+        updateMilestoneStatus({ id, status, goalId: goal.id });
+        return;
+      }
+    }
+  }, [updateMilestoneStatus, activeGoalsQuery.data]);
+
+  const renderGoalItem = useCallback(({ item }: { item: AssembledGoal }) => (
+    <GoalCard
+      goal={item}
+      isPrimary={item.is_primary}
+      onAddMilestone={handleAddMilestone}
+    />
+  ), [handleAddMilestone]);
+
+  const renderAchievedGoalItem = useCallback(({ item }: { item: AssembledGoal }) => (
+    <GoalCard
+      goal={item}
+      isPrimary={item.is_primary}
+    />
+  ), []);
+
+  const renderMilestoneItem = useCallback(({ item }: { item: MilestoneSectionItem }) => {
+    if ('isPlaceholder' in item && item.isPlaceholder) {
+      return (
+        <TouchableOpacity
+          style={styles.emptyMilestoneRow}
+          onPress={() => {
+            setSelectedGoalId(item.goal_id);
+            setIsMilestoneSheetVisible(true);
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.emptyMilestoneText}>+ Add your first milestone</Text>
+        </TouchableOpacity>
+      );
+    }
+    return (
+      <MilestoneItem
+        milestone={item as Milestone & { tasks: Task[] }}
+        onStatusChange={handleMilestoneStatusChange}
+        onAddTask={handleOpenCreateTask}
+      />
+    );
+  }, [handleMilestoneStatusChange, handleOpenCreateTask]);
+
+  const renderSectionHeader = useCallback(({ section }: { section: { id: string; title: string } }) => (
+    <View style={styles.groupHeaderRow}>
+      <Text style={styles.groupHeaderTitle}>{section.title}</Text>
+      <TouchableOpacity
+        style={styles.groupHeaderAddButton}
+        onPress={() => {
+          setSelectedGoalId(section.id);
+          setIsMilestoneSheetVisible(true);
+        }}
+        activeOpacity={0.7}
+      >
+        <Plus size={16} color="#5B4FE8" strokeWidth={2.5} />
+      </TouchableOpacity>
+    </View>
+  ), []);
+
   const renderActiveTab = () => {
     if (activeGoalsQuery.isLoading || standaloneTasksQuery.isLoading) {
       return (
@@ -261,10 +360,7 @@ export default function GoalsScreen(): React.JSX.Element {
       return (
         <ErrorState
           message={ERR_LOAD}
-          onRetry={() => {
-            activeGoalsQuery.refetch();
-            standaloneTasksQuery.refetch();
-          }}
+          onRetry={handleRetryActiveQuery}
         />
       );
     }
@@ -281,14 +377,10 @@ export default function GoalsScreen(): React.JSX.Element {
         maxToRenderPerBatch={10}
         windowSize={5}
         initialNumToRender={8}
-        renderItem={({ item }) => (
-          <GoalCard
-            goal={item}
-            isPrimary={item.is_primary}
-            onAddMilestone={handleAddMilestone}
-          />
-        )}
+        renderItem={renderGoalItem}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={styles.listContainer}
         refreshControl={
           <RefreshControl
@@ -306,15 +398,9 @@ export default function GoalsScreen(): React.JSX.Element {
                 <TaskItem
                   key={task.id}
                   task={task}
-                  onComplete={(id) =>
-                    completeTask({
-                      id,
-                      completed: task.completed_at === null,
-                      milestoneId: null,
-                    })
-                  }
-                  onReschedule={(id) => handleReschedule(id, null)}
-                  onDelete={(id) => handleDelete(id, null)}
+                  onComplete={handleCompleteTask}
+                  onReschedule={handleReschedule}
+                  onDelete={handleDelete}
                 />
               ))}
             </View>
@@ -344,47 +430,11 @@ export default function GoalsScreen(): React.JSX.Element {
         maxToRenderPerBatch={10}
         windowSize={5}
         initialNumToRender={8}
-        renderItem={({ item }) => {
-          if ('isPlaceholder' in item && item.isPlaceholder) {
-            return (
-              <TouchableOpacity
-                style={styles.emptyMilestoneRow}
-                onPress={() => {
-                  setSelectedGoalId(item.goal_id);
-                  setIsMilestoneSheetVisible(true);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.emptyMilestoneText}>+ Add your first milestone</Text>
-              </TouchableOpacity>
-            );
-          }
-          return (
-            <MilestoneItem
-              milestone={item as Milestone & { tasks: Task[] }}
-              onStatusChange={(id, status) =>
-                updateMilestoneStatus({ id, status, goalId: (item as Milestone).goal_id })
-              }
-              onAddTask={(mid) => handleOpenCreateTask(mid)}
-            />
-          );
-        }}
-        renderSectionHeader={({ section }) => (
-          <View style={styles.groupHeaderRow}>
-            <Text style={styles.groupHeaderTitle}>{section.title}</Text>
-            <TouchableOpacity
-              style={styles.groupHeaderAddButton}
-              onPress={() => {
-                setSelectedGoalId(section.id);
-                setIsMilestoneSheetVisible(true);
-              }}
-              activeOpacity={0.7}
-            >
-              <Plus size={16} color="#5B4FE8" strokeWidth={2.5} />
-            </TouchableOpacity>
-          </View>
-        )}
+        renderItem={renderMilestoneItem}
+        renderSectionHeader={renderSectionHeader}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={styles.listContainer}
         refreshControl={
           <RefreshControl
@@ -428,14 +478,10 @@ export default function GoalsScreen(): React.JSX.Element {
         maxToRenderPerBatch={10}
         windowSize={5}
         initialNumToRender={8}
-        renderItem={({ item }) => (
-          <GoalCard
-            goal={item}
-            isPrimary={item.is_primary}
-            onPress={() => {}}
-          />
-        )}
+        renderItem={renderAchievedGoalItem}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={styles.listContainer}
         refreshControl={
           <RefreshControl

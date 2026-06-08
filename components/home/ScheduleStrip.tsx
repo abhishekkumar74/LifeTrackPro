@@ -25,7 +25,7 @@ interface ScheduleStripProps {
   onAddSchedule?: () => void;
 }
 
-export const ScheduleStrip: React.FC<ScheduleStripProps> = ({
+export const ScheduleStrip = React.memo<ScheduleStripProps>(({
   blocks,
   isLoading,
   onSeeAll,
@@ -185,7 +185,7 @@ export const ScheduleStrip: React.FC<ScheduleStripProps> = ({
       )}
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   outerContainer: {

@@ -33,7 +33,7 @@ interface GoalBarProps {
   isLoading: boolean;
 }
 
-export const GoalBar: React.FC<GoalBarProps> = ({ goal, isLoading }) => {
+export const GoalBar = React.memo<GoalBarProps>(({ goal, isLoading }) => {
   const router = useRouter();
   const opacity = useSharedValue(0.4);
 
@@ -191,7 +191,7 @@ export const GoalBar: React.FC<GoalBarProps> = ({ goal, isLoading }) => {
       )}
     </TouchableOpacity>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

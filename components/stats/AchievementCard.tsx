@@ -7,7 +7,7 @@ interface AchievementCardProps {
   achievement: Achievement;
 }
 
-export const AchievementCard: React.FC<AchievementCardProps> = ({ achievement }) => {
+export const AchievementCard = React.memo<AchievementCardProps>(({ achievement }) => {
   const { title, description, emoji, isUnlocked, unlockedAt } = achievement;
 
   const formatDateStr = (dateStr?: string) => {
@@ -59,7 +59,7 @@ export const AchievementCard: React.FC<AchievementCardProps> = ({ achievement })
       )}
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

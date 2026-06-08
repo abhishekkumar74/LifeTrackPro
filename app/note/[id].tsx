@@ -23,6 +23,7 @@ import BottomSheet, {
   BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { ArrowLeft, MoreVertical, Plus, X, Sparkles, Check } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SubjectPicker } from '@/components/shared/SubjectPicker';
 import { useUiStore } from '@/lib/store/ui.store';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
@@ -123,13 +124,72 @@ export default function NoteEditorScreen(): React.JSX.Element {
     }
   }, [note]);
 
-  // Handle auto-save trigger on input edits
+  // Check if a newer draft exists on AsyncStorage on mount/note fetch
+  useEffect(() => {
+    async function checkDraft() {
+      if (!id) return;
+      try {
+        const draftStr = await AsyncStorage.getItem(`note_draft_${id}`);
+        if (!draftStr) return;
+        const draft = JSON.parse(draftStr);
+        if (draft && draft.timestamp) {
+          const noteUpdatedAt = note?.updated_at ? new Date(note.updated_at).getTime() : 0;
+          if (draft.timestamp > noteUpdatedAt) {
+            Alert.alert(
+              'Recover Draft?',
+              'An unsaved local draft was found for this note that is newer than the saved version. Would you like to recover it?',
+              [
+                {
+                  text: 'Discard',
+                  style: 'destructive',
+                  onPress: async () => {
+                    await AsyncStorage.removeItem(`note_draft_${id}`).catch(() => {});
+                  },
+                },
+                {
+                  text: 'Recover',
+                  onPress: () => {
+                    setTitle(draft.title || '');
+                    setContent(draft.content || '');
+                    setSubject(draft.subject);
+                    setChapter(draft.chapter);
+                    setTags(draft.tags || []);
+                  },
+                },
+              ]
+            );
+          }
+        }
+      } catch (err) {
+        if (__DEV__) console.warn('Failed to recover note draft:', err);
+      }
+    }
+
+    if (note && note.id !== 'new') {
+      checkDraft();
+    } else if (id === 'new') {
+      checkDraft();
+    }
+  }, [note, id]);
+
+  // Handle auto-save trigger on input edits + Local Draft saving
   useEffect(() => {
     // Skip saving on initial query mount load
     if (isInitialLoad.current) {
       isInitialLoad.current = false;
       return;
     }
+
+    // Save draft locally immediately
+    const draftData = {
+      title,
+      content,
+      subject,
+      chapter,
+      tags,
+      timestamp: Date.now(),
+    };
+    AsyncStorage.setItem(`note_draft_${id}`, JSON.stringify(draftData)).catch(() => {});
 
     // Auto-generate title if empty
     let computedTitle = title.trim();
@@ -163,7 +223,8 @@ export default function NoteEditorScreen(): React.JSX.Element {
             tags: tags,
           },
           {
-            onSuccess: (newNote) => {
+            onSuccess: async (newNote) => {
+              await AsyncStorage.removeItem('note_draft_new').catch(() => {});
               router.setParams({ id: newNote.id });
               setSaveStatus('SAVED');
               isCreating.current = false;
@@ -190,7 +251,8 @@ export default function NoteEditorScreen(): React.JSX.Element {
           },
         },
         {
-          onSuccess: () => {
+          onSuccess: async () => {
+            await AsyncStorage.removeItem(`note_draft_${id}`).catch(() => {});
             setSaveStatus('SAVED');
           },
           onError: () => {

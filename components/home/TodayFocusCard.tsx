@@ -26,7 +26,7 @@ interface TodayFocusCardProps {
   onPressCard?: () => void;
 }
 
-export const TodayFocusCard: React.FC<TodayFocusCardProps> = ({
+export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
   task,
   isLoading,
   onStartFocus,
@@ -121,7 +121,7 @@ export const TodayFocusCard: React.FC<TodayFocusCardProps> = ({
       )}
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

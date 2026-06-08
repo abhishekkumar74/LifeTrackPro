@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
+import { markEnd } from '../../lib/utils/startup-perf';
 
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useTodayStats } from '@/lib/hooks/use-today-stats';
@@ -43,10 +44,14 @@ export default function HomeDashboardScreen(): React.JSX.Element {
     };
   }, []);
 
+  useEffect(() => {
+    markEnd('app_boot');
+  }, []);
+
   // Combine auth profile name and default fallback
   const userName = profile?.name || 'Achiever';
 
-  const handleToggleHabit = async (habitId: string) => {
+  const handleToggleHabit = useCallback(async (habitId: string) => {
     const habit = stats.habits.find((h) => h.id === habitId);
     if (!habit) return;
 
@@ -69,27 +74,27 @@ export default function HomeDashboardScreen(): React.JSX.Element {
         );
       }
     );
-  };
+  }, [stats.habits, user?.id]);
 
-  const handleStartFocus = () => {
+  const handleStartFocus = useCallback(() => {
     router.push('/focus');
-  };
+  }, [router]);
 
-  const handleSeeAllSchedule = () => {
+  const handleSeeAllSchedule = useCallback(() => {
     router.push('/focus');
-  };
+  }, [router]);
 
-  const handleEditHabits = () => {
+  const handleEditHabits = useCallback(() => {
     router.push('/habits');
-  };
+  }, [router]);
 
-  const handlePressFocusCard = () => {
+  const handlePressFocusCard = useCallback(() => {
     router.push('/(tabs)/goals');
-  };
+  }, [router]);
 
-  const handleRefreshStats = () => {
+  const handleRefreshStats = useCallback(() => {
     stats.refetch();
-  };
+  }, [stats]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>

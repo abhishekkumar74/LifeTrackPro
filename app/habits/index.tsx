@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -61,10 +61,14 @@ export default function HabitsManagementScreen() {
 
   // Completion calculation
   const totalHabits = habits.length;
-  const doneHabits = habits.filter((h) => h.completedToday).length;
-  const completionPercent = totalHabits > 0 ? (doneHabits / totalHabits) * 100 : 0;
+  const { doneHabits, completionPercent } = useMemo(() => {
+    const total = habits.length;
+    const done = habits.filter((h) => h.completedToday).length;
+    const percent = total > 0 ? (done / total) * 100 : 0;
+    return { doneHabits: done, completionPercent: percent };
+  }, [habits]);
 
-  const handleToggleHabit = async (habit: HabitWithStatus) => {
+  const handleToggleHabit = useCallback(async (habit: HabitWithStatus) => {
     const todayStr = getTodayLocal();
     await toggleHabit({
       habitId: habit.id,
@@ -84,10 +88,10 @@ export default function HabitsManagementScreen() {
         queryClient.invalidateQueries({ queryKey: ['todayStats'] });
       },
     });
-  };
+  }, [queryClient]);
 
   // Reorder by Swapping
-  const handleMove = async (index: number, direction: 'up' | 'down') => {
+  const handleMove = useCallback(async (index: number, direction: 'up' | 'down') => {
     const newHabits = [...habits];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
 
@@ -109,16 +113,79 @@ export default function HabitsManagementScreen() {
         },
       }
     );
-  };
+  }, [habits, reorderMutation]);
 
   // Restore Habit
-  const handleRestore = (id: string) => {
+  const handleRestore = useCallback((id: string) => {
     restoreMutation.mutate(id, {
       onSuccess: () => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       },
     });
-  };
+  }, [restoreMutation]);
+
+  const renderHabitRow = useCallback(({ item: habit, index }: { item: HabitWithStatus, index: number }) => {
+    const isDone = habit.completedToday;
+    return (
+      <View style={styles.rowWrapper}>
+        {/* Left drag-handle / reorder arrow section */}
+        {isEditMode && (
+          <View style={styles.reorderControls}>
+            <Text style={styles.dragHandle}>⠿</Text>
+            <View style={styles.arrowGroup}>
+              <TouchableOpacity
+                style={[styles.arrowBtn, index === 0 && styles.arrowBtnDisabled]}
+                disabled={index === 0}
+                onPress={() => handleMove(index, 'up')}
+              >
+                <Text style={styles.arrowText}>▲</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.arrowBtn,
+                  index === habits.length - 1 && styles.arrowBtnDisabled,
+                ]}
+                disabled={index === habits.length - 1}
+                onPress={() => handleMove(index, 'down')}
+              >
+                <Text style={styles.arrowText}>▼</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={styles.habitRow}
+          onPress={() => router.push(`/habit/${habit.id}`)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.habitEmoji}>{habit.emoji}</Text>
+          <View style={styles.habitDetails}>
+            <Text
+              style={[styles.habitTitle, isDone && styles.habitTitleDone]}
+              numberOfLines={1}
+            >
+              {habit.title}
+            </Text>
+            {/* Placeholder Streak count */}
+            <Text style={styles.streakBadge}>🔥 Daily</Text>
+          </View>
+
+          {/* Checkbox toggle (only when not in edit mode) */}
+          {!isEditMode && (
+            <TouchableOpacity
+              style={[styles.checkbox, isDone && styles.checkboxChecked]}
+              onPress={() => handleToggleHabit(habit)}
+              activeOpacity={0.6}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              {isDone && <Text style={styles.checkmark}>✓</Text>}
+            </TouchableOpacity>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  }, [isEditMode, habits.length, router, handleMove, handleToggleHabit]);
 
   const isLoading = isHabitsLoading || isArchivedLoading;
 
@@ -176,6 +243,8 @@ export default function HabitsManagementScreen() {
           windowSize={5}
           initialNumToRender={8}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           contentContainerStyle={styles.scrollContainer}
           refreshControl={
             <RefreshControl
@@ -219,68 +288,7 @@ export default function HabitsManagementScreen() {
               )}
             </>
           }
-          renderItem={({ item: habit, index }) => {
-            const isDone = habit.completedToday;
-            return (
-              <View style={styles.rowWrapper}>
-                {/* Left drag-handle / reorder arrow section */}
-                {isEditMode && (
-                  <View style={styles.reorderControls}>
-                    <Text style={styles.dragHandle}>⠿</Text>
-                    <View style={styles.arrowGroup}>
-                      <TouchableOpacity
-                        style={[styles.arrowBtn, index === 0 && styles.arrowBtnDisabled]}
-                        disabled={index === 0}
-                        onPress={() => handleMove(index, 'up')}
-                      >
-                        <Text style={styles.arrowText}>▲</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.arrowBtn,
-                          index === habits.length - 1 && styles.arrowBtnDisabled,
-                        ]}
-                        disabled={index === habits.length - 1}
-                        onPress={() => handleMove(index, 'down')}
-                      >
-                        <Text style={styles.arrowText}>▼</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-
-                <TouchableOpacity
-                  style={styles.habitRow}
-                  onPress={() => router.push(`/habit/${habit.id}`)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.habitEmoji}>{habit.emoji}</Text>
-                  <View style={styles.habitDetails}>
-                    <Text
-                      style={[styles.habitTitle, isDone && styles.habitTitleDone]}
-                      numberOfLines={1}
-                    >
-                      {habit.title}
-                    </Text>
-                    {/* Placeholder Streak count */}
-                    <Text style={styles.streakBadge}>🔥 Daily</Text>
-                  </View>
-
-                  {/* Checkbox toggle (only when not in edit mode) */}
-                  {!isEditMode && (
-                    <TouchableOpacity
-                      style={[styles.checkbox, isDone && styles.checkboxChecked]}
-                      onPress={() => handleToggleHabit(habit)}
-                      activeOpacity={0.6}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      {isDone && <Text style={styles.checkmark}>✓</Text>}
-                    </TouchableOpacity>
-                  )}
-                </TouchableOpacity>
-              </View>
-            );
-          }}
+          renderItem={renderHabitRow}
           ListFooterComponent={
             <>
               {/* Archived section */}

@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, Session } from '@supabase/supabase-js';
 import { UserProfile } from '@/types/app.types';
 import { supabase } from '@/lib/supabase/client';
@@ -16,35 +18,47 @@ interface AuthState {
   signOut: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  session: null,
-  profile: null,
-  isLoading: true,
-  setSession: (session) =>
-    set({
-      session,
-      user: session ? session.user : null,
-    }),
-  setProfile: (profile) => set({ profile }),
-  setLoading: (isLoading) => set({ isLoading }),
-  clearAuth: () =>
-    set({
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
       user: null,
       session: null,
       profile: null,
-      isLoading: false,
+      isLoading: true,
+      setSession: (session) =>
+        set({
+          session,
+          user: session ? session.user : null,
+        }),
+      setProfile: (profile) => set({ profile }),
+      setLoading: (isLoading) => set({ isLoading }),
+      clearAuth: () =>
+        set({
+          user: null,
+          session: null,
+          profile: null,
+          isLoading: false,
+        }),
+      signOut: async () => {
+        await supabase.auth.signOut();
+        // CRITICAL: clear all cached data
+        queryClient.clear();
+        useAuthStore.setState({
+          user: null,
+          session: null,
+          profile: null,
+        });
+      },
     }),
-  signOut: async () => {
-    await supabase.auth.signOut();
-    // CRITICAL: clear all cached data
-    queryClient.clear();
-    useAuthStore.setState({
-      user: null,
-      session: null,
-      profile: null,
-    });
-  },
-}));
+    {
+      name: 'lifetrack-auth-store',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        user: state.user,
+        profile: state.profile,
+      }),
+    }
+  )
+);
 
 export default useAuthStore;

@@ -90,7 +90,24 @@ export default function RoomsScreen(): React.JSX.Element {
       </TouchableOpacity>
     </View>
   );
-
+  const renderRoomRow = useCallback(({ item }: { item: RoomWithHost }) => {
+    const isInactiveInMyTab = activeTab === 'my' && !item.is_active;
+    return (
+      <View style={isInactiveInMyTab && styles.inactiveRoomWrapper}>
+        <RoomCard
+          room={item}
+          currentUserId={currentUserId}
+          onJoin={handleJoinRoom}
+          onEnd={handleEndRoom}
+        />
+        {isInactiveInMyTab && (
+          <View style={styles.endedBadge}>
+            <Text style={styles.endedBadgeText}>Ended</Text>
+          </View>
+        )}
+      </View>
+    );
+  }, [activeTab, currentUserId, handleJoinRoom, handleEndRoom]);
   const isLoading = activeTab === 'live' ? isActiveLoading : isMyLoading;
   const error = activeTab === 'live' ? activeError : myError;
   const listData = activeTab === 'live' ? activeRooms : myRooms;
@@ -167,24 +184,7 @@ export default function RoomsScreen(): React.JSX.Element {
         <FlatList
           data={listData}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => {
-            const isInactiveInMyTab = activeTab === 'my' && !item.is_active;
-            return (
-              <View style={isInactiveInMyTab && styles.inactiveRoomWrapper}>
-                <RoomCard
-                  room={item}
-                  currentUserId={currentUserId}
-                  onJoin={handleJoinRoom}
-                  onEnd={handleEndRoom}
-                />
-                {isInactiveInMyTab && (
-                  <View style={styles.endedBadge}>
-                    <Text style={styles.endedBadgeText}>Ended</Text>
-                  </View>
-                )}
-              </View>
-            );
-          }}
+          renderItem={renderRoomRow}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -198,6 +198,10 @@ export default function RoomsScreen(): React.JSX.Element {
           removeClippedSubviews={true}
           maxToRenderPerBatch={10}
           windowSize={10}
+          initialNumToRender={8}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         />
       )}
 

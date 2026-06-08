@@ -1,3 +1,6 @@
+import { markStart, markEnd } from '../lib/utils/startup-perf';
+markStart('app_boot');
+
 import * as Sentry from '@sentry/react-native';
 import { initSentry, setSentryUser, clearSentryUser } from '@/lib/sentry';
 import { checkForUpdate } from '@/lib/update-checker';
@@ -24,7 +27,8 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Toast } from '@/components/shared/Toast';
 import { Platform, UIManager, View, Text, ActivityIndicator } from 'react-native';
 import { UserProfile } from '@/types/app.types';
-import { requestNotificationPermission, useNotificationResponse } from '@/lib/notifications';
+import { requestNotificationPermission, useNotificationResponse, scheduleMorningBrief } from '@/lib/notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -82,9 +86,26 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       const inOnboardingGroup = segmentsArray.includes('onboarding');
       const inAuthGroup = segmentsArray.includes('(auth)');
       if (!inOnboardingGroup && !inAuthGroup) {
-        requestNotificationPermission().catch((err) => {
-          if (__DEV__) console.warn('Failed requesting notification permission:', err);
-        });
+        const timer = setTimeout(async () => {
+          try {
+            await requestNotificationPermission();
+            
+            // Schedule daily brief if enabled
+            const mb = await AsyncStorage.getItem('pref_morning_brief');
+            if (mb === null || mb === 'true') {
+              const { data: tasks } = await supabase
+                .from('tasks')
+                .select('title')
+                .is('completed_at', null)
+                .limit(1);
+              const topTitle = tasks && tasks[0] ? tasks[0].title : 'Complete your daily habits';
+              await scheduleMorningBrief(topTitle);
+            }
+          } catch (err) {
+            if (__DEV__) console.warn('Failed requesting notification permission:', err);
+          }
+        }, 2000);
+        return () => clearTimeout(timer);
       }
     }
   }, [session, profile, segments]);
@@ -97,9 +118,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 function RootLayout() {
-  // Check for OTA updates on start
+  // Check for OTA updates on start (deferred by 2 seconds)
   useEffect(() => {
-    checkForUpdate();
+    const timer = setTimeout(() => {
+      checkForUpdate();
+    }, 2000);
+    return () => clearTimeout(timer);
   }, []);
 
   // Listen for lifecycle changes globally

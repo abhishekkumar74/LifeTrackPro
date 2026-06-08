@@ -2,17 +2,16 @@
   "expo": {
     "name": "LifeTrack Pro",
     "slug": "lifetrack-pro",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "lifetrackpro",
     "userInterfaceStyle": "automatic",
     "jsEngine": "hermes",
-
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.lifetrackpro.app",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio",
@@ -24,7 +23,7 @@
     },
     "android": {
       "package": "com.lifetrackpro.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.VIBRATE",
@@ -65,6 +64,15 @@
         {
           "organization": "your-org-slug",
           "project": "lifetrack-pro"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
         }
       ]
     ],

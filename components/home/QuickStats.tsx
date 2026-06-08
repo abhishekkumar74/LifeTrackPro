@@ -27,7 +27,7 @@ interface QuickStatsProps {
   isLoading: boolean;
 }
 
-export const QuickStats: React.FC<QuickStatsProps> = ({
+export const QuickStats = React.memo<QuickStatsProps>(({
   focusMinutes,
   tasksTotal,
   tasksDone,
@@ -116,7 +116,7 @@ export const QuickStats: React.FC<QuickStatsProps> = ({
       </TouchableOpacity>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

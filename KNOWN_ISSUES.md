@@ -11,12 +11,15 @@
 - **Android Status Bar Edges**: Depending on the specific device model, the Android Status Bar might slightly overlap dark-themed rooms. We use `SafeAreaView` to prevent overlap on notch devices.
 - **Android Keyboard Avoiding View**: The input keyboard in the study room's discussion chat is handled via `KeyboardAvoidingView`. Different Android keyboard heights or custom vendor keypads may result in minor layout shifts.
 
-## Deferred Features
-
-- **Avatar Image Storage Upload**: Remote storage uploads for user avatar images to Supabase storage are deferred to the next release. Currently, avatar selections are saved in local cache only.
-- **Archived Habits Section**: Habits can be archived (setting `is_active` to `false`). The UI to view and restore archived habits will be built in the next version.
 
 ## Security & Vulnerabilities
 
 - **PostCSS Vulnerability (Moderate - GHSA-qx2v-qp2m-jg93)**: Metro config uses PostCSS which has a moderate advisory for XSS via unescaped output. Since it is nested deep within Metro/Expo configurations, updating it requires upgrading Expo to SDK 56, which contains breaking API changes.
 - **UUID Vulnerability (Moderate - GHSA-w5hq-g745-h8pq)**: Nested dependency in expo-constants and ngrok configuration. Fixing this requires updating to SDK 56. Safe to defer as bounds check bounds are not reachable under current usage.
+
+## Deferred Features
+
+- **Avatar Storage & Upload**: The user profile avatar currently displays user initials. The `expo-image` library is installed and configured, ready to optimize image loading and caching as soon as a file storage provider (like Supabase Storage) and upload UI are implemented.
+- **Audio Files Compression**: Sound effects in `assets/sounds/` (`cafe.mp3` @ 2.0MB, `lofi.mp3` @ 2.6MB, and `rain.mp3` @ 2.3MB) currently exceed the 1.5MB recommended limit. Automatic compression during the build process is deferred because `ffmpeg` is not present in the local execution environment. These files should be compressed manually before production build bundling using:
+  `ffmpeg -i input.mp3 -b:a 96k output.mp3`
+

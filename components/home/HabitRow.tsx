@@ -25,7 +25,7 @@ interface HabitRowProps {
   onEdit: () => void;
 }
 
-export const HabitRow: React.FC<HabitRowProps> = ({
+export const HabitRow = React.memo<HabitRowProps>(({
   habits,
   isLoading,
   onToggle,
@@ -146,7 +146,7 @@ export const HabitRow: React.FC<HabitRowProps> = ({
       )}
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

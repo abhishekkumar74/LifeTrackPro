@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -106,7 +106,7 @@ export default function FocusScreen(): React.JSX.Element {
   }, [currentMode]);
 
   // Save focus session results directly to Supabase
-  const handleSaveSession = async (mood: number, _note: string) => {
+  const handleSaveSession = useCallback(async (mood: number, _note: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -149,15 +149,15 @@ export default function FocusScreen(): React.JSX.Element {
         'Could not log session. Please check your network and try again.'
       );
     }
-  };
+  }, [elapsedSeconds, selectedPreset, customMinutes, sessionGoal, subjectTag, activeSound, resetSession, ambient]);
 
-  const handleDiscardSession = () => {
+  const handleDiscardSession = useCallback(() => {
     setShowSummary(false);
     resetSession();
     ambient.stop().catch(() => {});
-  };
+  }, [resetSession, ambient]);
 
-  const handlePlayPause = async () => {
+  const handlePlayPause = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isRunning) {
       pause();
@@ -166,14 +166,14 @@ export default function FocusScreen(): React.JSX.Element {
     } else {
       start();
     }
-  };
+  }, [isRunning, isPaused, pause, resume, start]);
 
-  const handleReset = async () => {
+  const handleReset = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     stop();
-  };
+  }, [stop]);
 
-  const handleSkipBreak = async () => {
+  const handleSkipBreak = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     // Skips break mode and switches timer back to focus mode duration
     const focusDuration =
@@ -186,9 +186,9 @@ export default function FocusScreen(): React.JSX.Element {
       isRunning: false,
       isPaused: false,
     });
-  };
+  }, [selectedPreset, customMinutes]);
 
-  const cycleSubject = async () => {
+  const cycleSubject = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const options = subjects.length > 0 ? [...subjects, 'General'] : ['Physics', 'Chemistry', 'Biology', 'Math', 'Other'];
     const currentSubject = subjectTag || 'General';
@@ -196,9 +196,9 @@ export default function FocusScreen(): React.JSX.Element {
     const nextIndex = (currentIndex + 1) % options.length;
     const nextSubject = options[nextIndex];
     setSubjectTag(nextSubject === 'General' ? null : nextSubject);
-  };
+  }, [subjects, subjectTag, setSubjectTag]);
 
-  const handleSoundSelect = async (key: SoundKey | null) => {
+  const handleSoundSelect = useCallback(async (key: SoundKey | null) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSound(key);
     if (key) {
@@ -206,22 +206,22 @@ export default function FocusScreen(): React.JSX.Element {
     } else {
       await ambient.stop();
     }
-  };
+  }, [setSound, ambient, soundVolume]);
 
-  const handleVolumeChange = async (vol: number) => {
+  const handleVolumeChange = useCallback(async (vol: number) => {
     setVolume(vol);
     await ambient.setVolume(vol);
-  };
+  }, [setVolume, ambient]);
 
-  const handleBlockerToggle = async () => {
+  const handleBlockerToggle = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     toggleBlocker();
-  };
+  }, [toggleBlocker]);
 
-  const handleSaveGoal = () => {
+  const handleSaveGoal = useCallback(() => {
     setSessionGoal(tempGoal);
     setIsEditingGoal(false);
-  };
+  }, [tempGoal, setSessionGoal]);
 
   const focusMinutes =
     selectedPreset === 'custom'

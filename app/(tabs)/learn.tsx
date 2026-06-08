@@ -14,6 +14,7 @@ import {
   Dimensions,
   Platform,
   StatusBar,
+  RefreshControl,
 } from 'react-native';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
 import Svg, { Circle } from 'react-native-svg';
@@ -114,7 +115,7 @@ export default function LearnScreen(): React.JSX.Element {
     }
   }, [sortOption]);
 
-  const handleShowSortOptions = () => {
+  const handleShowSortOptions = useCallback(() => {
     Alert.alert(
       'Sort Notes',
       'Select a sorting option:',
@@ -127,7 +128,7 @@ export default function LearnScreen(): React.JSX.Element {
       ],
       { cancelable: true }
     );
-  };
+  }, []);
 
   // Expanded card tracking
   const [expandedSubjects, setExpandedSubjects] = useState<string[]>([]);
@@ -189,7 +190,7 @@ export default function LearnScreen(): React.JSX.Element {
 
   // Pull to refresh handlers
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     if (selectedTab === 'syllabus') {
       await syllabusQuery.refetch();
@@ -198,29 +199,29 @@ export default function LearnScreen(): React.JSX.Element {
       await dueRevisionsQuery.refetch();
     }
     setIsRefreshing(false);
-  };
+  }, [selectedTab, syllabusQuery, notesQuery, dueRevisionsQuery]);
 
   // Toggle subject accordion expand/collapse
-  const toggleSubjectExpanded = (subject: string) => {
+  const toggleSubjectExpanded = useCallback((subject: string) => {
     setExpandedSubjects((prev) =>
       prev.includes(subject) ? prev.filter((s) => s !== subject) : [...prev, subject]
     );
-  };
+  }, []);
 
   // Toggle chapter accordion expand/collapse
-  const toggleChapterExpanded = (chapterKey: string) => {
+  const toggleChapterExpanded = useCallback((chapterKey: string) => {
     setExpandedChapters((prev) =>
       prev.includes(chapterKey) ? prev.filter((c) => c !== chapterKey) : [...prev, chapterKey]
     );
-  };
+  }, []);
 
   // Syllabus Status select
-  const handleTopicStatusChange = (topicId: string, newStatus: SyllabusStatus) => {
+  const handleTopicStatusChange = useCallback((topicId: string, newStatus: SyllabusStatus) => {
     updateTopicStatusMutation.mutate({ topicId, newStatus });
-  };
+  }, [updateTopicStatusMutation]);
 
   // Multi-select toggles
-  const handleToggleSelectTopic = (topicId: string) => {
+  const handleToggleSelectTopic = useCallback((topicId: string) => {
     setSelectedTopicIds((prev) => {
       const isSelected = prev.includes(topicId);
       const nextList = isSelected ? prev.filter((id) => id !== topicId) : [...prev, topicId];
@@ -229,22 +230,22 @@ export default function LearnScreen(): React.JSX.Element {
       }
       return nextList;
     });
-  };
+  }, []);
 
-  const handleLongPressTopic = (topicId: string) => {
+  const handleLongPressTopic = useCallback((topicId: string) => {
     if (!isMultiSelectMode) {
       setIsMultiSelectMode(true);
       setSelectedTopicIds([topicId]);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
-  };
+  }, [isMultiSelectMode]);
 
-  const handleCancelMultiSelect = () => {
+  const handleCancelMultiSelect = useCallback(() => {
     setSelectedTopicIds([]);
     setIsMultiSelectMode(false);
-  };
+  }, []);
 
-  const handleBulkStatusUpdate = async (status: SyllabusStatus) => {
+  const handleBulkStatusUpdate = useCallback(async (status: SyllabusStatus) => {
     if (selectedTopicIds.length === 0) return;
 
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -256,17 +257,17 @@ export default function LearnScreen(): React.JSX.Element {
         },
       }
     );
-  };
+  }, [selectedTopicIds, bulkUpdateTopicsMutation, handleCancelMultiSelect]);
 
   // Add Syllabus Topic
-  const handleOpenAddTopic = () => {
+  const handleOpenAddTopic = useCallback(() => {
     setNewSubject('');
     setNewChapter('');
     setNewTopic('');
     addTopicSheetRef.current?.expand();
-  };
+  }, []);
 
-  const handleAddTopicSubmit = () => {
+  const handleAddTopicSubmit = useCallback(() => {
     if (!newSubject.trim() || !newChapter.trim() || !newTopic.trim()) {
       Alert.alert('Missing fields', 'Please enter subject, chapter, and topic details.');
       return;
@@ -289,10 +290,10 @@ export default function LearnScreen(): React.JSX.Element {
         },
       }
     );
-  };
+  }, [newSubject, newChapter, newTopic, createTopicMutation, expandedSubjects]);
 
   // Notes tab pin toggle
-  const handlePinNote = (noteId: string) => {
+  const handlePinNote = useCallback((noteId: string) => {
     const list = notesQuery.data || [];
     const target = list.find((n) => n.id === noteId);
     if (target) {
@@ -301,27 +302,10 @@ export default function LearnScreen(): React.JSX.Element {
         updates: { is_pinned: !target.is_pinned },
       });
     }
-  };
+  }, [notesQuery.data, updateNoteMutation]);
 
   // Flashcards Review Mutation triggers
-  const handleFlashcardGotIt = (noteId: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    reviewNoteMutation.mutate({ noteId, quality: 4 });
-
-    setGotItCount((prev) => prev + 1);
-    moveToNextCard();
-  };
-
-  const handleFlashcardReviewAgain = (noteId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    reviewNoteMutation.mutate({ noteId, quality: 1 });
-
-    setReviewAgainCount((prev) => prev + 1);
-    setFailedCardIds((prev) => [...prev, noteId]);
-    moveToNextCard();
-  };
-
-  const moveToNextCard = () => {
+  const moveToNextCard = useCallback(() => {
     if (currentCardIndex + 1 < currentSessionDeck.length) {
       setCurrentCardIndex((prev) => prev + 1);
     } else {
@@ -331,7 +315,24 @@ export default function LearnScreen(): React.JSX.Element {
       }
       setStudySessionState('complete');
     }
-  };
+  }, [currentCardIndex, currentSessionDeck.length, sessionStartTime]);
+
+  const handleFlashcardGotIt = useCallback((noteId: string) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    reviewNoteMutation.mutate({ noteId, quality: 4 });
+
+    setGotItCount((prev) => prev + 1);
+    moveToNextCard();
+  }, [reviewNoteMutation, moveToNextCard]);
+
+  const handleFlashcardReviewAgain = useCallback((noteId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    reviewNoteMutation.mutate({ noteId, quality: 1 });
+
+    setReviewAgainCount((prev) => prev + 1);
+    setFailedCardIds((prev) => [...prev, noteId]);
+    moveToNextCard();
+  }, [reviewNoteMutation, moveToNextCard]);
 
   // Local Search Filters
   const filteredSyllabus = useMemo((): GroupedSyllabus => {
@@ -463,16 +464,15 @@ export default function LearnScreen(): React.JSX.Element {
 
   const activeCard = currentSessionDeck[currentCardIndex];
 
-  const handleTabPress = (tab: TabType) => {
+  const handleTabPress = useCallback((tab: TabType) => {
     setSelectedTab(tab);
     setSearchQuery(''); // Clear search on tab switch
     if (tab !== 'flashcards') {
       setStudySessionState('idle'); // Reset flashcard session if user leaves tab
     }
-  };
+  }, []);
 
-  // Syllabus Template loading
-  const handleLoadSyllabusTemplate = (key: string) => {
+  const handleLoadSyllabusTemplate = useCallback((key: string) => {
     const template = SYLLABUS_TEMPLATES[key];
     if (!template) return;
 
@@ -499,7 +499,7 @@ export default function LearnScreen(): React.JSX.Element {
         },
       ]
     );
-  };
+  }, [setupSyllabusMutation]);
 
   // Remember active subject from last note
   const lastUsedSubject = useMemo(() => {
@@ -597,8 +597,7 @@ export default function LearnScreen(): React.JSX.Element {
     return Array.from(list);
   }, [syllabusQuery.data]);
 
-  // Handle Quick Note Save
-  const handleQuickCaptureSave = (content: string, subject: string) => {
+  const handleQuickCaptureSave = useCallback((content: string, subject: string) => {
     createNoteMutation.mutate(
       {
         title: content.substring(0, 50),
@@ -617,10 +616,9 @@ export default function LearnScreen(): React.JSX.Element {
         },
       }
     );
-  };
+  }, [createNoteMutation, router]);
 
-  // Start study session
-  const handleStartReview = () => {
+  const handleStartReview = useCallback(() => {
     if (flashcardDeck.length === 0) return;
     setCurrentSessionDeck([...flashcardDeck]);
     setCurrentCardIndex(0);
@@ -629,10 +627,9 @@ export default function LearnScreen(): React.JSX.Element {
     setFailedCardIds([]);
     setSessionStartTime(Date.now());
     setStudySessionState('active');
-  };
+  }, [flashcardDeck]);
 
-  // Study again only failed cards
-  const handleStudyAgain = () => {
+  const handleStudyAgain = useCallback(() => {
     const failedCards = currentSessionDeck.filter((c) => failedCardIds.includes(c.id));
     if (failedCards.length === 0) return;
 
@@ -643,7 +640,20 @@ export default function LearnScreen(): React.JSX.Element {
     setFailedCardIds([]);
     setSessionStartTime(Date.now());
     setStudySessionState('active');
-  };
+  }, [currentSessionDeck, failedCardIds]);
+
+  const handleNotePress = useCallback((noteId: string) => {
+    router.push(`/note/${noteId}`);
+  }, [router]);
+
+  const renderNoteItem = useCallback(({ item }: { item: Note }) => (
+    <NoteCard
+      note={item}
+      onPress={() => handleNotePress(item.id)}
+      onPin={handlePinNote}
+      searchQuery={searchQuery}
+    />
+  ), [handleNotePress, handlePinNote, searchQuery]);
 
   // Flashcards subject breakdown
   const flashcardSubjectBreakdown = useMemo(() => {
@@ -1221,18 +1231,19 @@ export default function LearnScreen(): React.JSX.Element {
                   maxToRenderPerBatch={10}
                   windowSize={5}
                   initialNumToRender={8}
-                  onRefresh={handleRefresh}
-                  refreshing={isRefreshing}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={isRefreshing}
+                      onRefresh={handleRefresh}
+                      colors={['#5B4FE8']}
+                      tintColor="#5B4FE8"
+                    />
+                  }
                   contentContainerStyle={styles.listScroll}
                   keyboardDismissMode="on-drag"
-                  renderItem={({ item }) => (
-                    <NoteCard
-                      note={item}
-                      onPress={() => router.push(`/note/${item.id}`)}
-                      onPin={handlePinNote}
-                      searchQuery={searchQuery}
-                    />
-                  )}
+                  renderItem={renderNoteItem}
                   ListEmptyComponent={
                     <View style={styles.emptyContainer}>
                       <Text style={styles.emptyTitle}>No notes found 📝</Text>
