@@ -94,6 +94,17 @@ export const ScheduleStrip = React.memo<ScheduleStripProps>(({
     return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
   };
 
+  // Sort active blocks to the top
+  const sortedBlocks = useMemo(() => {
+    return [...blocks].sort((a, b) => {
+      const aActive = isBlockActiveNow(a.start_time, a.end_time);
+      const bActive = isBlockActiveNow(b.start_time, b.end_time);
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      return a.start_time.localeCompare(b.start_time);
+    });
+  }, [blocks]);
+
   if (isLoading) {
     return (
       <View style={styles.outerContainer}>
@@ -114,17 +125,6 @@ export const ScheduleStrip = React.memo<ScheduleStripProps>(({
       </View>
     );
   }
-
-  // Sort active blocks to the top
-  const sortedBlocks = useMemo(() => {
-    return [...blocks].sort((a, b) => {
-      const aActive = isBlockActiveNow(a.start_time, a.end_time);
-      const bActive = isBlockActiveNow(b.start_time, b.end_time);
-      if (aActive && !bActive) return -1;
-      if (!aActive && bActive) return 1;
-      return a.start_time.localeCompare(b.start_time);
-    });
-  }, [blocks]);
 
   return (
     <View style={styles.outerContainer}>

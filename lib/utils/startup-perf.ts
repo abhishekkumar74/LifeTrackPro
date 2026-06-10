@@ -17,8 +17,8 @@ export function markEnd(label: string) {
     );
   }
   
-  // Warn if critical path is slow
-  if (duration > 1000 && label === 'app_boot') {
+  // Warn if critical path is slow (only in production — tunnel/dev builds are always slow)
+  if (!__DEV__ && duration > 5000 && label === 'app_boot') {
     captureError(
       new Error(`Slow startup: ${duration}ms`),
       { context: 'startup_perf', duration: String(duration) }

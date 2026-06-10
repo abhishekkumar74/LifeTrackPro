@@ -117,6 +117,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function InnerApp({ children }: { children: React.ReactNode }) {
+  // Listen for lifecycle changes globally
+  useAppLifecycle();
+  return <>{children}</>;
+}
+
 function RootLayout() {
   // Check for OTA updates on start (deferred by 2 seconds)
   useEffect(() => {
@@ -125,9 +131,6 @@ function RootLayout() {
     }, 2000);
     return () => clearTimeout(timer);
   }, []);
-
-  // Listen for lifecycle changes globally
-  useAppLifecycle();
 
   // Listen for notification taps globally
   useNotificationResponse();
@@ -339,24 +342,26 @@ function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <SafeAreaProvider>
-          <AuthGuard>
-            <ErrorBoundary>
-              <OfflineBanner />
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(auth)/login" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="(auth)/onboarding/index" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="rooms/index" options={{ headerShown: false }} />
-                <Stack.Screen name="rooms/[id]" options={{ headerShown: false }} />
-                <Stack.Screen name="profile" options={{ headerShown: false }} />
-                <Stack.Screen name="habit/[id]" options={{ headerShown: false }} />
-                <Stack.Screen name="habits/index" options={{ headerShown: false }} />
-              </Stack>
-              <Toast />
-            </ErrorBoundary>
-          </AuthGuard>
-        </SafeAreaProvider>
+        <InnerApp>
+          <SafeAreaProvider>
+            <AuthGuard>
+              <ErrorBoundary>
+                <OfflineBanner />
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="(auth)/login" options={{ gestureEnabled: false }} />
+                  <Stack.Screen name="(auth)/onboarding/index" options={{ gestureEnabled: false }} />
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="rooms/index" options={{ headerShown: false }} />
+                  <Stack.Screen name="rooms/[id]" options={{ headerShown: false }} />
+                  <Stack.Screen name="profile" options={{ headerShown: false }} />
+                  <Stack.Screen name="habit/[id]" options={{ headerShown: false }} />
+                  <Stack.Screen name="habits/index" options={{ headerShown: false }} />
+                </Stack>
+                <Toast />
+              </ErrorBoundary>
+            </AuthGuard>
+          </SafeAreaProvider>
+        </InnerApp>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

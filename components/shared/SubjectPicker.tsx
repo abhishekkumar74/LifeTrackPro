@@ -26,6 +26,7 @@ interface SubjectPickerProps {
   isDark?: boolean; // styled for dark theme (Focus mode)
   style?: any;
   textStyle?: any;
+  customTrigger?: (open: () => void) => React.ReactNode;
 }
 
 export const SubjectPicker: React.FC<SubjectPickerProps> = ({
@@ -35,6 +36,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
   isDark = false,
   style,
   textStyle,
+  customTrigger,
 }) => {
   const sheetRef = useRef<BottomSheet>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,31 +97,35 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
   return (
     <View style={styles.wrapper}>
       {/* Trigger button */}
-      <TouchableOpacity
-        onPress={handleOpen}
-        activeOpacity={0.7}
-        style={[
-          styles.trigger,
-          isDark ? styles.triggerDark : styles.triggerLight,
-          style,
-        ]}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <View style={styles.triggerContent}>
-          <View style={[styles.colorDot, { backgroundColor: selectedColor }]} />
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.triggerText,
-              isDark ? styles.triggerTextDark : styles.triggerTextLight,
-              !selectedSubject && styles.placeholderText,
-              textStyle,
-            ]}
-          >
-            {selectedSubject || placeholder}
-          </Text>
-        </View>
-      </TouchableOpacity>
+      {customTrigger ? (
+        customTrigger(handleOpen)
+      ) : (
+        <TouchableOpacity
+          onPress={handleOpen}
+          activeOpacity={0.7}
+          style={[
+            styles.trigger,
+            isDark ? styles.triggerDark : styles.triggerLight,
+            style,
+          ]}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <View style={styles.triggerContent}>
+            <View style={[styles.colorDot, { backgroundColor: selectedColor }]} />
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.triggerText,
+                isDark ? styles.triggerTextDark : styles.triggerTextLight,
+                !selectedSubject && styles.placeholderText,
+                textStyle,
+              ]}
+            >
+              {selectedSubject || placeholder}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
 
       {/* Picker Bottom Sheet */}
       <BottomSheet

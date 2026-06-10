@@ -75,9 +75,12 @@ export function usePeriodStats(period: 'day' | 'week' | 'month') {
         periodStart.setHours(0, 0, 0, 0);
         periodEnd.setHours(23, 59, 59, 999);
 
-        prevStart.setDate(today.getDate() - 1);
+        prevStart = new Date(periodStart);
+        prevStart.setDate(prevStart.getDate() - 1);
         prevStart.setHours(0, 0, 0, 0);
-        prevEnd.setDate(today.getDate() - 1);
+
+        prevEnd = new Date(periodEnd);
+        prevEnd.setDate(prevEnd.getDate() - 1);
         prevEnd.setHours(23, 59, 59, 999);
       } else if (period === 'week') {
         const dayOfWeek = today.getDay();
@@ -86,13 +89,16 @@ export function usePeriodStats(period: 'day' | 'week' | 'month') {
         periodStart.setDate(today.getDate() - distanceToMonday);
         periodStart.setHours(0, 0, 0, 0);
         
-        periodEnd.setDate(periodStart.getDate() + 6);
+        periodEnd = new Date(periodStart);
+        periodEnd.setDate(periodEnd.getDate() + 6);
         periodEnd.setHours(23, 59, 59, 999);
 
-        prevStart.setDate(periodStart.getDate() - 7);
+        prevStart = new Date(periodStart);
+        prevStart.setDate(prevStart.getDate() - 7);
         prevStart.setHours(0, 0, 0, 0);
         
-        prevEnd.setDate(prevStart.getDate() + 6);
+        prevEnd = new Date(prevStart);
+        prevEnd.setDate(prevEnd.getDate() + 6);
         prevEnd.setHours(23, 59, 59, 999);
       } else {
         // Month

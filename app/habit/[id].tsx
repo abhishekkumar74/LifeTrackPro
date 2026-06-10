@@ -149,6 +149,7 @@ export default function HabitDetailScreen() {
         queryClient.invalidateQueries({ queryKey: ['habitHistory', id] });
         queryClient.invalidateQueries({ queryKey: ['habits'] });
         queryClient.invalidateQueries({ queryKey: ['todayStats'] });
+        queryClient.invalidateQueries({ queryKey: ['stats'] });
       },
     });
   };

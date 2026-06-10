@@ -76,6 +76,8 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
       onPanResponderGrant: (evt, gestureState) => {
         if (sliderWidth <= 0) return;
         const initialVolume = Math.max(0, Math.min(1, evt.nativeEvent.locationX / sliderWidth));
@@ -121,7 +123,13 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
 
       {/* Volume Slider overlay with animation */}
       <Animated.View style={[styles.sliderRow, animatedSliderStyle]}>
-        <Text style={styles.volumeEmoji}>🔈</Text>
+        <TouchableOpacity
+          onPress={() => onVolumeChange(Math.max(0, volume - 0.1))}
+          activeOpacity={0.6}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Text style={styles.volumeEmoji}>🔈</Text>
+        </TouchableOpacity>
 
         <View
           style={styles.sliderTrackContainer}
@@ -149,7 +157,13 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
           />
         </View>
 
-        <Text style={styles.volumeEmoji}>🔊</Text>
+        <TouchableOpacity
+          onPress={() => onVolumeChange(Math.min(1, volume + 0.1))}
+          activeOpacity={0.6}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Text style={styles.volumeEmoji}>🔊</Text>
+        </TouchableOpacity>
       </Animated.View>
     </View>
   );

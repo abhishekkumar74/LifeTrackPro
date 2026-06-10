@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -42,10 +42,125 @@ import {
 } from '@/lib/notifications';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import { useNotificationPermission } from '@/lib/hooks/use-permissions';
+import BottomSheet, {
+  BottomSheetView,
+  BottomSheetTextInput,
+  BottomSheetBackdrop,
+  BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 
 const CATEGORIES: UserCategory[] = ['student', 'employee', 'creator', 'entrepreneur', 'educator', 'aspirant'];
 const PEAK_TIMES: ('morning' | 'afternoon' | 'night')[] = ['morning', 'afternoon', 'night'];
 const DURATIONS = [25, 50, 90];
+
+const SUBCATEGORIES: Record<UserCategory, string[]> = {
+  student: [
+    'NEET',
+    'JEE Main',
+    'JEE Advanced',
+    'UPSC CSE',
+    'UPSC CAPF',
+    'SSC CGL',
+    'SSC CHSL',
+    'SSC MTS',
+    'IBPS PO',
+    'IBPS Clerk',
+    'SBI PO',
+    'RBI Grade B',
+    'SEBI',
+    'CAT',
+    'XAT',
+    'GMAT',
+    'GRE',
+    'GATE',
+    'ESE/IES',
+    'CLAT',
+    'AILET',
+    'LSAT',
+    'NDA',
+    'CDS',
+    'AFCAT',
+    'CUET',
+    'Class 10 Boards',
+    'Class 12 Boards',
+    'CA Foundation',
+    'CA Intermediate',
+    'CA Final',
+    'CS Foundation',
+    'CMA',
+    'IELTS',
+    'TOEFL',
+    'PTE',
+    'Coding / DSA',
+    'Other',
+  ],
+  employee: [
+    'Corporate / MNC',
+    'Government Job',
+    'PSU / Public Sector',
+    'Banking & Finance',
+    'IT / Software',
+    'Healthcare / Medical',
+    'Teaching / Education',
+    'Legal / Law',
+    'Defence / Military',
+    'Police / CRPF / BSF',
+    'Railways',
+    'Remote / Work from Home',
+    'Startup / Scaleup',
+    'Self Employed',
+    'Other',
+  ],
+  creator: [
+    'YouTuber / Video Creator',
+    'Instagram / Reels Creator',
+    'Blogger / Writer',
+    'Podcaster',
+    'Graphic Designer',
+    'UI/UX Designer',
+    'Photographer / Videographer',
+    'Music Artist',
+    'Developer / Programmer',
+    'Freelancer',
+    'Digital Marketer',
+    'Other',
+  ],
+  entrepreneur: [
+    'Early Stage Startup',
+    'Growing Business',
+    'E-commerce / D2C',
+    'SaaS / Tech Product',
+    'Service Business',
+    'Manufacturing',
+    'Agriculture / AgriTech',
+    'EdTech',
+    'FinTech',
+    'HealthTech',
+    'Real Estate',
+    'Side Business / Hustle',
+    'Other',
+  ],
+  educator: [
+    'School Teacher',
+    'College Professor',
+    'Online Tutor / Coach',
+    'Coaching Institute',
+    'Corporate Trainer',
+    'Skill Trainer',
+    'Other',
+  ],
+  aspirant: [
+    'Career Change',
+    'Skill Building',
+    'Physical Fitness',
+    'Language Learning',
+    'Music / Arts',
+    'Personal Development',
+    'Financial Goals',
+    'Health & Wellness',
+    'Other',
+  ],
+};
 
 export default function ProfileScreen(): React.JSX.Element {
   useAndroidBackHandler();
@@ -161,6 +276,12 @@ export default function ProfileScreen(): React.JSX.Element {
   const [peakTime, setPeakTime] = useState(profile?.peak_time || 'morning');
   const [defaultDuration, setDefaultDuration] = useState(25);
 
+  // Subcategory and bottom sheet states
+  const subCategorySheetRef = useRef<BottomSheet>(null);
+  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>(profile?.sub_category || []);
+  const [customSubcategoryText, setCustomSubcategoryText] = useState('');
+  const [subCategorySearchQuery, setSubCategorySearchQuery] = useState('');
+
   // Notifications toggles
   const [morningBriefEnabled, setMorningBriefEnabled] = useState(true);
   const [streakAlertsEnabled, setStreakAlertsEnabled] = useState(true);
@@ -193,6 +314,14 @@ export default function ProfileScreen(): React.JSX.Element {
       setDailyHours(profile.daily_hours || 4);
       setCategory(profile.category || 'student');
       setPeakTime(profile.peak_time || 'morning');
+
+      const subCats = profile.sub_category || [];
+      setSelectedSubcategories(subCats);
+
+      // Extract custom subcategory if any
+      const predefined = SUBCATEGORIES[profile.category || 'student'] || [];
+      const custom = subCats.find((s) => !predefined.includes(s));
+      setCustomSubcategoryText(custom || '');
     }
   }, [profile]);
 
@@ -240,10 +369,90 @@ export default function ProfileScreen(): React.JSX.Element {
     updateProfileMutation.mutate({ daily_hours: newHours });
   };
 
+  const handleOpenSubCategoryPicker = () => {
+    setSelectedSubcategories(profile?.sub_category || []);
+    const predefined = SUBCATEGORIES[category] || [];
+    const custom = (profile?.sub_category || []).find((s) => !predefined.includes(s));
+    setCustomSubcategoryText(custom || '');
+    setSubCategorySearchQuery('');
+    subCategorySheetRef.current?.expand();
+  };
+
   const handleCategorySelect = (cat: UserCategory) => {
     setCategory(cat);
-    updateProfileMutation.mutate({ category: cat });
+    setSelectedSubcategories([]);
+    setCustomSubcategoryText('');
+    setSubCategorySearchQuery('');
+    
+    updateProfileMutation.mutate(
+      { category: cat, sub_category: [] },
+      {
+        onSuccess: () => {
+          setTimeout(() => {
+            handleOpenSubCategoryPicker();
+          }, 300);
+        },
+      }
+    );
   };
+
+  const handleToggleSubcategory = (sub: string) => {
+    const isStudent = category === 'student';
+    if (isStudent) {
+      if (selectedSubcategories.includes(sub)) {
+        setSelectedSubcategories(selectedSubcategories.filter((x) => x !== sub));
+      } else {
+        setSelectedSubcategories([...selectedSubcategories, sub]);
+      }
+    } else {
+      if (selectedSubcategories.includes(sub)) {
+        setSelectedSubcategories([]);
+      } else {
+        setSelectedSubcategories([sub]);
+      }
+    }
+  };
+
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+    ),
+    []
+  );
+
+  const handleSaveSubcategories = () => {
+    const hasOther = selectedSubcategories.includes('Other');
+    let finalSubcategories = [...selectedSubcategories];
+
+    if (hasOther && customSubcategoryText.trim()) {
+      const predefined = SUBCATEGORIES[category] || [];
+      finalSubcategories = selectedSubcategories.filter(
+        (s) => predefined.includes(s) || s === 'Other'
+      );
+      finalSubcategories.push(customSubcategoryText.trim());
+    }
+
+    updateProfileMutation.mutate(
+      { sub_category: finalSubcategories },
+      {
+        onSuccess: () => {
+          showToast('Updated ✓', 'success');
+          subCategorySheetRef.current?.close();
+          queryClient.invalidateQueries({ queryKey: ['subjects'] });
+        },
+        onError: () => {
+          showToast('Failed to update sub-category', 'error');
+        },
+      }
+    );
+  };
+
+  const filteredSubCategories = useMemo(() => {
+    const predefined = SUBCATEGORIES[category] || [];
+    const query = subCategorySearchQuery.trim().toLowerCase();
+    if (!query) return predefined;
+    return predefined.filter((sub) => sub.toLowerCase().includes(query));
+  }, [category, subCategorySearchQuery]);
 
   const handlePeakTimeSelect = (pt: 'morning' | 'afternoon' | 'night') => {
     setPeakTime(pt);
@@ -401,7 +610,7 @@ export default function ProfileScreen(): React.JSX.Element {
 
             <TouchableOpacity
               style={styles.categoryPill}
-              onPress={() => Alert.alert('Update Category', 'Updating your category and sub-category is a future feature coming soon!')}
+              onPress={handleOpenSubCategoryPicker}
               activeOpacity={0.7}
             >
               <Text style={styles.categoryPillText}>{getCategoryDisplay()}</Text>
@@ -525,6 +734,36 @@ export default function ProfileScreen(): React.JSX.Element {
               })}
             </ScrollView>
           </View>
+
+          {/* Sub-category / Preparation row */}
+          <TouchableOpacity
+            style={styles.row}
+            onPress={handleOpenSubCategoryPicker}
+            activeOpacity={0.7}
+          >
+            <View style={styles.rowLabelCol}>
+              <Text style={styles.rowTitle}>
+                {category === 'student' ? 'Preparation / Exams' : 'Sub-category'}
+              </Text>
+              <Text style={styles.rowSubtitle}>
+                {category === 'student' 
+                  ? 'Exams or subjects you are preparing for' 
+                  : 'Your specific focus area'}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text 
+                style={[styles.rowVal, { maxWidth: 150 }]} 
+                numberOfLines={1} 
+                ellipsizeMode="tail"
+              >
+                {profile?.sub_category && profile.sub_category.length > 0 
+                  ? profile.sub_category.join(', ') 
+                  : 'None selected'}
+              </Text>
+              <ChevronRight size={16} color="#9B9BAF" />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* NOTIFICATIONS SECTION */}
@@ -665,6 +904,97 @@ export default function ProfileScreen(): React.JSX.Element {
           <Text style={styles.signOutButtonText}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Subcategory Picker Bottom Sheet */}
+      <BottomSheet
+        ref={subCategorySheetRef}
+        index={-1}
+        snapPoints={['75%']}
+        enablePanDownToClose
+        backdropComponent={renderBackdrop}
+        keyboardBehavior="interactive"
+      >
+        <BottomSheetView style={styles.sheetContent}>
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>
+              {category === 'student' ? 'Select Preparations / Exams' : 'Select Sub-category'}
+            </Text>
+            <TouchableOpacity 
+              style={styles.sheetSaveButton} 
+              onPress={handleSaveSubcategories}
+              disabled={updateProfileMutation.isPending}
+            >
+              {updateProfileMutation.isPending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.sheetSaveButtonText}>Save</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Search bar for student */}
+          {category === 'student' && (
+            <View style={styles.sheetSearchContainer}>
+              <TextInput
+                style={styles.sheetSearchInput}
+                placeholder="Search exams/subjects..."
+                placeholderTextColor="#9B9BAF"
+                value={subCategorySearchQuery}
+                onChangeText={setSubCategorySearchQuery}
+                autoCorrect={false}
+              />
+            </View>
+          )}
+
+          <ScrollView 
+            style={styles.sheetScrollView} 
+            contentContainerStyle={styles.sheetScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.sheetPillsContainer}>
+              {filteredSubCategories.map((sub) => {
+                const isSelected = selectedSubcategories.includes(sub);
+                return (
+                  <TouchableOpacity
+                    key={sub}
+                    style={[
+                      styles.sheetPill,
+                      isSelected ? styles.sheetPillSelected : styles.sheetPillUnselected,
+                    ]}
+                    onPress={() => handleToggleSubcategory(sub)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.sheetPillText,
+                        isSelected ? styles.sheetPillTextSelected : styles.sheetPillTextUnselected,
+                      ]}
+                    >
+                      {sub}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Custom Input for Other */}
+            {selectedSubcategories.includes('Other') && (
+              <View style={styles.sheetCustomInputContainer}>
+                <Text style={styles.sheetCustomLabel}>Enter your custom focus area:</Text>
+                <BottomSheetTextInput
+                  style={styles.sheetCustomInput}
+                  placeholder="e.g. CA Foundation, IELTS, Coding..."
+                  placeholderTextColor="#9B9BAF"
+                  value={customSubcategoryText}
+                  onChangeText={setCustomSubcategoryText}
+                  maxLength={50}
+                  autoCorrect={false}
+                />
+              </View>
+            )}
+          </ScrollView>
+        </BottomSheetView>
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -932,5 +1262,114 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#E85858',
+  },
+  sheetContent: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    flex: 1,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  sheetTitle: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 22,
+    color: '#17172A',
+    flex: 1,
+    marginRight: 12,
+  },
+  sheetSaveButton: {
+    backgroundColor: '#5B4FE8',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sheetSaveButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  sheetSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7F6F3',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    paddingHorizontal: 12,
+    marginBottom: 16,
+    height: 44,
+  },
+  sheetSearchInput: {
+    flex: 1,
+    fontFamily: 'DMSans',
+    fontSize: 14,
+    color: '#17172A',
+    padding: 0,
+  },
+  sheetScrollView: {
+    flex: 1,
+  },
+  sheetScrollContent: {
+    paddingBottom: 20,
+  },
+  sheetPillsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  sheetPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  sheetPillUnselected: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E8E7E3',
+  },
+  sheetPillSelected: {
+    backgroundColor: '#EAE8FD',
+    borderColor: '#5B4FE8',
+  },
+  sheetPillText: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+  },
+  sheetPillTextUnselected: {
+    color: '#5C5C70',
+    fontWeight: '400',
+  },
+  sheetPillTextSelected: {
+    color: '#5B4FE8',
+    fontWeight: '600',
+  },
+  sheetCustomInputContainer: {
+    marginTop: 20,
+  },
+  sheetCustomLabel: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#5C5C70',
+    marginBottom: 8,
+  },
+  sheetCustomInput: {
+    fontFamily: 'DMSans',
+    fontSize: 14,
+    color: '#17172A',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    borderRadius: 10,
+    height: 44,
+    paddingHorizontal: 12,
   },
 });

@@ -86,6 +86,7 @@ export default function HabitsManagementScreen() {
         // Trigger background sync refetches
         queryClient.invalidateQueries({ queryKey: ['habits'] });
         queryClient.invalidateQueries({ queryKey: ['todayStats'] });
+        queryClient.invalidateQueries({ queryKey: ['stats'] });
       },
     });
   }, [queryClient]);

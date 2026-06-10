@@ -93,7 +93,7 @@ export function getDefaultSubjectsForProfile(
   }
 
   // CA
-  if (subCatLower.some((s) => s.includes('ca '))) {
+  if (subCatLower.some((s) => s === 'ca' || s.startsWith('ca ') || s.includes(' ca'))) {
     return [
       'Accounts',
       'Law',

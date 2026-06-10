@@ -228,6 +228,7 @@ export function useCreateHabit() {
     onSuccess: () => {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
     },
     onError: (err) => {
       handleSupabaseError(err, 'create_habit');
@@ -284,6 +285,7 @@ export function useUpdateHabit() {
     onSettled: (data) => {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
       if (data) {
         queryClient.invalidateQueries({ queryKey: ['habitStreak', user?.id, data.id] });
         queryClient.invalidateQueries({ queryKey: ['habitHistory', user?.id, data.id] });
@@ -315,6 +317,7 @@ export function useArchiveHabit() {
     onSuccess: () => {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
     },
     onError: (err) => {
       handleSupabaseError(err, 'archive_habit');
@@ -346,6 +349,7 @@ export function useRestoreHabit() {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['habits', user?.id, 'archived'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
     },
     onError: (err) => {
       handleSupabaseError(err, 'restore_habit');
@@ -410,6 +414,7 @@ export function useReorderHabits() {
     onSettled: () => {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
     },
   });
 }

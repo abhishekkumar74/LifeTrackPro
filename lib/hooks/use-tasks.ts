@@ -110,6 +110,7 @@ export function useCompleteTask() {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['tasks', user?.id, milestoneId || 'standalone'] });
       queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
     },
   });
 }
@@ -141,6 +142,7 @@ export function useCreateTask() {
       const cacheKey = ['tasks', user?.id, data.milestone_id || 'standalone'];
       queryClient.invalidateQueries({ queryKey: cacheKey });
       queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
     },
   });
 }
@@ -198,6 +200,7 @@ export function useDeleteTask() {
       const cacheKey = ['tasks', user?.id, variables.milestoneId || 'standalone'];
       queryClient.invalidateQueries({ queryKey: cacheKey });
       queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
     },
   });
 }

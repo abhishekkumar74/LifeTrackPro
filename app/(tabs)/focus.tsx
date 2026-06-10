@@ -9,29 +9,57 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase/client';
 import { useUiStore } from '@/lib/store/ui.store';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Custom Hooks & Stores
 import { useFocusStore, SoundKey, FocusPreset } from '@/lib/store/focus.store';
 import { useAmbientSound } from '@/lib/hooks/use-ambient-sound';
+import { useFocusSessions } from '@/lib/hooks/use-focus-sessions';
+import { getSubjectColor } from '@/lib/utils/subject-colors';
 
 // Custom Components
 import { TimerCircle } from '@/components/focus/TimerCircle';
 import { SoundPicker } from '@/components/focus/SoundPicker';
 import { BlockerToggle } from '@/components/focus/BlockerToggle';
 import { SessionSummary } from '@/components/focus/SessionSummary';
-import { useSubjects } from '@/lib/hooks/use-subjects';
+import { SubjectPicker } from '@/components/shared/SubjectPicker';
 
 export default function FocusScreen(): React.JSX.Element {
-  const { data: subjects = [] } = useSubjects();
+  const queryClient = useQueryClient();
+  const { data: history = [], isLoading: isLoadingHistory, refetch: refetchHistory } = useFocusSessions();
   const [showSummary, setShowSummary] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [tempGoal, setTempGoal] = useState('');
+  
+  // ... rest of the setup
+  const formatDate = (isoString: string) => {
+    const date = new Date(isoString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const formatTimeRange = (startedAt: string, endedAt: string) => {
+    const start = new Date(startedAt);
+    const end = new Date(endedAt);
+    const formatTime = (d: Date) => {
+      let hours = d.getHours();
+      const minutes = d.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+      return `${hours}:${minutes} ${ampm}`;
+    };
+    return `${formatTime(start)} - ${formatTime(end)}`;
+  };
 
   // Store bindings
   const {
@@ -132,6 +160,10 @@ export default function FocusScreen(): React.JSX.Element {
 
       if (error) throw error;
 
+      // Refetch history list
+      refetchHistory();
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+
       // Trigger success haptics
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -149,7 +181,7 @@ export default function FocusScreen(): React.JSX.Element {
         'Could not log session. Please check your network and try again.'
       );
     }
-  }, [elapsedSeconds, selectedPreset, customMinutes, sessionGoal, subjectTag, activeSound, resetSession, ambient]);
+  }, [elapsedSeconds, selectedPreset, customMinutes, sessionGoal, subjectTag, activeSound, resetSession, ambient, refetchHistory, queryClient]);
 
   const handleDiscardSession = useCallback(() => {
     setShowSummary(false);
@@ -188,15 +220,7 @@ export default function FocusScreen(): React.JSX.Element {
     });
   }, [selectedPreset, customMinutes]);
 
-  const cycleSubject = useCallback(async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const options = subjects.length > 0 ? [...subjects, 'General'] : ['Physics', 'Chemistry', 'Biology', 'Math', 'Other'];
-    const currentSubject = subjectTag || 'General';
-    const currentIndex = options.indexOf(currentSubject);
-    const nextIndex = (currentIndex + 1) % options.length;
-    const nextSubject = options[nextIndex];
-    setSubjectTag(nextSubject === 'General' ? null : nextSubject);
-  }, [subjects, subjectTag, setSubjectTag]);
+  // SubjectPicker controls the subject selection directly via bottom sheet
 
   const handleSoundSelect = useCallback(async (key: SoundKey | null) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -240,185 +264,247 @@ export default function FocusScreen(): React.JSX.Element {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {/* Top bar (Section A) */}
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => router.replace('/')}
-            activeOpacity={0.7}
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContainer}
           >
-            <Text style={styles.closeText}>✕</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.modeHeading}>
-            {currentMode === 'focus' ? 'Deep Focus' : 'Break Time'}
-          </Text>
-
-          <View style={styles.badgeContainer}>
-            <Text style={styles.badgeText}>
-              {selectedPreset === 'custom' ? 'CUSTOM' : 'POMODORO'}
-            </Text>
-          </View>
-        </View>
-
-        {/* Session goal (Section B) */}
-        <View style={styles.goalContainer}>
-          <Text style={styles.goalHeaderLabel}>SESSION GOAL</Text>
-          {isEditingGoal ? (
-            <TextInput
-              style={styles.goalInput}
-              value={tempGoal}
-              onChangeText={setTempGoal}
-              placeholder="What are we focusing on?"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              onSubmitEditing={handleSaveGoal}
-              onBlur={handleSaveGoal}
-              autoFocus
-              maxLength={80}
-            />
-          ) : (
-            <TouchableOpacity
-              onPress={() => setIsEditingGoal(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.goalText} numberOfLines={1}>
-                {sessionGoal.trim() || 'Tap to set your session goal...'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Preset Selector (Section C) */}
-        <View style={styles.presetsRow}>
-          {(['25/5', '50/10', '90/20', 'custom'] as FocusPreset[]).map((preset) => {
-            const active = selectedPreset === preset;
-            let displayLabel: string = preset;
-            if (preset === 'custom') displayLabel = 'Custom';
-
-            return (
+            {/* Top bar (Section A) */}
+            <View style={styles.topBar}>
               <TouchableOpacity
-                key={preset}
-                style={[styles.presetChip, active && styles.presetChipActive]}
-                onPress={() => setPreset(preset)}
-                disabled={isRunning}
+                style={styles.closeButton}
+                onPress={() => router.replace('/')}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.presetText, active && styles.presetTextActive]}>
-                  {displayLabel}
+                <Text style={styles.closeText}>✕</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.modeHeading}>
+                {currentMode === 'focus' ? 'Deep Focus' : 'Break Time'}
+              </Text>
+
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>
+                  {selectedPreset === 'custom' ? 'CUSTOM' : 'POMODORO'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Session goal (Section B) */}
+            <View style={styles.goalContainer}>
+              <Text style={styles.goalHeaderLabel}>SESSION GOAL</Text>
+              {isEditingGoal ? (
+                <TextInput
+                  style={styles.goalInput}
+                  value={tempGoal}
+                  onChangeText={setTempGoal}
+                  placeholder="What are we focusing on?"
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  onSubmitEditing={handleSaveGoal}
+                  onBlur={handleSaveGoal}
+                  autoFocus
+                  maxLength={80}
+                />
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setIsEditingGoal(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.goalText} numberOfLines={1}>
+                    {sessionGoal.trim() || 'Tap to set your session goal...'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Preset Selector (Section C) */}
+            <View style={styles.presetsRow}>
+              {(['25/5', '50/10', '90/20', 'custom'] as FocusPreset[]).map((preset) => {
+                const active = selectedPreset === preset;
+                let displayLabel: string = preset;
+                if (preset === 'custom') displayLabel = 'Custom';
+
+                return (
+                  <TouchableOpacity
+                    key={preset}
+                    style={[styles.presetChip, active && styles.presetChipActive]}
+                    onPress={() => setPreset(preset)}
+                    disabled={isRunning}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.presetText, active && styles.presetTextActive]}>
+                      {displayLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Stepper adjustment for Custom Preset */}
+            {selectedPreset === 'custom' && !isRunning && (
+              <View style={styles.stepperContainer}>
+                <TouchableOpacity
+                  onPress={() => setCustomMinutes(Math.max(1, customMinutes - 5))}
+                  style={styles.stepperButton}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.stepperButtonText}>-</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepperValueText}>{customMinutes} min</Text>
+                <TouchableOpacity
+                  onPress={() => setCustomMinutes(customMinutes + 5)}
+                  style={styles.stepperButton}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.stepperButtonText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Timer Ring (Section D) */}
+            <View style={styles.timerWrapper}>
+              <TimerCircle
+                size={190}
+                secondsLeft={secondsLeft}
+                totalSeconds={totalSeconds}
+                isRunning={isRunning}
+                currentMode={currentMode}
+              />
+            </View>
+
+            {/* Controls Row (Section E) */}
+            <View style={styles.controlsRow}>
+              {/* Left Reset Button */}
+              <TouchableOpacity
+                style={styles.controlCircleSmall}
+                onPress={handleReset}
+                activeOpacity={0.8}
+                accessibilityLabel="Reset timer"
+                accessibilityRole="button"
+                accessibilityHint="Resets the focus timer duration"
+              >
+                <Text style={styles.controlIconSmall}>↺</Text>
+              </TouchableOpacity>
+
+              {/* Center Play/Pause Button */}
+              <TouchableOpacity
+                style={styles.controlCircleMain}
+                onPress={handlePlayPause}
+                activeOpacity={0.8}
+                accessibilityLabel={isRunning ? 'Pause timer' : 'Start timer'}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isRunning }}
+                accessibilityHint="Start or pause the focus session"
+              >
+                <Text style={styles.controlIconMain}>
+                  {isRunning ? '⏸' : '▶'}
                 </Text>
               </TouchableOpacity>
-            );
-          })}
-        </View>
 
-        {/* Stepper adjustment for Custom Preset */}
-        {selectedPreset === 'custom' && !isRunning && (
-          <View style={styles.stepperContainer}>
-            <TouchableOpacity
-              onPress={() => setCustomMinutes(Math.max(1, customMinutes - 5))}
-              style={styles.stepperButton}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.stepperButtonText}>-</Text>
-            </TouchableOpacity>
-            <Text style={styles.stepperValueText}>{customMinutes} min</Text>
-            <TouchableOpacity
-              onPress={() => setCustomMinutes(customMinutes + 5)}
-              style={styles.stepperButton}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.stepperButtonText}>+</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+              {/* Right Skip Break OR Subject Selector */}
+              {currentMode !== 'focus' ? (
+                <TouchableOpacity
+                  style={styles.controlCircleSmall}
+                  onPress={handleSkipBreak}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Skip break"
+                  accessibilityRole="button"
+                  accessibilityHint="Skips the current break interval and returns to focus"
+                >
+                  <Text style={styles.controlIconSmall}>⏭</Text>
+                </TouchableOpacity>
+              ) : (
+                <SubjectPicker
+                  selectedSubject={subjectTag}
+                  onSelect={setSubjectTag}
+                  isDark
+                  customTrigger={(open) => (
+                    <TouchableOpacity
+                      style={[styles.subjectPill, styles.controlCircleSmall]}
+                      onPress={async () => {
+                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        open();
+                      }}
+                      activeOpacity={0.8}
+                      accessibilityLabel={`Subject: ${subjectTag || 'General'}`}
+                      accessibilityRole="button"
+                      accessibilityHint="Double tap to open subject picker"
+                    >
+                      <Text style={styles.subjectTextChip} numberOfLines={1}>
+                        {subjectTag || 'General'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+            </View>
 
-        {/* Timer Ring (Section D) - Centered and takes all middle space */}
-        <View style={styles.timerWrapper}>
-          <TimerCircle
-            size={190}
-            secondsLeft={secondsLeft}
-            totalSeconds={totalSeconds}
-            isRunning={isRunning}
-            currentMode={currentMode}
-          />
-        </View>
+            {/* Sound Selector (Section F) - BELOW Controls */}
+            <View style={styles.pickerSection}>
+              <SoundPicker
+                activeSound={activeSound}
+                onSelect={handleSoundSelect}
+                volume={soundVolume}
+                onVolumeChange={handleVolumeChange}
+              />
+            </View>
 
-        {/* Controls Row (Section E) */}
-        <View style={styles.controlsRow}>
-          {/* Left Reset Button */}
-          <TouchableOpacity
-            style={styles.controlCircleSmall}
-            onPress={handleReset}
-            activeOpacity={0.8}
-            accessibilityLabel="Reset timer"
-            accessibilityRole="button"
-            accessibilityHint="Resets the focus timer duration"
-          >
-            <Text style={styles.controlIconSmall}>↺</Text>
-          </TouchableOpacity>
+            {/* App Blocker (Section G) */}
+            <View style={styles.blockerSection}>
+              <BlockerToggle
+                isActive={isBlockerActive}
+                onToggle={handleBlockerToggle}
+                blockedCount={blockedAppsCount}
+              />
+            </View>
 
-          {/* Center Play/Pause Button */}
-          <TouchableOpacity
-            style={styles.controlCircleMain}
-            onPress={handlePlayPause}
-            activeOpacity={0.8}
-            accessibilityLabel={isRunning ? 'Pause timer' : 'Start timer'}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isRunning }}
-            accessibilityHint="Start or pause the focus session"
-          >
-            <Text style={styles.controlIconMain}>
-              {isRunning ? '⏸' : '▶'}
-            </Text>
-          </TouchableOpacity>
+            {/* History Section (Section H) */}
+            <View style={styles.historyContainer}>
+              <Text style={styles.historyHeading}>Focus History</Text>
+              {isLoadingHistory ? (
+                <ActivityIndicator color="#5B4FE8" style={{ marginVertical: 24 }} />
+              ) : history.length === 0 ? (
+                <View style={styles.emptyHistoryCard}>
+                  <Text style={styles.emptyHistoryText}>No focus sessions logged yet.</Text>
+                </View>
+              ) : (
+                history.map((session) => {
+                  const accentColor = getSubjectColor(session.subject);
+                  return (
+                    <View key={session.id} style={styles.historyCard}>
+                      {/* Left Accent Bar */}
+                      <View style={[styles.historyAccentBar, { backgroundColor: accentColor }]} />
+                      
+                      {/* Card Content */}
+                      <View style={styles.historyCardBody}>
+                        <View style={styles.historyCardHeader}>
+                          <Text style={styles.historyCardGoal} numberOfLines={1}>
+                            {session.session_goal}
+                          </Text>
+                          <View style={styles.historyDurationBadge}>
+                            <Text style={styles.historyDurationText}>
+                              {session.duration_min}m
+                            </Text>
+                          </View>
+                        </View>
 
-          {/* Right Skip Break OR Subject Selector */}
-          {currentMode !== 'focus' ? (
-            <TouchableOpacity
-              style={styles.controlCircleSmall}
-              onPress={handleSkipBreak}
-              activeOpacity={0.8}
-              accessibilityLabel="Skip break"
-              accessibilityRole="button"
-              accessibilityHint="Skips the current break interval and returns to focus"
-            >
-              <Text style={styles.controlIconSmall}>⏭</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.subjectPill, styles.controlCircleSmall]}
-              onPress={cycleSubject}
-              activeOpacity={0.8}
-              accessibilityLabel={`Subject: ${subjectTag || 'General'}`}
-              accessibilityRole="button"
-              accessibilityHint="Double tap to cycle focus subjects"
-            >
-              <Text style={styles.subjectTextChip} numberOfLines={1}>
-                {subjectTag || 'General'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Sound Selector (Section F) - BELOW Controls */}
-        <View style={styles.pickerSection}>
-          <SoundPicker
-            activeSound={activeSound}
-            onSelect={handleSoundSelect}
-            volume={soundVolume}
-            onVolumeChange={handleVolumeChange}
-          />
-        </View>
-
-        {/* App Blocker (Section G) - VERY BOTTOM */}
-        <View style={styles.blockerSection}>
-          <BlockerToggle
-            isActive={isBlockerActive}
-            onToggle={handleBlockerToggle}
-            blockedCount={blockedAppsCount}
-          />
-        </View>
+                        <View style={styles.historyCardFooter}>
+                          <View style={styles.historySubjectBadge}>
+                            <Text style={[styles.historySubjectText, { color: accentColor }]}>
+                              {session.subject || 'General'}
+                            </Text>
+                          </View>
+                          <Text style={styles.historyTimeText}>
+                            {formatDate(session.started_at)} • {formatTimeRange(session.started_at, session.ended_at)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
 
@@ -443,7 +529,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     paddingHorizontal: 24,
-    justifyContent: 'space-between',
+  },
+  scrollContainer: {
+    paddingBottom: 40,
   },
   circle1: {
     position: 'absolute',
@@ -580,9 +668,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   timerWrapper: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
   },
   controlsRow: {
     flexDirection: 'row',
@@ -649,5 +737,94 @@ const styles = StyleSheet.create({
   blockerSection: {
     marginTop: 0,
     marginBottom: 16,
+  },
+  historyContainer: {
+    marginTop: 24,
+    width: '100%',
+  },
+  historyHeading: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  historyCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+    flexDirection: 'row',
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  historyAccentBar: {
+    width: 4,
+    height: '100%',
+  },
+  historyCardBody: {
+    flex: 1,
+    padding: 12,
+  },
+  historyCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  historyCardGoal: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    flex: 1,
+    marginRight: 8,
+  },
+  historyDurationBadge: {
+    backgroundColor: 'rgba(91, 79, 232, 0.2)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  historyDurationText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    color: '#A89EF8',
+  },
+  historyCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  historySubjectBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  historySubjectText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  historyTimeText: {
+    fontFamily: 'DMSans',
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.4)',
+  },
+  emptyHistoryCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.04)',
+    borderStyle: 'dashed',
+  },
+  emptyHistoryText: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.3)',
   },
 });

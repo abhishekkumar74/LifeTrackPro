@@ -27,11 +27,11 @@ export const Toast: React.FC = () => {
     }
   }, [toast?.visible, hideToast]);
 
-  if (!toast) return null;
-
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
   }));
+
+  if (!toast) return null;
 
   const getTheme = () => {
     switch (toast.type) {

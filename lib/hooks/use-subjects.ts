@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDefaultSubjectsForProfile } from '@/lib/utils/profile-subjects';
+import { useAuthStore } from '@/lib/store/auth.store';
 import { captureError } from '../sentry';
 
 // Always show these even for new users:
@@ -31,99 +32,73 @@ const CUSTOM_SUBJECTS_KEY = 'custom_subjects';
  * Hook to retrieve unique, sorted, dynamic subjects.
  * Combines:
  * 1. Default subjects list based on user's profile category & subcategory
- * 2. User's syllabus topics
- * 3. User's task subject fields
- * 4. User's focus session subject fields
- * 5. Locally stored custom subjects in AsyncStorage
+ * 2. Locally stored custom subjects in AsyncStorage
  */
 export function useSubjects() {
-  const [userId, setUserId] = useState<string | null>(null);
+  const profile = useAuthStore((state) => state.profile);
+  const userId = profile?.id ?? null;
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null);
-    });
-  }, []);
+  // Compute profile-specific subjects based on active category & subcategories
+  const profileSubjects = useMemo(() => {
+    if (!profile) return DEFAULT_SUBJECTS;
+    return getDefaultSubjectsForProfile(
+      profile.category ?? '',
+      profile.sub_category ?? []
+    );
+  }, [profile]);
 
   return useQuery<string[]>({
-    queryKey: ['subjects', userId],
+    queryKey: ['subjects', userId, profileSubjects.join(',')],
     enabled: !!userId,
     staleTime: 1000 * 60 * 10,
-    initialData: DEFAULT_SUBJECTS,
+    placeholderData: profileSubjects,
     queryFn: async () => {
-      if (!userId) return DEFAULT_SUBJECTS;
-
-      // Get user profile first
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('category, sub_category')
-        .eq('id', userId)
-        .single();
-
-      const profileSubjects = getDefaultSubjectsForProfile(
-        profile?.category ?? '',
-        profile?.sub_category ?? []
-      );
-
-      // Fetch unique subjects across DB tables concurrently
-      const [syllabusRes, tasksRes, focusRes] = await Promise.all([
-        supabase
-          .from('syllabus_topics')
-          .select('subject')
-          .eq('user_id', userId),
-        supabase
-          .from('tasks')
-          .select('subject')
-          .eq('user_id', userId)
-          .not('subject', 'is', null),
-        supabase
-          .from('focus_sessions')
-          .select('subject')
-          .eq('user_id', userId)
-          .not('subject', 'is', null),
-      ]);
-
-      const seen = new Set<string>();
-      const result: string[] = [];
-
-      // Helper to add unique subjects case-insensitively and title-case them
-      const addUniqueSubject = (sub: string | null | undefined) => {
-        if (!sub) return;
-        const trimmed = sub.trim();
-        if (!trimmed) return;
-        const lower = trimmed.toLowerCase();
-        if (!seen.has(lower)) {
-          seen.add(lower);
-          // Format as title-cased
-          const formatted = trimmed
-            .split(/\s+/)
-            .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-            .join(' ');
-          result.push(formatted);
-        }
-      };
-
-      // Add profile-based defaults first
-      profileSubjects.forEach(addUniqueSubject);
-
-      // Add db fetched subjects
-      syllabusRes.data?.forEach((row) => addUniqueSubject(row.subject));
-      tasksRes.data?.forEach((row) => addUniqueSubject(row.subject));
-      focusRes.data?.forEach((row) => addUniqueSubject(row.subject));
-
-      // Add custom offline subjects from AsyncStorage
       try {
-        const storedStr = await AsyncStorage.getItem(CUSTOM_SUBJECTS_KEY);
-        if (storedStr) {
-          const storedList: string[] = JSON.parse(storedStr);
-          storedList.forEach(addUniqueSubject);
-        }
-      } catch (err) {
-        captureError(err, { context: 'parse_custom_subjects' });
-      }
+        if (!userId) return profileSubjects;
 
-      // Return sorted alphabetically
-      return result.sort((a, b) => a.localeCompare(b));
+        const seen = new Set<string>();
+        const result: string[] = [];
+
+        // Helper to add unique subjects case-insensitively and title-case them
+        const addUniqueSubject = (sub: string | null | undefined) => {
+          if (!sub) return;
+          const trimmed = sub.trim();
+          if (!trimmed) return;
+          const lower = trimmed.toLowerCase();
+          if (!seen.has(lower)) {
+            seen.add(lower);
+            // Format as title-cased
+            const formatted = trimmed
+              .split(/\s+/)
+              .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .join(' ');
+            result.push(formatted);
+          }
+        };
+
+        // Add profile-based defaults first
+        profileSubjects.forEach(addUniqueSubject);
+
+        // Add custom offline subjects from AsyncStorage
+        try {
+          const storedStr = await AsyncStorage.getItem(CUSTOM_SUBJECTS_KEY);
+          if (storedStr) {
+            const storedList: string[] = JSON.parse(storedStr);
+            if (Array.isArray(storedList)) {
+              storedList.forEach(addUniqueSubject);
+            }
+          }
+        } catch (err) {
+          captureError(err, { context: 'parse_custom_subjects' });
+        }
+
+        // Return sorted alphabetically
+        return result.sort((a, b) => a.localeCompare(b));
+      } catch (err) {
+        captureError(err, { context: 'useSubjects_queryFn' });
+        console.error('Error in useSubjects queryFn:', err);
+        return profileSubjects;
+      }
     },
   });
 }
