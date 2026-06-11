@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -23,9 +23,10 @@ interface HomeHeaderProps {
   name: string;
   streakCount: number;
   isLoading: boolean;
+  avatarUrl?: string | null;
 }
 
-export const HomeHeader: React.FC<HomeHeaderProps> = ({ name, streakCount, isLoading }) => {
+export const HomeHeader: React.FC<HomeHeaderProps> = ({ name, streakCount, isLoading, avatarUrl }) => {
   // Reanimated shared value for loading skeleton pulse
   const opacity = useSharedValue(0.4);
 
@@ -88,7 +89,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({ name, streakCount, isLoa
   return (
     <View style={styles.container}>
       <View style={styles.leftSide}>
-        {/* Avatar with SVG Linear Gradient */}
+        {/* Avatar with SVG Linear Gradient or Image */}
         <TouchableOpacity
           style={styles.avatarContainer}
           onPress={() => router.push('/profile' as Href)}
@@ -97,16 +98,22 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({ name, streakCount, isLoa
           accessibilityRole="button"
           accessibilityHint="Navigate to profile settings"
         >
-          <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
-            <Defs>
-              <LinearGradient id="avatarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <Stop offset="0%" stopColor="#5B4FE8" />
-                <Stop offset="100%" stopColor="#8B6FE8" />
-              </LinearGradient>
-            </Defs>
-            <Rect width="100%" height="100%" fill="url(#avatarGrad)" rx={20} ry={20} />
-          </Svg>
-          <Text style={styles.avatarText}>{initials}</Text>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <>
+              <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
+                <Defs>
+                  <LinearGradient id="avatarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <Stop offset="0%" stopColor="#5B4FE8" />
+                    <Stop offset="100%" stopColor="#8B6FE8" />
+                  </LinearGradient>
+                </Defs>
+                <Rect width="100%" height="100%" fill="url(#avatarGrad)" rx={20} ry={20} />
+              </Svg>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <View style={styles.textColumn}>
@@ -168,6 +175,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   avatarText: {
     color: '#FFFFFF',

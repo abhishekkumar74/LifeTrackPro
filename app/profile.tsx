@@ -11,6 +11,7 @@ import {
   Share,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -619,9 +620,13 @@ export default function ProfileScreen(): React.JSX.Element {
           </TouchableOpacity>
 
           <View style={styles.headerAvatarContainer}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials}</Text>
-            </View>
+            {profile?.avatar_url ? (
+              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{initials}</Text>
+              </View>
+            )}
             <View style={styles.headerNameRow}>
               <Text style={styles.profileName}>{profile?.name || 'Achiever'}</Text>
             </View>
@@ -1052,6 +1057,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#5B4FE8',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  avatarImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     marginBottom: 12,
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.15)',

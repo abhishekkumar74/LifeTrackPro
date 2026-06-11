@@ -189,6 +189,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
         name={userName}
         streakCount={stats.habitStreak}
         isLoading={stats.isLoading}
+        avatarUrl={profile?.avatar_url}
       />
 
       {/* Scrollable Dashboard zones */}
