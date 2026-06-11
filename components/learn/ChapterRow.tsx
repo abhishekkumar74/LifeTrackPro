@@ -24,6 +24,7 @@ interface ChapterRowProps {
   onLongPressTopic: (topicId: string) => void;
   searchQuery?: string;
   subjectColor?: string;
+  isCse?: boolean;
 }
 
 // Simple escape regex helper
@@ -126,6 +127,7 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
   onLongPressTopic,
   searchQuery = '',
   subjectColor = '#5B4FE8',
+  isCse = false,
 }) => {
   const doneCount = topics.filter((t) => t.status === 'done').length;
   const totalCount = topics.length;
@@ -190,7 +192,11 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
             ) : (
               <ChevronRight size={14} color="#5C5C70" style={styles.chevron} />
             )}
-            <HighlightText text={chapter} query={searchQuery} style={styles.chapterText} />
+            <HighlightText
+              text={isCse ? `${chapter} (${totalCount} topics)` : chapter}
+              query={searchQuery}
+              style={styles.chapterText}
+            />
           </View>
           <Text style={styles.countText}>{`${doneCount} / ${totalCount} topics complete`}</Text>
         </View>

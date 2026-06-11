@@ -5,7 +5,7 @@
 
 // --- ENUMS ---
 
-export type UserCategory = 'student' | 'employee' | 'creator' | 'entrepreneur' | 'educator' | 'aspirant';
+export type UserCategory = 'student' | 'cse_student' | 'employee' | 'creator' | 'entrepreneur' | 'educator' | 'aspirant';
 
 export type GoalStatus = 'active' | 'paused' | 'achieved' | 'abandoned';
 

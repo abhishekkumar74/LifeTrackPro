@@ -110,7 +110,10 @@ export const ScheduleStrip = React.memo<ScheduleStripProps>(({
       <View style={styles.outerContainer}>
         <View style={styles.headerRow}>
           <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
-          <Text style={styles.seeAllText}>{SEE_ALL}</Text>
+          <View style={styles.headerRight}>
+            <Text style={[styles.addBtnText, { opacity: 0.5, marginRight: 12 }]}>+ Add block</Text>
+            <Text style={styles.seeAllText}>{SEE_ALL}</Text>
+          </View>
         </View>
         {[1, 2].map((key) => (
           <View key={key} style={styles.blockItem}>
@@ -130,9 +133,14 @@ export const ScheduleStrip = React.memo<ScheduleStripProps>(({
     <View style={styles.outerContainer}>
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
-        <TouchableOpacity onPress={onSeeAll} activeOpacity={0.6}>
-          <Text style={styles.seeAllText}>{SEE_ALL}</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={onAddSchedule} activeOpacity={0.6} style={styles.addBtn}>
+            <Text style={styles.addBtnText}>+ Add block</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onSeeAll} activeOpacity={0.6}>
+            <Text style={styles.seeAllText}>{SEE_ALL}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {sortedBlocks.length === 0 ? (
@@ -204,6 +212,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   seeAllText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#5B4FE8',
+    fontWeight: '500',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addBtn: {
+    marginRight: 12,
+  },
+  addBtnText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 12,
     color: '#5B4FE8',

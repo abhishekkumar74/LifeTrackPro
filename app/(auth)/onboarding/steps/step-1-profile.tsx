@@ -25,10 +25,12 @@ interface CategoryOption {
   type: UserCategory;
   label: string;
   emoji: string;
+  description?: string;
 }
 
 const CATEGORY_OPTIONS: CategoryOption[] = [
   { type: 'student', label: 'Student', emoji: '🎓' },
+  { type: 'cse_student', label: 'CSE Student', emoji: '🎓', description: 'B.Tech / MCA / BSc CS' },
   { type: 'employee', label: 'Employee', emoji: '💼' },
   { type: 'creator', label: 'Creator', emoji: '🎨' },
   { type: 'entrepreneur', label: 'Entrepreneur', emoji: '🚀' },
@@ -82,10 +84,13 @@ export default function Step1Profile({ state, onChange }: StepProps): React.JSX.
               onPress={() => onChange({ category: item.type })}
               accessibilityRole="radio"
               accessibilityState={{ checked: isSelected }}
-              accessibilityLabel={`I am a ${item.label}`}
+              accessibilityLabel={`I am a ${item.label}${item.description ? `. ${item.description}` : ''}`}
             >
               <Text style={styles.emoji}>{item.emoji}</Text>
               <Text style={styles.tileLabel}>{item.label}</Text>
+              {item.description && (
+                <Text style={styles.tileDesc} numberOfLines={1}>{item.description}</Text>
+              )}
             </Pressable>
           );
         })}
@@ -136,11 +141,12 @@ const styles = StyleSheet.create({
   },
   tile: {
     width: TILE_WIDTH,
-    height: 80,
+    minHeight: 80,
     borderRadius: RADIUS.lg,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
+    paddingVertical: 8,
   },
   tileUnselected: {
     backgroundColor: COLORS.surface,
@@ -161,5 +167,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: COLORS.t1,
+  },
+  tileDesc: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 9,
+    color: COLORS.t3,
+    marginTop: 2,
+    textAlign: 'center',
+    paddingHorizontal: 4,
   },
 });

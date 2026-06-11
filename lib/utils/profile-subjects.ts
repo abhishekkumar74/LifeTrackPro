@@ -4,6 +4,21 @@ export function getDefaultSubjectsForProfile(
 ): string[] {
   const subCatLower = subCategory.map((s) => s.toLowerCase());
 
+  // CSE subjects
+  if (category === 'cse_student') {
+    return [
+      'Data Structures & Algorithms',
+      'Java Programming',
+      'Object Oriented Design (OOD)',
+      'System Design',
+      'Backend Development',
+      'Computer Science Fundamentals',
+      'Interview Preparation',
+      'Web Development',
+      'Cloud & DevOps',
+    ];
+  }
+
   // NEET subjects
   if (subCatLower.some((s) => s.includes('neet'))) {
     return ['Physics', 'Chemistry', 'Biology', 'Botany', 'Zoology'];

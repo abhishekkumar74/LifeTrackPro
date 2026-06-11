@@ -55,6 +55,28 @@ const SUBCATEGORY_OPTIONS = {
     'Other',
   ],
 
+  cse_student: [
+    // Career Goals
+    'Amazon SDE',
+    'Google SWE', 
+    'Microsoft SWE',
+    'Meta/Facebook',
+    'Startup (Product)',
+    'FAANG (General)',
+    // Academic
+    'GATE Exam',
+    'Campus Placement',
+    'Higher Studies (MS/MBA)',
+    // Domain
+    'Backend Development',
+    'Full Stack Development',
+    'DevOps / Cloud',
+    'System Design',
+    'Competitive Programming',
+    'Open Source',
+    'Other',
+  ],
+
   employee: [
     'Corporate / MNC',
     'Government Job',
@@ -138,11 +160,12 @@ export default function Step2Subcategory({ state, onChange }: StepProps): React.
   }, [subcategories]);
 
   const pills = category ? SUBCATEGORY_OPTIONS[category] || [] : [];
-  const isMultiSelect = category === 'student';
+  const isMultiSelect = category === 'student' || category === 'cse_student';
 
   const getHeading = (): string => {
     switch (category) {
       case 'student':
+      case 'cse_student':
         return 'What are you preparing for?';
       case 'employee':
         return "What's your work setup?";
@@ -206,7 +229,7 @@ export default function Step2Subcategory({ state, onChange }: StepProps): React.
       </Text>
 
       {/* Search Input for student long list */}
-      {category === 'student' && (
+      {(category === 'student' || category === 'cse_student') && (
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}

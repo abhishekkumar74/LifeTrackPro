@@ -61,6 +61,7 @@ import {
   GroupedSyllabus,
 } from '@/lib/hooks/use-syllabus';
 import { Note, SyllabusTopic, SyllabusStatus } from '@/types/app.types';
+import { supabase } from '@/lib/supabase/client';
 
 // Custom Components
 import { SubjectCard } from '@/components/learn/SubjectCard';
@@ -74,6 +75,7 @@ import { ErrorState } from '@/components/shared/ErrorState';
 
 // Syllabus Templates
 import { SYLLABUS_TEMPLATES } from '@/lib/utils/syllabus-templates';
+import { CSE_SYLLABUS } from '@/lib/utils/cse-syllabus-templates';
 
 type TabType = 'syllabus' | 'notes' | 'flashcards';
 type FilterType = string;
@@ -97,6 +99,14 @@ export default function LearnScreen(): React.JSX.Element {
   const [failedCardIds, setFailedCardIds] = useState<string[]>([]);
   const [currentSessionDeck, setCurrentSessionDeck] = useState<Note[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
+
+  // CSE Syllabus setup states
+  const [isAddingSyllabus, setIsAddingSyllabus] = useState(false);
+  const [addingGoal, setAddingGoal] = useState('');
+  const [addingProgress, setAddingProgress] = useState(0);
+  const [addingTotal, setAddingTotal] = useState(0);
+  const [showCseManualChecklist, setShowCseManualChecklist] = useState(false);
+  const [selectedCseCategories, setSelectedCseCategories] = useState<string[]>([]);
 
   // Multi-select state for bulk syllabus actions
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
@@ -501,6 +511,293 @@ export default function LearnScreen(): React.JSX.Element {
     );
   }, [setupSyllabusMutation]);
 
+  const handleLoadCseSyllabus = useCallback(async (categoriesToLoad: string[], goalLabel: string) => {
+    if (categoriesToLoad.length === 0) {
+      Alert.alert('No subjects selected', 'Please select at least one subject to load.');
+      return;
+    }
+
+    // Calculate total topics
+    let totalTopicsCount = 0;
+    categoriesToLoad.forEach(cat => {
+      const categoryObj = CSE_SYLLABUS[cat];
+      if (categoryObj && categoryObj.subjects) {
+        Object.values(categoryObj.subjects).forEach(sub => {
+          totalTopicsCount += sub.topics.length;
+        });
+      }
+    });
+
+    Alert.alert(
+      'Set Up CSE Syllabus',
+      `Loading ${totalTopicsCount} topics for ${goalLabel}...`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Load Roadmap',
+          onPress: async () => {
+            setIsAddingSyllabus(true);
+            setAddingGoal(goalLabel);
+            setAddingTotal(totalTopicsCount);
+            setAddingProgress(0);
+
+            // Fetch user session
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+              setIsAddingSyllabus(false);
+              Alert.alert('Authentication Error', 'Not authenticated.');
+              return;
+            }
+
+            // Simulate progress increment
+            const interval = setInterval(() => {
+              setAddingProgress(prev => {
+                if (prev >= totalTopicsCount - 10) {
+                  clearInterval(interval);
+                  return prev;
+                }
+                return prev + Math.max(15, Math.ceil((totalTopicsCount - prev) * 0.15));
+              });
+            }, 80);
+
+            try {
+              // Construct the allTopics array
+              const allTopics: any[] = [];
+              let orderIdx = 0;
+
+              categoriesToLoad.forEach(cat => {
+                const categoryObj = CSE_SYLLABUS[cat];
+                if (categoryObj && categoryObj.subjects) {
+                  Object.keys(categoryObj.subjects).forEach(subName => {
+                    const subjectObj = categoryObj.subjects[subName];
+                    subjectObj.topics.forEach(topicName => {
+                      allTopics.push({
+                        user_id: session.user.id,
+                        subject: cat, // Category maps to subject field in DB
+                        chapter: subName, // Subject maps to chapter field in DB
+                        topic: topicName, // Topic maps to topic field in DB
+                        status: 'not_started',
+                        order_index: orderIdx++
+                      });
+                    });
+                  });
+                }
+              });
+
+              // Perform single Supabase batch insert call
+              const { error } = await supabase
+                .from('syllabus_topics')
+                .insert(allTopics);
+
+              if (error) throw error;
+
+              // Complete progress
+              clearInterval(interval);
+              setAddingProgress(totalTopicsCount);
+
+              // Wait 500ms for visual satisfaction, then refetch
+              setTimeout(() => {
+                setIsAddingSyllabus(false);
+                syllabusQuery.refetch();
+                setShowCseManualChecklist(false);
+                Alert.alert('Success', `Roadmap loaded successfully! Added ${totalTopicsCount} topics.`);
+              }, 500);
+
+            } catch (err) {
+              clearInterval(interval);
+              setIsAddingSyllabus(false);
+              if (__DEV__) {
+                console.error('Failed to load CSE syllabus:', err);
+              }
+              Alert.alert('Error', 'Failed to load CSE syllabus topics. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  }, [syllabusQuery]);
+
+  const getCategoryTopicCount = (categoryName: string): number => {
+    const categoryObj = CSE_SYLLABUS[categoryName];
+    if (!categoryObj || !categoryObj.subjects) return 0;
+    let count = 0;
+    Object.values(categoryObj.subjects).forEach(sub => {
+      count += sub.topics.length;
+    });
+    return count;
+  };
+
+  const handleToggleCseCategory = (cat: string) => {
+    setSelectedCseCategories(prev =>
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    );
+  };
+
+  const renderCseSetupScreen = () => {
+    if (isAddingSyllabus) {
+      const progressPercent = addingTotal > 0 ? Math.round((addingProgress / addingTotal) * 100) : 0;
+      return (
+        <View style={styles.cseProgressOverlay}>
+          <Text style={styles.cseProgressTitle}>Loading CSE Roadmap 📚</Text>
+          <Text style={styles.cseProgressSubtitle}>
+            Loading {addingTotal} topics for {addingGoal}...
+          </Text>
+          <View style={styles.cseProgressBarOuter}>
+            <View style={[styles.cseProgressBarInner, { width: `${progressPercent}%` }]} />
+          </View>
+          <Text style={[styles.cseProgressSubtitle, { marginTop: 12 }]}>
+            Adding topics... ({addingProgress} / {addingTotal})
+          </Text>
+        </View>
+      );
+    }
+
+    if (showCseManualChecklist) {
+      let manualTotalTopics = 0;
+      selectedCseCategories.forEach(cat => {
+        manualTotalTopics += getCategoryTopicCount(cat);
+      });
+
+      return (
+        <View style={styles.cseChecklistContainer}>
+          <Text style={styles.cseChecklistTitle}>Select Subjects Manually</Text>
+          {Object.keys(CSE_SYLLABUS).map((cat) => {
+            const isChecked = selectedCseCategories.includes(cat);
+            const topicCount = getCategoryTopicCount(cat);
+            return (
+              <TouchableOpacity
+                key={cat}
+                style={styles.cseChecklistItem}
+                onPress={() => handleToggleCseCategory(cat)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.cseCheckbox, isChecked && styles.cseCheckboxChecked]}>
+                  {isChecked && <Text style={styles.cseCheckboxCheck}>✓</Text>}
+                </View>
+                <Text style={styles.cseChecklistItemText}>
+                  {cat} ({topicCount} topics)
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+
+          <View style={styles.cseChecklistButtons}>
+            <TouchableOpacity
+              style={styles.cseChecklistBtnBack}
+              onPress={() => setShowCseManualChecklist(false)}
+            >
+              <Text style={styles.cseChecklistBtnBackText}>Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.cseChecklistBtnSubmit,
+                selectedCseCategories.length === 0 && styles.cseChecklistBtnSubmitDisabled,
+              ]}
+              onPress={() => handleLoadCseSyllabus(selectedCseCategories, 'Custom Roadmap')}
+              disabled={selectedCseCategories.length === 0}
+            >
+              <Text style={styles.cseChecklistBtnSubmitText}>
+                Load Selected ({manualTotalTopics} topics)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    const cseRoadmaps = [
+      {
+        key: 'amazon_google',
+        title: 'Crack Amazon/Google',
+        emoji: '🏆',
+        categories: ['Data Structures & Algorithms', 'System Design', 'Object Oriented Design (OOD)', 'Interview Preparation'],
+        displaySubjects: 'DSA • System Design • Java/OOD • Interview Prep',
+        description: 'Best for FAANG / product company placement preparation.',
+        topicCount: 427,
+        subjectCount: 4,
+      },
+      {
+        key: 'backend',
+        title: 'Backend Developer',
+        emoji: '⚙️',
+        categories: ['Data Structures & Algorithms', 'Backend Development', 'Cloud & DevOps'],
+        displaySubjects: 'DSA • Backend Dev • Databases • Cloud & DevOps',
+        description: 'Focuses on databases, server architectures, and DevOps.',
+        topicCount: 313,
+        subjectCount: 3,
+      },
+      {
+        key: 'fullstack',
+        title: 'Full Stack Dev',
+        emoji: '🌐',
+        categories: ['Data Structures & Algorithms', 'Web Development', 'Backend Development'],
+        displaySubjects: 'DSA • Web Dev • Backend Dev • Databases',
+        description: 'Covers frontend, backend, and database structures.',
+        topicCount: 312,
+        subjectCount: 3,
+      },
+      {
+        key: 'all',
+        title: 'All Subjects (Complete)',
+        emoji: '🎓',
+        categories: Object.keys(CSE_SYLLABUS),
+        displaySubjects: 'All 9 CSE Syllabus Categories',
+        description: 'Includes complete computer science subjects & roadmap.',
+        topicCount: 753,
+        subjectCount: 9,
+      }
+    ];
+
+    return (
+      <>
+        <Text style={styles.setupWelcomeTitle}>Set up your CS roadmap 📚</Text>
+        <Text style={styles.setupWelcomeSubtitle}>Choose your goal:</Text>
+
+        <View style={styles.cseRoadmapGrid}>
+          {cseRoadmaps.map((map) => {
+            const daysToComplete = Math.ceil(map.topicCount / 5);
+            return (
+              <TouchableOpacity
+                key={map.key}
+                style={styles.cseCard}
+                onPress={() => handleLoadCseSyllabus(map.categories, map.title)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.cseCardHeader}>
+                  <Text style={{ fontSize: 18 }}>{map.emoji}</Text>
+                  <Text style={styles.cseCardTitle}>{map.title}</Text>
+                </View>
+                <Text style={styles.cseCardSubjects}>{map.displaySubjects}</Text>
+                <Text style={styles.cseCardDesc}>{map.description}</Text>
+                <View style={styles.cseCardStats}>
+                  <Text style={styles.cseStatText}>{map.subjectCount} subjects</Text>
+                  <Text style={styles.cseStatText}>{map.topicCount} topics</Text>
+                  <Text style={styles.cseStatText}>~{daysToComplete} days (@ 5/day)</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          {/* Manual Entry */}
+          <TouchableOpacity
+            style={[styles.templateCard, styles.customSetupCard, { marginTop: 8 }]}
+            onPress={() => {
+              setSelectedCseCategories([]);
+              setShowCseManualChecklist(true);
+            }}
+            activeOpacity={0.85}
+          >
+            <Plus size={20} color="#5B4FE8" style={styles.customSetupIcon} />
+            <Text style={styles.customSetupTitle}>Pick subjects manually</Text>
+            <Text style={styles.customSetupDesc}>
+              Select specific computer science subjects to add to your roadmap.
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </>
+    );
+  };
+
   // Remember active subject from last note
   const lastUsedSubject = useMemo(() => {
     const list = notesQuery.data || [];
@@ -844,6 +1141,9 @@ export default function LearnScreen(): React.JSX.Element {
                   renderSectionHeader={({ section }) => {
                     const isExpandedWithChapters = section.isExpanded && section.data.length > 0;
                     const accentColor = getSubjectColor(section.title);
+                    
+                    // Get CSE icon if applicable
+                    const cseIcon = userCategory === 'cse_student' ? (CSE_SYLLABUS[section.title]?.icon || null) : null;
 
                     return (
                       <View style={[
@@ -856,7 +1156,11 @@ export default function LearnScreen(): React.JSX.Element {
                           activeOpacity={0.7}
                         >
                           <View style={styles.leftRow}>
-                            <View style={[styles.accentDot, { backgroundColor: accentColor }]} />
+                            {cseIcon ? (
+                              <Text style={styles.iconText}>{cseIcon}</Text>
+                            ) : (
+                              <View style={[styles.accentDot, { backgroundColor: accentColor }]} />
+                            )}
                             <View style={styles.textContainer}>
                               <Text style={styles.subjectText}>{section.title}</Text>
                               <Text style={styles.chaptersCountText}>
@@ -907,6 +1211,7 @@ export default function LearnScreen(): React.JSX.Element {
                           onLongPressTopic={handleLongPressTopic}
                           searchQuery={searchQuery}
                           subjectColor={getSubjectColor(section.title)}
+                          isCse={userCategory === 'cse_student'}
                         />
                       </View>
                     );
@@ -923,7 +1228,9 @@ export default function LearnScreen(): React.JSX.Element {
               ) : (
                 /* Syllabus Setup Welcome Screen Flow (Syllabus empty) */
                 <ScrollView contentContainerStyle={styles.setupWelcomeContainer}>
-                  {userCategory === 'student' ? (
+                  {userCategory === 'cse_student' ? (
+                    renderCseSetupScreen()
+                  ) : userCategory === 'student' ? (
                     <>
                       <Text style={styles.setupWelcomeTitle}>Set up your syllabus 📚</Text>
                       <Text style={styles.setupWelcomeSubtitle}>
@@ -2530,5 +2837,192 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+  },
+  iconText: {
+    fontSize: 16,
+    marginRight: 12,
+  },
+  // CSE welcome styles
+  cseRoadmapGrid: {
+    gap: 12,
+    marginTop: 16,
+    width: '100%',
+  },
+  cseCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    padding: 16,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cseCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  cseCardTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#17172A',
+  },
+  cseCardSubjects: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#5B4FE8',
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  cseCardDesc: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#5C5C70',
+    lineHeight: 16,
+  },
+  cseCardStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F2F1EE',
+    paddingTop: 8,
+  },
+  cseStatText: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9B9BAF',
+  },
+  cseProgressOverlay: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 32,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  cseProgressTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#17172A',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  cseProgressSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#5C5C70',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  cseProgressBarOuter: {
+    height: 6,
+    backgroundColor: '#E8E7E3',
+    borderRadius: 3,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  cseProgressBarInner: {
+    height: '100%',
+    backgroundColor: '#5B4FE8',
+    borderRadius: 3,
+  },
+  cseChecklistContainer: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    padding: 16,
+    marginTop: 16,
+  },
+  cseChecklistTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#17172A',
+    marginBottom: 12,
+  },
+  cseChecklistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F1EE',
+  },
+  cseChecklistItemText: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#17172A',
+    marginLeft: 12,
+    flex: 1,
+  },
+  cseCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#9B9BAF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cseCheckboxChecked: {
+    backgroundColor: '#5B4FE8',
+    borderColor: '#5B4FE8',
+  },
+  cseCheckboxCheck: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  cseChecklistButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  cseChecklistBtnBack: {
+    flex: 1,
+    backgroundColor: '#F7F6F3',
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  cseChecklistBtnBackText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#5C5C70',
+    fontWeight: '600',
+  },
+  cseChecklistBtnSubmit: {
+    flex: 2,
+    backgroundColor: '#5B4FE8',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  cseChecklistBtnSubmitDisabled: {
+    backgroundColor: '#9B9BAF',
+  },
+  cseChecklistBtnSubmitText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });

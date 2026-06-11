@@ -31,9 +31,20 @@ const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS; // ~113.1
 interface GoalBarProps {
   goal: (Goal & { totalTasks: number; doneTasks: number }) | null;
   isLoading: boolean;
+  isCse?: boolean;
+  subCategory?: string;
+  totalTopics?: number;
+  completedTopics?: number;
 }
 
-export const GoalBar = React.memo<GoalBarProps>(({ goal, isLoading }) => {
+export const GoalBar = React.memo<GoalBarProps>(({
+  goal,
+  isLoading,
+  isCse,
+  subCategory,
+  totalTopics,
+  completedTopics,
+}) => {
   const router = useRouter();
   const opacity = useSharedValue(0.4);
 
@@ -79,7 +90,9 @@ export const GoalBar = React.memo<GoalBarProps>(({ goal, isLoading }) => {
     );
   }
 
-  const progress = goal.totalTasks > 0 ? goal.doneTasks / goal.totalTasks : 0;
+  const progress = isCse
+    ? (totalTopics && totalTopics > 0 ? (completedTopics || 0) / totalTopics : 0)
+    : (goal.totalTasks > 0 ? goal.doneTasks / goal.totalTasks : 0);
   const progressPercent = Math.round(progress * 100);
   const strokeOffset = CIRCUMFERENCE * (1 - progress);
 
@@ -94,23 +107,42 @@ export const GoalBar = React.memo<GoalBarProps>(({ goal, isLoading }) => {
   const timeDiff = deadline.getTime() - today.getTime();
   const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
 
+  // Extract / Clean goal name (e.g. "Amazon SDE" -> "Amazon")
+  const cleanGoalName = (subCategory || '')
+    .replace(/\s*(?:SDE|SWE|Developer|Development|Dev|Exam|Placement|Studies.*|\(.*\))/i, '')
+    .trim() || 'Goal';
+
   let daysLeftText = '';
   let daysTextColor = '#9B9BAF';
-  if (daysDiff > 0) {
-    daysLeftText = `${daysDiff} days left`;
-  } else if (daysDiff === 0) {
-    daysLeftText = `Due today`;
+  if (isCse) {
+    if (daysDiff > 0) {
+      daysLeftText = `${cleanGoalName}-ready in ${daysDiff} days`;
+    } else if (daysDiff === 0) {
+      daysLeftText = `${cleanGoalName}-ready today`;
+    } else {
+      daysLeftText = `${cleanGoalName}-ready overdue`;
+      daysTextColor = '#E85858';
+    }
   } else {
-    daysLeftText = `Overdue`;
-    daysTextColor = '#E85858'; // coral
+    if (daysDiff > 0) {
+      daysLeftText = `${daysDiff} days left`;
+    } else if (daysDiff === 0) {
+      daysLeftText = `Due today`;
+    } else {
+      daysLeftText = `Overdue`;
+      daysTextColor = '#E85858'; // coral
+    }
   }
+
+  // Calculate daily target pacing recomendation
+  const dailyTarget = isCse && daysDiff > 0 ? Math.ceil((totalTopics || 0) / daysDiff) : 0;
 
   // Track status
   const status = calculateOnTrackStatus(
     goal.created_at || new Date().toISOString(),
     goal.deadline,
-    goal.doneTasks,
-    goal.totalTasks
+    isCse ? (completedTopics || 0) : goal.doneTasks,
+    isCse ? (totalTopics || 0) : goal.totalTasks
   );
 
   const getStatusStyles = (statusType: 'on_track' | 'at_risk' | 'behind') => {
@@ -126,6 +158,8 @@ export const GoalBar = React.memo<GoalBarProps>(({ goal, isLoading }) => {
   };
 
   const statusTheme = getStatusStyles(status);
+
+  const showStatusBadge = isCse ? (totalTopics || 0) > 0 : goal.totalTasks > 0;
 
   return (
     <TouchableOpacity style={styles.container} onPress={handlePress} activeOpacity={0.7}>
@@ -174,7 +208,14 @@ export const GoalBar = React.memo<GoalBarProps>(({ goal, isLoading }) => {
         <Text style={styles.goalName} numberOfLines={1}>
           {goal.title}
         </Text>
-        {goal.totalTasks === 0 ? (
+        {isCse ? (
+          <View>
+            <Text style={[styles.daysText, { color: daysTextColor }]}>{daysLeftText}</Text>
+            {dailyTarget > 0 && (
+              <Text style={styles.pacingText}>{`Do ${dailyTarget} topics/day`}</Text>
+            )}
+          </View>
+        ) : goal.totalTasks === 0 ? (
           <Text style={styles.noTasksText}>{NO_TASKS_SUBTEXT}</Text>
         ) : (
           <Text style={[styles.daysText, { color: daysTextColor }]}>{daysLeftText}</Text>
@@ -182,7 +223,7 @@ export const GoalBar = React.memo<GoalBarProps>(({ goal, isLoading }) => {
       </View>
 
       {/* Status Badge */}
-      {goal.totalTasks > 0 && (
+      {showStatusBadge && (
         <View style={[styles.statusBadge, { backgroundColor: statusTheme.bg }]}>
           <Text style={[styles.statusBadgeText, { color: statusTheme.text }]}>
             {STATUS_LABELS[status]}
@@ -252,6 +293,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
     paddingVertical: 4,
+  },
+  pacingText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#5B4FE8',
+    marginTop: 2,
+    fontWeight: '600',
   },
   // Skeleton Layouts
   skeletonRing: {

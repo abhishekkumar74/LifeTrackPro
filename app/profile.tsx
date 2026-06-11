@@ -49,11 +49,29 @@ import BottomSheet, {
   BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-const CATEGORIES: UserCategory[] = ['student', 'employee', 'creator', 'entrepreneur', 'educator', 'aspirant'];
+const CATEGORIES: UserCategory[] = ['student', 'cse_student', 'employee', 'creator', 'entrepreneur', 'educator', 'aspirant'];
 const PEAK_TIMES: ('morning' | 'afternoon' | 'night')[] = ['morning', 'afternoon', 'night'];
 const DURATIONS = [25, 50, 90];
 
 const SUBCATEGORIES: Record<UserCategory, string[]> = {
+  cse_student: [
+    'Amazon SDE',
+    'Google SWE',
+    'Microsoft SWE',
+    'Meta/Facebook',
+    'Startup (Product)',
+    'FAANG (General)',
+    'GATE Exam',
+    'Campus Placement',
+    'Higher Studies (MS/MBA)',
+    'Backend Development',
+    'Full Stack Development',
+    'DevOps / Cloud',
+    'System Design',
+    'Competitive Programming',
+    'Open Source',
+    'Other',
+  ],
   student: [
     'NEET',
     'JEE Main',
@@ -397,8 +415,8 @@ export default function ProfileScreen(): React.JSX.Element {
   };
 
   const handleToggleSubcategory = (sub: string) => {
-    const isStudent = category === 'student';
-    if (isStudent) {
+    const isMultiSelect = category === 'student' || category === 'cse_student';
+    if (isMultiSelect) {
       if (selectedSubcategories.includes(sub)) {
         setSelectedSubcategories(selectedSubcategories.filter((x) => x !== sub));
       } else {
@@ -743,10 +761,10 @@ export default function ProfileScreen(): React.JSX.Element {
           >
             <View style={styles.rowLabelCol}>
               <Text style={styles.rowTitle}>
-                {category === 'student' ? 'Preparation / Exams' : 'Sub-category'}
+                {(category === 'student' || category === 'cse_student') ? 'Preparation / Exams' : 'Sub-category'}
               </Text>
               <Text style={styles.rowSubtitle}>
-                {category === 'student' 
+                {(category === 'student' || category === 'cse_student') 
                   ? 'Exams or subjects you are preparing for' 
                   : 'Your specific focus area'}
               </Text>
@@ -917,7 +935,7 @@ export default function ProfileScreen(): React.JSX.Element {
         <BottomSheetView style={styles.sheetContent}>
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>
-              {category === 'student' ? 'Select Preparations / Exams' : 'Select Sub-category'}
+              {(category === 'student' || category === 'cse_student') ? 'Select Preparations / Exams' : 'Select Sub-category'}
             </Text>
             <TouchableOpacity 
               style={styles.sheetSaveButton} 
@@ -933,7 +951,7 @@ export default function ProfileScreen(): React.JSX.Element {
           </View>
 
           {/* Search bar for student */}
-          {category === 'student' && (
+          {(category === 'student' || category === 'cse_student') && (
             <View style={styles.sheetSearchContainer}>
               <TextInput
                 style={styles.sheetSearchInput}

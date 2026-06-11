@@ -20,6 +20,7 @@ export interface TodayStats {
   error: string | null;
   refetch: () => void;
   updateHabitCompletedToday: (habitId: string, completed: boolean) => void;
+  todayTasks: Task[];
 }
 
 export function useTodayStats(): TodayStats {
@@ -34,6 +35,7 @@ export function useTodayStats(): TodayStats {
     habits: (Habit & { completedToday: boolean })[];
     nextBlocks: ScheduleBlock[];
     primaryGoal: (Goal & { totalTasks: number; doneTasks: number }) | null;
+    todayTasks: Task[];
   }>({
     topTask: null,
     focusMinutesToday: 0,
@@ -43,6 +45,7 @@ export function useTodayStats(): TodayStats {
     habits: [],
     nextBlocks: [],
     primaryGoal: null,
+    todayTasks: [],
   });
 
   const fetchStats = useCallback(async () => {
@@ -91,10 +94,10 @@ export function useTodayStats(): TodayStats {
           .gte('started_at', startOfDay.toISOString())
           .lte('started_at', endOfDay.toISOString()),
 
-        // 3. Today's task count (due_date = today)
+        // 3. Today's task list (due_date = today)
         supabase
           .from('tasks')
-          .select('completed_at')
+          .select('*')
           .eq('due_date', todayStr),
 
         // 4. All completed habit logs (for streak)
@@ -179,7 +182,7 @@ export function useTodayStats(): TodayStats {
       );
 
       // 3. Tasks count today
-      const todayTasks = todayTasksRes.data || [];
+      const todayTasks = (todayTasksRes.data || []) as Task[];
       const tasksTotal = todayTasks.length;
       const tasksDone = todayTasks.filter(t => t.completed_at !== null).length;
 
@@ -232,26 +235,21 @@ export function useTodayStats(): TodayStats {
         };
       });
 
-      // 6. Schedule blocks parsing
+      // 6. Schedule blocks parsing (get all schedule blocks of the day)
       const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
-      const currentHour = today.getHours();
-      const currentMinute = today.getMinutes();
-      const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(
-        currentMinute
-      ).padStart(2, '0')}:00`;
 
       const nextBlocks = (scheduleBlocksRes.data || [])
         .filter(block => {
           if (block.specific_date) {
-            return block.specific_date === todayStr && block.start_time > currentTimeStr;
+            return block.specific_date === todayStr;
           }
           if (block.days && block.days.includes(currentDay)) {
-            return block.start_time > currentTimeStr;
+            return true;
           }
           return false;
         })
         .sort((a, b) => a.start_time.localeCompare(b.start_time))
-        .slice(0, 2) as ScheduleBlock[];
+        .slice(0, 10) as ScheduleBlock[];
 
       // 7. Primary goal with tasks count
       let primaryGoal: (Goal & { totalTasks: number; doneTasks: number }) | null = null;
@@ -300,6 +298,7 @@ export function useTodayStats(): TodayStats {
         habits,
         nextBlocks,
         primaryGoal,
+        todayTasks,
       });
     } catch (err) {
       handleSupabaseError(err, 'fetch_today_stats');

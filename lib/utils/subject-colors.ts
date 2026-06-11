@@ -15,6 +15,28 @@ const COLOR_MAP: Record<string, string> = {
   'computer science': '#6366F1',
   'general studies': '#10B981',
   'reasoning': '#EC4899',
+
+  // CSE Subjects
+  'data structures & algorithms': '#5B4FE8',
+  'dsa': '#5B4FE8',
+  'java programming': '#E85858',
+  'java': '#E85858',
+  'object oriented design': '#00B894',
+  'ood': '#00B894',
+  'oops': '#00B894',
+  'system design': '#E8A020',
+  'backend development': '#6C5CE7',
+  'backend': '#6C5CE7',
+  'computer science fundamentals': '#0984E3',
+  'cs fundamentals': '#0984E3',
+  'operating systems': '#0984E3',
+  'computer networks': '#0984E3',
+  'interview preparation': '#00B894',
+  'web development': '#E17055',
+  'react': '#E17055',
+  'cloud & devops': '#74B9FF',
+  'aws': '#74B9FF',
+  'docker': '#74B9FF',
 };
 
 const DEFAULT_COLOR = '#9B9BAF';
@@ -41,9 +63,22 @@ export function getSubjectColor(subject: string | null | undefined): string {
   if (normalized.includes('history')) return COLOR_MAP.history;
   if (normalized.includes('geogr')) return COLOR_MAP.geography;
   if (normalized.includes('econ')) return COLOR_MAP.economics;
-  if (normalized.includes('comp')) return COLOR_MAP['computer science'];
+  if (normalized.includes('comp') && !normalized.includes('networks') && !normalized.includes('fundamentals')) return COLOR_MAP['computer science'];
   if (normalized.includes('general')) return COLOR_MAP['general studies'];
   if (normalized.includes('reason')) return COLOR_MAP.reasoning;
+
+  // CSE partial matches
+  if (normalized.includes('data structures') || normalized.includes('dsa')) return COLOR_MAP.dsa;
+  if (normalized.includes('java')) return COLOR_MAP.java;
+  if (normalized.includes('object oriented') || normalized.includes('ood') || normalized.includes('oops')) return COLOR_MAP.ood;
+  if (normalized.includes('system design')) return COLOR_MAP['system design'];
+  if (normalized.includes('backend')) return COLOR_MAP.backend;
+  if (normalized.includes('operating system')) return COLOR_MAP['operating systems'];
+  if (normalized.includes('network')) return COLOR_MAP['computer networks'];
+  if (normalized.includes('fundamentals') || normalized.includes('cs fund')) return COLOR_MAP['computer science fundamentals'];
+  if (normalized.includes('interview')) return COLOR_MAP['interview preparation'];
+  if (normalized.includes('web dev') || normalized.includes('react')) return COLOR_MAP['web development'];
+  if (normalized.includes('cloud') || normalized.includes('devops') || normalized.includes('aws') || normalized.includes('docker')) return COLOR_MAP['cloud & devops'];
   
   return DEFAULT_COLOR;
 }

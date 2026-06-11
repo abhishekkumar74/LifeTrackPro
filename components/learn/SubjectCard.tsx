@@ -24,6 +24,7 @@ interface SubjectCardProps {
   isExpanded: boolean;
   onToggle: () => void;
   children?: React.ReactNode;
+  icon?: string;
 }
 
 export const SubjectCard: React.FC<SubjectCardProps> = ({
@@ -33,6 +34,7 @@ export const SubjectCard: React.FC<SubjectCardProps> = ({
   isExpanded,
   onToggle,
   children,
+  icon,
 }) => {
   const accentColor = getSubjectColor(subject);
 
@@ -51,8 +53,12 @@ export const SubjectCard: React.FC<SubjectCardProps> = ({
         activeOpacity={0.7}
       >
         <View style={styles.leftRow}>
-          {/* Left subject accent dot */}
-          <View style={[styles.accentDot, { backgroundColor: accentColor }]} />
+          {icon ? (
+            <Text style={styles.iconText}>{icon}</Text>
+          ) : (
+            /* Left subject accent dot */
+            <View style={[styles.accentDot, { backgroundColor: accentColor }]} />
+          )}
           
           <View style={styles.textContainer}>
             <Text style={styles.subjectText}>{subject}</Text>
@@ -116,6 +122,10 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
+    marginRight: 12,
+  },
+  iconText: {
+    fontSize: 16,
     marginRight: 12,
   },
   textContainer: {

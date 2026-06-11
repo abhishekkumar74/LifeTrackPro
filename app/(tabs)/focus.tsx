@@ -13,8 +13,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import BottomSheet, {
+  BottomSheetView,
+  BottomSheetBackdrop,
+  BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
+import { useAuthStore } from '@/lib/store/auth.store';
 import { supabase } from '@/lib/supabase/client';
 import { useUiStore } from '@/lib/store/ui.store';
 import { useQueryClient } from '@tanstack/react-query';
@@ -38,6 +44,14 @@ export default function FocusScreen(): React.JSX.Element {
   const [showSummary, setShowSummary] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [tempGoal, setTempGoal] = useState('');
+
+  const params = useLocalSearchParams<{ suggestedSubject?: string; suggestedGoal?: string }>();
+  const { profile } = useAuthStore();
+  const isCse = profile?.category === 'cse_student';
+
+  const topicSheetRef = useRef<BottomSheet>(null);
+  const [cseIncompleteTopics, setCseIncompleteTopics] = useState<any[]>([]);
+  const [topicSelectionActive, setTopicSelectionActive] = useState(false);
   
   // ... rest of the setup
   const formatDate = (isoString: string) => {
@@ -105,6 +119,16 @@ export default function FocusScreen(): React.JSX.Element {
     setTempGoal(sessionGoal);
   }, [sessionGoal]);
 
+  // Sync parameters from dashboard
+  useEffect(() => {
+    if (params.suggestedSubject) {
+      setSubjectTag(params.suggestedSubject);
+    }
+    if (params.suggestedGoal) {
+      setSessionGoal(params.suggestedGoal);
+    }
+  }, [params.suggestedSubject, params.suggestedGoal, setSubjectTag, setSessionGoal]);
+
   // Timer loop interval
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -132,6 +156,41 @@ export default function FocusScreen(): React.JSX.Element {
     }
     prevModeRef.current = currentMode;
   }, [currentMode]);
+
+  const handleSelectCseTopic = async (topicId: string) => {
+    try {
+      const { error } = await supabase
+        .from('syllabus_topics')
+        .update({ status: 'done' })
+        .eq('id', topicId);
+
+      if (error) throw error;
+
+      useUiStore.getState().showToast('Topic marked as completed!', 'success');
+      queryClient.invalidateQueries({ queryKey: ['syllabus'] });
+    } catch (err) {
+      if (__DEV__) {
+        console.error('Failed to update topic status:', err);
+      }
+    } finally {
+      topicSheetRef.current?.close();
+      setTopicSelectionActive(false);
+      resetSession();
+    }
+  };
+
+  const handleSkipTopicSelection = () => {
+    topicSheetRef.current?.close();
+    setTopicSelectionActive(false);
+    resetSession();
+  };
+
+  const renderTopicBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+    ),
+    []
+  );
 
   // Save focus session results directly to Supabase
   const handleSaveSession = useCallback(async (mood: number, _note: string) => {
@@ -170,8 +229,31 @@ export default function FocusScreen(): React.JSX.Element {
       useUiStore.getState().showToast('Session saved!', 'success');
 
       setShowSummary(false);
-      resetSession();
       await ambient.stop();
+
+      // Check if we should prompt for CSE syllabus topics
+      if (isCse && subjectTag) {
+        const { data: topics, error: topicsErr } = await supabase
+          .from('syllabus_topics')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .eq('subject', subjectTag)
+          .not('status', 'eq', 'done')
+          .order('order_index', { ascending: true })
+          .limit(10);
+
+        if (!topicsErr && topics && topics.length > 0) {
+          setCseIncompleteTopics(topics);
+          setTopicSelectionActive(true);
+          // Expand the bottom sheet after state update
+          setTimeout(() => {
+            topicSheetRef.current?.expand();
+          }, 100);
+          return;
+        }
+      }
+
+      resetSession();
     } catch (err) {
       if (__DEV__) {
         console.error('Failed to save focus session:', err);
@@ -181,7 +263,7 @@ export default function FocusScreen(): React.JSX.Element {
         'Could not log session. Please check your network and try again.'
       );
     }
-  }, [elapsedSeconds, selectedPreset, customMinutes, sessionGoal, subjectTag, activeSound, resetSession, ambient, refetchHistory, queryClient]);
+  }, [elapsedSeconds, selectedPreset, customMinutes, sessionGoal, subjectTag, activeSound, resetSession, ambient, refetchHistory, queryClient, isCse]);
 
   const handleDiscardSession = useCallback(() => {
     setShowSummary(false);
@@ -517,6 +599,50 @@ export default function FocusScreen(): React.JSX.Element {
         onSave={handleSaveSession}
         onDiscard={handleDiscardSession}
       />
+
+      {/* CSE Topic Selection Bottom Sheet */}
+      {topicSelectionActive && (
+        <BottomSheet
+          ref={topicSheetRef}
+          index={0}
+          snapPoints={['50%']}
+          enablePanDownToClose={false}
+          backdropComponent={renderTopicBackdrop}
+          backgroundStyle={styles.bottomSheetBackground}
+          handleIndicatorStyle={styles.bottomSheetIndicator}
+        >
+          <BottomSheetView style={styles.topicSheetContent}>
+            <Text style={styles.topicSheetTitle}>Which topic did you cover? 🎓</Text>
+            <Text style={styles.topicSheetSubtitle}>
+              Select a syllabus topic from <Text style={{fontWeight: 'bold', color: '#5B4FE8'}}>{subjectTag}</Text> to mark it as done:
+            </Text>
+            <ScrollView
+              contentContainerStyle={styles.topicChipsScroll}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {cseIncompleteTopics.map((topic) => (
+                <TouchableOpacity
+                  key={topic.id}
+                  style={styles.topicSelectChip}
+                  onPress={() => handleSelectCseTopic(topic.id)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.topicSelectChipText}>{topic.topic}</Text>
+                  <Text style={styles.topicSelectChipChapter}>{topic.chapter}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.topicSkipButton}
+              onPress={handleSkipTopicSelection}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.topicSkipButtonText}>None / Skip</Text>
+            </TouchableOpacity>
+          </BottomSheetView>
+        </BottomSheet>
+      )}
     </View>
   );
 }
@@ -826,5 +952,72 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans',
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.3)',
+  },
+  bottomSheetBackground: {
+    backgroundColor: '#FFFFFF',
+  },
+  bottomSheetIndicator: {
+    backgroundColor: '#9B9BAF',
+  },
+  topicSheetContent: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    flex: 1,
+  },
+  topicSheetTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 18,
+    color: '#17172A',
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  topicSheetSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#5C5C70',
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  topicChipsScroll: {
+    gap: 8,
+    paddingBottom: 16,
+  },
+  topicSelectChip: {
+    backgroundColor: '#F7F6F3',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'column',
+    gap: 2,
+  },
+  topicSelectChipText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 14,
+    color: '#17172A',
+    fontWeight: '600',
+  },
+  topicSelectChipChapter: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9B9BAF',
+  },
+  topicSkipButton: {
+    marginTop: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#F7F6F3',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+  },
+  topicSkipButtonText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#5C5C70',
+    fontWeight: '600',
   },
 });

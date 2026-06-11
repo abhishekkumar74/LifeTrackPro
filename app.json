@@ -15,6 +15,8 @@
       "infoPlist": {
         "UIBackgroundModes": [
           "audio",
+          "fetch",
+          "audio",
           "fetch"
         ],
         "NSMicrophoneUsageDescription": "LifeTrack Pro does not use the microphone.",
@@ -25,6 +27,13 @@
       "package": "com.lifetrackpro.app",
       "versionCode": 3,
       "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.POST_NOTIFICATIONS",
         "android.permission.INTERNET",
         "android.permission.VIBRATE",
         "android.permission.WAKE_LOCK",
@@ -71,7 +80,8 @@
         {
           "android": {
             "enableProguardInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enableMinifyInReleaseBuilds": true
           }
         }
       ]
@@ -85,6 +95,12 @@
         "projectId": "f9f5a5fa-ec1b-4533-90bd-066c6913f67e"
       }
     },
-    "owner": "abhishek74"
+    "owner": "abhishek74",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f9f5a5fa-ec1b-4533-90bd-066c6913f67e"
+    }
   }
 }

@@ -24,6 +24,9 @@ interface TodayFocusCardProps {
   onStartFocus: () => void;
   onAddTask?: () => void;
   onPressCard?: () => void;
+  isCse?: boolean;
+  userGoal?: string;
+  firstIncompleteTopic?: { subject: string; topic: string } | null;
 }
 
 export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
@@ -32,6 +35,9 @@ export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
   onStartFocus,
   onAddTask,
   onPressCard,
+  isCse,
+  userGoal,
+  firstIncompleteTopic,
 }) => {
   const opacity = useSharedValue(0.4);
 
@@ -68,9 +74,48 @@ export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
     );
   }
 
-  const subjectTheme = task && task.subject
-    ? { text: getSubjectColor(task.subject), bg: getSubjectBgColor(getSubjectColor(task.subject)) }
+  const isInterviewPrep = !userGoal || 
+    userGoal.includes('Amazon') || 
+    userGoal.includes('Google') || 
+    userGoal.includes('Microsoft') || 
+    userGoal.includes('Meta') || 
+    userGoal.includes('FAANG') || 
+    userGoal.includes('SDE') || 
+    userGoal.includes('SWE') || 
+    userGoal.includes('Placement') ||
+    userGoal.includes('GATE');
+
+  const cardLabel = isCse 
+    ? (isInterviewPrep ? "INTERVIEW PREP" : "TODAY'S CODING")
+    : LABEL_TODAYS_FOCUS;
+
+  // Determine display title and subject
+  let displayTitle = '';
+  let displaySubject = '';
+
+  if (task) {
+    displayTitle = task.title;
+    displaySubject = task.subject || '';
+  } else if (isCse) {
+    if (isInterviewPrep) {
+      displayTitle = "2hr DSA practice";
+      displaySubject = "Data Structures & Algorithms";
+    } else {
+      displayTitle = firstIncompleteTopic 
+        ? `Practice: ${firstIncompleteTopic.topic}` 
+        : "2hr Backend practice";
+      displaySubject = firstIncompleteTopic 
+        ? firstIncompleteTopic.subject 
+        : "Backend Development";
+    }
+  }
+
+  const subjectTheme = displaySubject
+    ? { text: getSubjectColor(displaySubject), bg: getSubjectBgColor(getSubjectColor(displaySubject)) }
     : { text: '#5C5C70', bg: '#F5F5F7' };
+
+  const showTaskContent = !!task || isCse;
+  const showStartButton = !!task || isCse;
 
   return (
     <View style={styles.container}>
@@ -80,22 +125,22 @@ export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
       {/* Content Touch Target */}
       <TouchableOpacity
         style={styles.contentArea}
-        onPress={task ? onPressCard : onAddTask}
+        onPress={task ? onPressCard : (isCse ? onStartFocus : onAddTask)}
         activeOpacity={0.7}
       >
-        <Text style={styles.topLabel}>{LABEL_TODAYS_FOCUS}</Text>
-        {task ? (
+        <Text style={styles.topLabel}>{cardLabel}</Text>
+        {showTaskContent ? (
           <>
             <Text style={styles.taskTitle} numberOfLines={2} ellipsizeMode="tail">
-              {task.title}
+              {displayTitle}
             </Text>
-            {task.subject && (
+            {displaySubject ? (
               <View style={[styles.subjectChip, { backgroundColor: subjectTheme.bg }]}>
                 <Text style={[styles.subjectText, { color: subjectTheme.text }]}>
-                  {task.subject}
+                  {displaySubject}
                 </Text>
               </View>
-            )}
+            ) : null}
           </>
         ) : (
           <View style={styles.emptyContainer}>
@@ -108,7 +153,7 @@ export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
       </TouchableOpacity>
 
       {/* Right start button */}
-      {task && (
+      {showStartButton && (
         <View style={styles.rightArea}>
           <TouchableOpacity
             style={styles.startButton}
