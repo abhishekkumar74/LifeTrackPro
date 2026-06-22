@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, StatusBar, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, StatusBar, Text, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
-import { markEnd } from '../../lib/utils/startup-perf';
 
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useTodayStats } from '@/lib/hooks/use-today-stats';
@@ -12,6 +11,8 @@ import { queryClient } from '@/lib/query-client';
 import { useSyllabus } from '@/lib/hooks/use-syllabus';
 import { useCompleteTask } from '@/lib/hooks/use-tasks';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
+import { ScheduleBlock, ScheduleSkipEntry } from '@/types/app.types';
+import { getTodayLocal } from '@/lib/utils/date';
 
 // Import Home Dashboard Components
 import { HomeHeader } from '@/components/home/HomeHeader';
@@ -25,6 +26,7 @@ import { DailyCheckinCard } from '@/components/home/DailyCheckinCard';
 // Quick Add Sheets
 import { QuickAddTaskSheet } from '@/components/home/QuickAddTaskSheet';
 import { QuickAddScheduleSheet } from '@/components/home/QuickAddScheduleSheet';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Constants
 const BG_COLOR = '#F7F6F3';
@@ -38,7 +40,103 @@ export default function HomeDashboardScreen(): React.JSX.Element {
 
   const [taskSheetVisible, setTaskSheetVisible] = useState(false);
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false);
+  const [editingScheduleBlock, setEditingScheduleBlock] = useState<ScheduleBlock | null>(null);
+  const [doneBlockIds, setDoneBlockIds] = useState<string[]>([]);
+  const [skippedBlockIds, setSkippedBlockIds] = useState<string[]>([]);
+  const [skipsLog, setSkipsLog] = useState<ScheduleSkipEntry[]>([]);
+  const [todayScheduleSnapshot, setTodayScheduleSnapshot] = useState<ScheduleBlock[]>([]);
   const completeTaskMutation = useCompleteTask();
+
+  // Load schedule states on mount
+  useEffect(() => {
+    const loadState = async () => {
+      try {
+        const todayStr = getTodayLocal();
+
+        // 1. Load done blocks
+        const storedDone = await AsyncStorage.getItem(`done_blocks_${todayStr}`);
+        if (storedDone) {
+          setDoneBlockIds(JSON.parse(storedDone));
+        } else {
+          setDoneBlockIds([]);
+        }
+
+        // 2. Load skipped blocks
+        const storedSkipped = await AsyncStorage.getItem(`skipped_blocks_${todayStr}`);
+        if (storedSkipped) {
+          setSkippedBlockIds(JSON.parse(storedSkipped));
+        } else {
+          setSkippedBlockIds([]);
+        }
+
+        // 3. Load global skips log
+        const storedSkipsLog = await AsyncStorage.getItem('schedule_skips_log');
+        if (storedSkipsLog) {
+          setSkipsLog(JSON.parse(storedSkipsLog));
+        } else {
+          setSkipsLog([]);
+        }
+      } catch (err) {
+        console.error('Failed to load schedule state', err);
+      }
+    };
+    loadState();
+  }, []);
+
+  // Manage daily schedule snapshot and merge newly created routines
+  useEffect(() => {
+    if (stats.isLoading) return;
+
+    const initializeAndMergeSnapshot = async () => {
+      try {
+        const todayStr = getTodayLocal();
+        const snapshotKey = `schedule_snapshot_${todayStr}`;
+        const storedSnapshot = await AsyncStorage.getItem(snapshotKey);
+
+        const currentRoutines = stats.nextBlocks || [];
+
+        if (!storedSnapshot) {
+          // No snapshot yet, capture today's active routines and save
+          await AsyncStorage.setItem(snapshotKey, JSON.stringify(currentRoutines));
+          setTodayScheduleSnapshot(currentRoutines);
+        } else {
+          // Snapshot exists, load and merge only brand-new routines
+          const snapshotBlocks: ScheduleBlock[] = JSON.parse(storedSnapshot);
+          const snapshotIds = new Set(snapshotBlocks.map((b) => b.id));
+
+          const newRoutines = currentRoutines.filter((b) => !snapshotIds.has(b.id));
+
+          if (newRoutines.length > 0) {
+            const merged = [...snapshotBlocks, ...newRoutines].sort((a, b) =>
+              a.start_time.localeCompare(b.start_time)
+            );
+            await AsyncStorage.setItem(snapshotKey, JSON.stringify(merged));
+            setTodayScheduleSnapshot(merged);
+          } else {
+            setTodayScheduleSnapshot(snapshotBlocks);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to manage schedule daily snapshot', err);
+      }
+    };
+
+    initializeAndMergeSnapshot();
+  }, [stats.isLoading, stats.nextBlocks]);
+
+
+  const handlePressScheduleBlock = useCallback((block: ScheduleBlock) => {
+    router.push({
+      pathname: '/focus',
+      params: {
+        suggestedSubject: block.subject || 'General',
+        suggestedGoal: block.title,
+        routineBlockId: block.id,
+        routineStartTime: block.start_time,
+        routineEndTime: block.end_time,
+      }
+    });
+  }, [router]);
 
   const handleRefreshStats = useCallback(() => {
     stats.refetch();
@@ -64,10 +162,6 @@ export default function HomeDashboardScreen(): React.JSX.Element {
     return () => {
       delete tabScrollRefs['home'];
     };
-  }, []);
-
-  useEffect(() => {
-    markEnd('app_boot');
   }, []);
 
   // Combine auth profile name and default fallback
@@ -180,6 +274,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
     router.push('/(tabs)/goals');
   }, [router]);
 
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="dark-content" />
@@ -217,6 +312,28 @@ export default function HomeDashboardScreen(): React.JSX.Element {
           userGoal={subCategory}
           firstIncompleteTopic={syllabusStats.firstIncompleteTopic}
         />
+
+        {/* Compact Focus Stats Summary Card */}
+        {!stats.isLoading && (
+          <TouchableOpacity
+            style={styles.summaryCard}
+            onPress={() => router.push('/(tabs)/stats')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.summaryCardLeft}>
+              <Text style={styles.summaryStreakText}>
+                🔥 {stats.focusStreak} day focus streak
+              </Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryCardRight}>
+              <Text style={styles.summaryFocusText}>
+                ⏱️ Today: {stats.focusMinutesToday}m focused
+              </Text>
+              <Text style={styles.arrowIcon}>→</Text>
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Zone C — Quick Stats Row */}
         <View style={styles.statsWrapper}>
@@ -285,10 +402,17 @@ export default function HomeDashboardScreen(): React.JSX.Element {
         {/* Zone D — Schedule Strip */}
         <View style={styles.sectionWrapper}>
           <ScheduleStrip
-            blocks={stats.nextBlocks}
+            blocks={todayScheduleSnapshot}
             isLoading={stats.isLoading}
             onSeeAll={handleSeeAllSchedule}
-            onAddSchedule={() => setScheduleSheetVisible(true)}
+            onAddSchedule={() => {
+              setEditingScheduleBlock(null);
+              setScheduleSheetVisible(true);
+            }}
+            onPressBlock={handlePressScheduleBlock}
+            doneBlockIds={doneBlockIds}
+            skippedBlockIds={skippedBlockIds}
+            skipsLog={skipsLog}
           />
         </View>
 
@@ -330,8 +454,12 @@ export default function HomeDashboardScreen(): React.JSX.Element {
       {/* Quick Add Schedule Block Bottom Sheet */}
       <QuickAddScheduleSheet
         isVisible={scheduleSheetVisible}
-        onClose={() => setScheduleSheetVisible(false)}
+        onClose={() => {
+          setScheduleSheetVisible(false);
+          setEditingScheduleBlock(null);
+        }}
         onSuccess={handleRefreshStats}
+        editingBlock={editingScheduleBlock}
       />
     </SafeAreaView>
   );
@@ -349,6 +477,56 @@ const styles = StyleSheet.create({
   statsWrapper: {
     marginTop: 16,
     width: '100%',
+  },
+  summaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  summaryCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  summaryStreakText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#17172A',
+    fontWeight: '600',
+  },
+  summaryDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: '#E8E7E3',
+    marginHorizontal: 12,
+  },
+  summaryCardRight: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  summaryFocusText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#5C5C70',
+    fontWeight: '500',
+  },
+  arrowIcon: {
+    fontSize: 16,
+    color: '#9B9BAF',
+    fontWeight: '600',
   },
   sectionWrapper: {
     marginTop: 24,

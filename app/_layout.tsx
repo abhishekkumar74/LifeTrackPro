@@ -332,6 +332,7 @@ function RootLayout() {
   useEffect(() => {
     if (fontsLoaded && authInitialized) {
       SplashScreen.hideAsync();
+      markEnd('app_boot');
     }
   }, [fontsLoaded, authInitialized]);
 

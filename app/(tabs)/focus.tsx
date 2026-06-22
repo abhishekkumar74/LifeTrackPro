@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import BottomSheet, {
   BottomSheetView,
@@ -44,8 +45,15 @@ export default function FocusScreen(): React.JSX.Element {
   const [showSummary, setShowSummary] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [tempGoal, setTempGoal] = useState('');
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
-  const params = useLocalSearchParams<{ suggestedSubject?: string; suggestedGoal?: string }>();
+  const params = useLocalSearchParams<{
+    suggestedSubject?: string;
+    suggestedGoal?: string;
+    routineBlockId?: string;
+    routineStartTime?: string;
+    routineEndTime?: string;
+  }>();
   const { profile } = useAuthStore();
   const isCse = profile?.category === 'cse_student';
 
@@ -193,7 +201,7 @@ export default function FocusScreen(): React.JSX.Element {
   );
 
   // Save focus session results directly to Supabase
-  const handleSaveSession = useCallback(async (mood: number, _note: string) => {
+  const handleSaveSession = useCallback(async (mood: number, _note: string, status: 'completed' | 'interrupted' = 'completed') => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -206,15 +214,20 @@ export default function FocusScreen(): React.JSX.Element {
           ? customMinutes
           : parseInt(selectedPreset.split('/')[0], 10);
 
+      const dbDuration = status === 'interrupted' 
+        ? Math.max(1, Math.floor(elapsedSeconds / 60)) 
+        : focusMinutes;
+
       const { error } = await supabase.from('focus_sessions').insert({
         user_id: session.user.id,
         session_goal: sessionGoal.trim() || 'Deep Focus Session',
-        duration_min: focusMinutes,
+        duration_min: dbDuration,
         subject: subjectTag,
         sound_used: activeSound,
-        mood: mood,
+        mood: status === 'interrupted' ? null : mood,
         started_at: startedAt,
         ended_at: endedAt,
+        status: status,
       });
 
       if (error) throw error;
@@ -226,13 +239,72 @@ export default function FocusScreen(): React.JSX.Element {
       // Trigger success haptics
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      useUiStore.getState().showToast('Session saved!', 'success');
+      // Check if we should mark a linked routine block as done
+      if (status === 'completed' && params.routineBlockId && params.routineStartTime && params.routineEndTime) {
+        // Validation 1: must be >= 25 minutes
+        const isDurationValid = focusMinutes >= 25;
+
+        // Validation 2: must be completed within the scheduled window [routineStartTime - 15, routineEndTime + 60]
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+        const timeToMinutes = (timeStr: string) => {
+          const parts = timeStr.split(':');
+          if (parts.length < 2) return 0;
+          return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+        };
+
+        const startM = timeToMinutes(params.routineStartTime);
+        let endM = timeToMinutes(params.routineEndTime);
+        if (endM < startM) {
+          endM += 1440; // crosses midnight
+        }
+
+        let isTimeWindowValid = false;
+        const windowStart = startM - 15;
+        const windowEnd = endM + 60;
+
+        if (currentMinutes >= windowStart && currentMinutes <= windowEnd) {
+          isTimeWindowValid = true;
+        } else if (endM >= 1440) {
+          const adjMinutes = currentMinutes + 1440;
+          if (adjMinutes >= windowStart && adjMinutes <= windowEnd) {
+            isTimeWindowValid = true;
+          }
+        }
+
+        if (isDurationValid && isTimeWindowValid) {
+          const todayStr = new Date().toLocaleDateString('en-CA');
+          const storedDone = await AsyncStorage.getItem(`done_blocks_${todayStr}`);
+          const doneIds: string[] = storedDone ? JSON.parse(storedDone) : [];
+          if (!doneIds.includes(params.routineBlockId)) {
+            const updated = [...doneIds, params.routineBlockId];
+            await AsyncStorage.setItem(`done_blocks_${todayStr}`, JSON.stringify(updated));
+          }
+          useUiStore.getState().showToast('Routine block marked Done!', 'success');
+        } else {
+          let reason = '';
+          if (!isDurationValid && !isTimeWindowValid) {
+            reason = 'Session was under 25m and outside the scheduled time window.';
+          } else if (!isDurationValid) {
+            reason = 'Session duration was under 25 minutes.';
+          } else {
+            reason = 'Completed outside the routine\'s scheduled window.';
+          }
+          Alert.alert(
+            'Routine Not Completed',
+            `Focus session saved, but routine block was not marked Done. Reason: ${reason}`
+          );
+        }
+      } else {
+        useUiStore.getState().showToast('Session saved!', 'success');
+      }
 
       setShowSummary(false);
       await ambient.stop();
 
       // Check if we should prompt for CSE syllabus topics
-      if (isCse && subjectTag) {
+      if (status === 'completed' && isCse && subjectTag) {
         const { data: topics, error: topicsErr } = await supabase
           .from('syllabus_topics')
           .select('*')
@@ -284,8 +356,44 @@ export default function FocusScreen(): React.JSX.Element {
 
   const handleReset = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    stop();
-  }, [stop]);
+    if (elapsedSeconds >= 300) {
+      Alert.alert(
+        'Cancel Focus Session?',
+        'Do you want to end this session early? It will be logged as Interrupted.',
+        [
+          {
+            text: 'Yes, End Session',
+            style: 'destructive',
+            onPress: async () => {
+              await handleSaveSession(3, '', 'interrupted');
+            }
+          },
+          {
+            text: 'Keep Focusing',
+            style: 'cancel'
+          }
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Discard Focus Session?',
+        'Sessions under 5 minutes are not saved.',
+        [
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => {
+              stop();
+            }
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          }
+        ]
+      );
+    }
+  }, [elapsedSeconds, handleSaveSession, stop]);
 
   const handleSkipBreak = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -348,6 +456,7 @@ export default function FocusScreen(): React.JSX.Element {
       >
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <ScrollView
+            scrollEnabled={scrollEnabled}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContainer}
           >
@@ -371,6 +480,17 @@ export default function FocusScreen(): React.JSX.Element {
                 </Text>
               </View>
             </View>
+
+            {params.routineBlockId && (
+              <View style={styles.routineLinkBanner}>
+                <Text style={styles.routineLinkText}>
+                  Linked Routine: {params.suggestedGoal || 'Study Routine'}
+                </Text>
+                <Text style={styles.routineLinkSubtext}>
+                  Requires 25m+ focus between {params.routineStartTime} and {params.routineEndTime} to mark done.
+                </Text>
+              </View>
+            )}
 
             {/* Session goal (Section B) */}
             <View style={styles.goalContainer}>
@@ -528,6 +648,7 @@ export default function FocusScreen(): React.JSX.Element {
                 onSelect={handleSoundSelect}
                 volume={soundVolume}
                 onVolumeChange={handleVolumeChange}
+                onScrollStateChange={setScrollEnabled}
               />
             </View>
 
@@ -1019,5 +1140,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#5C5C70',
     fontWeight: '600',
+  },
+  routineLinkBanner: {
+    backgroundColor: 'rgba(91, 79, 232, 0.15)',
+    borderColor: '#5B4FE8',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginTop: 16,
+    marginHorizontal: 4,
+    alignItems: 'center',
+  },
+  routineLinkText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#FFF',
+    fontWeight: '600',
+  },
+  routineLinkSubtext: {
+    fontFamily: 'DMSans',
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginTop: 4,
+    textAlign: 'center',
   },
 });

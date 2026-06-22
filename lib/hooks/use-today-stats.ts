@@ -10,6 +10,7 @@ export interface TodayStats {
   tasksTotal: number;
   tasksDone: number;
   habitStreak: number;
+  focusStreak: number;
   habits: (Habit & { completedToday: boolean })[];
   nextBlocks: ScheduleBlock[];
   primaryGoal: (Goal & { 
@@ -32,6 +33,7 @@ export function useTodayStats(): TodayStats {
     tasksTotal: number;
     tasksDone: number;
     habitStreak: number;
+    focusStreak: number;
     habits: (Habit & { completedToday: boolean })[];
     nextBlocks: ScheduleBlock[];
     primaryGoal: (Goal & { totalTasks: number; doneTasks: number }) | null;
@@ -42,6 +44,7 @@ export function useTodayStats(): TodayStats {
     tasksTotal: 0,
     tasksDone: 0,
     habitStreak: 0,
+    focusStreak: 0,
     habits: [],
     nextBlocks: [],
     primaryGoal: null,
@@ -78,7 +81,8 @@ export function useTodayStats(): TodayStats {
         habitsRes,
         todayHabitLogsRes,
         scheduleBlocksRes,
-        primaryGoalRes
+        primaryGoalRes,
+        focusAllSessionsRes
       ] = await Promise.all([
         // 1. Top priority task
         supabase
@@ -87,10 +91,10 @@ export function useTodayStats(): TodayStats {
           .is('completed_at', null)
           .or(`due_date.lte.${todayStr},due_date.is.null`),
 
-        // 2. Focus sessions today
+        // 2. Focus sessions today (need status to exclude interrupted ones)
         supabase
           .from('focus_sessions')
-          .select('duration_min')
+          .select('duration_min, status')
           .gte('started_at', startOfDay.toISOString())
           .lte('started_at', endOfDay.toISOString()),
 
@@ -134,6 +138,12 @@ export function useTodayStats(): TodayStats {
           .eq('status', 'active')
           .limit(1)
           .maybeSingle(),
+
+        // 8. All completed focus sessions (for focus streak)
+        supabase
+          .from('focus_sessions')
+          .select('started_at')
+          .eq('status', 'completed')
       ]);
 
       // Check errors
@@ -145,6 +155,7 @@ export function useTodayStats(): TodayStats {
       if (todayHabitLogsRes.error) throw todayHabitLogsRes.error;
       if (scheduleBlocksRes.error) throw scheduleBlocksRes.error;
       if (primaryGoalRes.error) throw primaryGoalRes.error;
+      if (focusAllSessionsRes.error) throw focusAllSessionsRes.error;
 
       // 1. Top priority task parsing
       let topTask: Task | null = null;
@@ -175,14 +186,29 @@ export function useTodayStats(): TodayStats {
         topTask = sortedTasks[0] as Task;
       }
 
-      // 2. Focus minutes today
-      const focusMinutesToday = (focusRes.data || []).reduce(
-        (sum, s) => sum + s.duration_min,
-        0
-      );
+      // 2. Focus minutes today (completed only)
+      const focusMinutesToday = (focusRes.data || [])
+        .filter(s => s.status !== 'interrupted')
+        .reduce((sum, s) => sum + s.duration_min, 0);
 
-      // 3. Tasks count today
-      const todayTasks = (todayTasksRes.data || []) as Task[];
+      // 3. Tasks count today (sorted: incomplete first, completed last, then by priority)
+      const todayTasks = ((todayTasksRes.data || []) as Task[]).sort((a, b) => {
+        const aDone = a.completed_at !== null;
+        const bDone = b.completed_at !== null;
+        if (aDone && !bDone) return 1;
+        if (!aDone && bDone) return -1;
+
+        const priorityWeight = (p: string) => {
+          switch (p) {
+            case 'urgent': return 1;
+            case 'important': return 2;
+            default: return 3;
+          }
+        };
+        const wA = priorityWeight(a.priority);
+        const wB = priorityWeight(b.priority);
+        return wA - wB;
+      });
       const tasksTotal = todayTasks.length;
       const tasksDone = todayTasks.filter(t => t.completed_at !== null).length;
 
@@ -217,6 +243,42 @@ export function useTodayStats(): TodayStats {
           const dateStr = formatDateStr(curr);
           if (doneDates.has(dateStr)) {
             habitStreak++;
+          } else {
+            break;
+          }
+        }
+      }
+
+      // 4b. Focus streak calculation (completed sessions only)
+      const completedFocusDates = new Set(
+        (focusAllSessionsRes.data || []).map(fs => {
+          const d = new Date(fs.started_at);
+          return formatDateStr(d);
+        })
+      );
+      let focusStreak = 0;
+
+      if (completedFocusDates.has(checkDateTodayStr)) {
+        focusStreak = 1;
+        const curr = new Date();
+        while (true) {
+          curr.setDate(curr.getDate() - 1);
+          const dateStr = formatDateStr(curr);
+          if (completedFocusDates.has(dateStr)) {
+            focusStreak++;
+          } else {
+            break;
+          }
+        }
+      } else if (completedFocusDates.has(checkDateYesterdayStr)) {
+        focusStreak = 1;
+        const curr = new Date();
+        curr.setDate(curr.getDate() - 1);
+        while (true) {
+          curr.setDate(curr.getDate() - 1);
+          const dateStr = formatDateStr(curr);
+          if (completedFocusDates.has(dateStr)) {
+            focusStreak++;
           } else {
             break;
           }
@@ -295,6 +357,7 @@ export function useTodayStats(): TodayStats {
         tasksTotal,
         tasksDone,
         habitStreak,
+        focusStreak,
         habits,
         nextBlocks,
         primaryGoal,

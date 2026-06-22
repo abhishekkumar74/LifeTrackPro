@@ -21,8 +21,16 @@ export function useTasks(milestoneId?: string) {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Sort locally: priority (urgent -> important -> normal), then due_date
+      // Sort locally: 
+      // 1. Completion status (incomplete first, completed last)
+      // 2. Priority (urgent -> important -> normal)
+      // 3. Due date
       return (data || []).sort((a, b) => {
+        const aDone = a.completed_at !== null;
+        const bDone = b.completed_at !== null;
+        if (aDone && !bDone) return 1;
+        if (!aDone && bDone) return -1;
+
         const priorityWeight = (p: string) => {
           switch (p) {
             case 'urgent': return 1;

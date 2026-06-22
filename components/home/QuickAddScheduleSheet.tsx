@@ -15,7 +15,12 @@ import BottomSheet, {
   BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useCreateScheduleBlock } from '@/lib/hooks/use-schedule';
+import {
+  useCreateScheduleBlock,
+  useUpdateScheduleBlock,
+  useDeleteScheduleBlock,
+} from '@/lib/hooks/use-schedule';
+import { ScheduleBlock } from '@/types/app.types';
 import { COLORS, TYPOGRAPHY } from '@/constants/theme';
 import { getTodayLocal } from '@/lib/utils/date';
 import * as Haptics from 'expo-haptics';
@@ -24,6 +29,7 @@ interface QuickAddScheduleSheetProps {
   isVisible: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  editingBlock?: ScheduleBlock | null;
 }
 
 const SUBJECT_OPTIONS = [
@@ -52,6 +58,7 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
   isVisible,
   onClose,
   onSuccess,
+  editingBlock,
 }) => {
   const sheetRef = useRef<BottomSheet>(null);
 
@@ -67,16 +74,52 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
   useEffect(() => {
     if (isVisible) {
       sheetRef.current?.expand();
-      setTitle('');
-      setSelectedSubject(null);
-      setStartTimeDate(new Date());
-      setSelectedDuration(60);
-      setCustomDurationStr('');
-      setSelectedRepeat('today');
+      if (editingBlock) {
+        setTitle(editingBlock.title);
+        setSelectedSubject(editingBlock.subject);
+        
+        // Parse start_time (HH:MM:SS)
+        const parts = (editingBlock.start_time || '12:00:00').split(':');
+        const d = new Date();
+        d.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+        setStartTimeDate(d);
+
+        // Calculate duration in minutes
+        const startParts = editingBlock.start_time.split(':');
+        const endParts = editingBlock.end_time.split(':');
+        const sMins = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
+        const eMins = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
+        let diff = eMins - sMins;
+        if (diff < 0) diff += 24 * 60; // safety wrap-around
+
+        if ([30, 60, 90, 120].includes(diff)) {
+          setSelectedDuration(diff);
+          setCustomDurationStr('');
+        } else {
+          setSelectedDuration(-1);
+          setCustomDurationStr(String(diff));
+        }
+
+        // Determine repeat from days array
+        if (editingBlock.specific_date) {
+          setSelectedRepeat('today');
+        } else if (editingBlock.days && editingBlock.days.length === 5 && !editingBlock.days.includes(0) && !editingBlock.days.includes(6)) {
+          setSelectedRepeat('weekdays');
+        } else {
+          setSelectedRepeat('daily');
+        }
+      } else {
+        setTitle('');
+        setSelectedSubject(null);
+        setStartTimeDate(new Date());
+        setSelectedDuration(60);
+        setCustomDurationStr('');
+        setSelectedRepeat('today');
+      }
     } else {
       sheetRef.current?.close();
     }
-  }, [isVisible]);
+  }, [isVisible, editingBlock]);
 
   const handleSheetChange = useCallback(
     (index: number) => {
@@ -88,6 +131,8 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
   );
 
   const createBlockMutation = useCreateScheduleBlock();
+  const updateBlockMutation = useUpdateScheduleBlock();
+  const deleteBlockMutation = useDeleteScheduleBlock();
 
   const getSubjectColor = (subject: string | null) => {
     if (!subject) return '#9B9BAF';
@@ -137,29 +182,73 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
 
     const color = getSubjectColor(selectedSubject);
 
-    createBlockMutation.mutate(
-      {
-        title: title.trim(),
-        subject: selectedSubject,
-        color,
-        start_time: startTimeStr,
-        end_time: endTimeStr,
-        days,
-        specific_date: specificDate,
-        is_active: true,
-      },
-      {
-        onSuccess: () => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-          Keyboard.dismiss();
-          onClose();
-          if (onSuccess) {
-            onSuccess();
-          }
+    if (editingBlock) {
+      updateBlockMutation.mutate(
+        {
+          id: editingBlock.id,
+          title: title.trim(),
+          subject: selectedSubject,
+          color,
+          start_time: startTimeStr,
+          end_time: endTimeStr,
+          days,
+          specific_date: specificDate,
+          is_active: true,
         },
-      }
-    );
+        {
+          onSuccess: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            Keyboard.dismiss();
+            onClose();
+            if (onSuccess) {
+              onSuccess();
+            }
+          },
+        }
+      );
+    } else {
+      createBlockMutation.mutate(
+        {
+          title: title.trim(),
+          subject: selectedSubject,
+          color,
+          start_time: startTimeStr,
+          end_time: endTimeStr,
+          days,
+          specific_date: specificDate,
+          is_active: true,
+        },
+        {
+          onSuccess: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            Keyboard.dismiss();
+            onClose();
+            if (onSuccess) {
+              onSuccess();
+            }
+          },
+        }
+      );
+    }
   };
+
+  const handleDeleteBlock = () => {
+    if (!editingBlock) return;
+
+    deleteBlockMutation.mutate(editingBlock.id, {
+      onSuccess: () => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        Keyboard.dismiss();
+        onClose();
+        if (onSuccess) {
+          onSuccess();
+        }
+      },
+    });
+  };
+
+  const isSaving = createBlockMutation.isPending || updateBlockMutation.isPending;
+  const isDeleting = deleteBlockMutation.isPending;
 
   const formatTimeDisplay = (date: Date) => {
     let hours = date.getHours();
@@ -177,8 +266,6 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
     []
   );
 
-  const isSaving = createBlockMutation.isPending;
-
   return (
     <BottomSheet
       ref={sheetRef}
@@ -190,7 +277,9 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
       keyboardBehavior="interactive"
     >
       <BottomSheetView style={styles.sheetContent}>
-        <Text style={styles.sheetHeader}>Quick Add Schedule Block</Text>
+        <Text style={styles.sheetHeader}>
+          {editingBlock ? 'Edit Schedule Block' : 'Quick Add Schedule Block'}
+        </Text>
 
         {/* Title */}
         <BottomSheetTextInput
@@ -331,19 +420,49 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
           })}
         </View>
 
-        {/* Add Block button */}
-        <TouchableOpacity
-          style={[styles.addButton, (!title.trim() || isSaving) && styles.addButtonDisabled]}
-          onPress={handleAddBlock}
-          disabled={!title.trim() || isSaving}
-          activeOpacity={0.8}
-        >
-          {isSaving ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.addButtonText}>Add Block</Text>
-          )}
-        </TouchableOpacity>
+        {/* Save / Delete button row */}
+        {editingBlock ? (
+          <View style={styles.btnRow}>
+            <TouchableOpacity
+              style={[styles.deleteButton, isDeleting && styles.deleteButtonDisabled]}
+              onPress={handleDeleteBlock}
+              disabled={isDeleting || isSaving}
+              activeOpacity={0.8}
+            >
+              {isDeleting ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.deleteButtonText}>Delete</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.saveButton, (!title.trim() || isSaving) && styles.addButtonDisabled]}
+              onPress={handleAddBlock}
+              disabled={!title.trim() || isSaving || isDeleting}
+              activeOpacity={0.8}
+            >
+              {isSaving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.addButtonText}>Save Changes</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.addButton, (!title.trim() || isSaving) && styles.addButtonDisabled]}
+            onPress={handleAddBlock}
+            disabled={!title.trim() || isSaving}
+            activeOpacity={0.8}
+          >
+            {isSaving ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.addButtonText}>Add Block</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </BottomSheetView>
     </BottomSheet>
   );
@@ -476,6 +595,40 @@ const styles = StyleSheet.create({
     fontFamily: TYPOGRAPHY.fonts.sans,
     fontSize: 16,
     color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 10,
+  },
+  saveButton: {
+    flex: 2,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.violet,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    flex: 1,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FDF3F3',
+    borderWidth: 1,
+    borderColor: '#F8D7DA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButtonDisabled: {
+    backgroundColor: '#E8E7E3',
+    borderColor: '#E8E7E3',
+    opacity: 0.5,
+  },
+  deleteButtonText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 16,
+    color: '#E85858',
     fontWeight: '600',
   },
 });

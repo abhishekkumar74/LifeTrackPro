@@ -13,6 +13,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import { Volume2, VolumeX, Volume1 } from 'lucide-react-native';
 import { SoundKey } from '@/lib/store/focus.store';
 
 interface SoundPickerProps {
@@ -20,6 +21,7 @@ interface SoundPickerProps {
   onSelect: (key: SoundKey | null) => void;
   volume: number;
   onVolumeChange: (vol: number) => void;
+  onScrollStateChange?: (enabled: boolean) => void;
 }
 
 interface ChipItem {
@@ -41,6 +43,7 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
   onSelect,
   volume,
   onVolumeChange,
+  onScrollStateChange,
 }) => {
   const [sliderWidth, setSliderWidth] = useState<number>(0);
   const opacity = useSharedValue(0);
@@ -56,20 +59,31 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
   const animatedSliderStyle = useAnimatedStyle(() => {
     return {
       opacity: opacity.value,
-      height: withTiming(activeSound ? 48 : 0, { duration: 300 }),
-      marginTop: withTiming(activeSound ? 16 : 0, { duration: 300 }),
+      height: withTiming(activeSound ? 36 : 0, { duration: 300 }),
+      marginTop: withTiming(activeSound ? 12 : 0, { duration: 300 }),
       overflow: 'hidden',
     };
   });
 
-  const startVolumeRef = useRef(0);
+  // Track layout width ref
+  const sliderWidthRef = useRef(0);
+  useEffect(() => {
+    sliderWidthRef.current = sliderWidth;
+  }, [sliderWidth]);
 
-  // Calculate volume percentage and trigger callback
-  const handleTouch = (locationX: number) => {
-    if (sliderWidth <= 0) return;
-    const newVolume = Math.max(0, Math.min(1, locationX / sliderWidth));
-    onVolumeChange(newVolume);
-  };
+  // Use a state reference object to avoid closure issues in PanResponder callbacks
+  const stateRef = useRef({
+    volume,
+    onVolumeChange,
+    onScrollStateChange,
+    startVolume: volume,
+  });
+
+  useEffect(() => {
+    stateRef.current.volume = volume;
+    stateRef.current.onVolumeChange = onVolumeChange;
+    stateRef.current.onScrollStateChange = onScrollStateChange;
+  }, [volume, onVolumeChange, onScrollStateChange]);
 
   // Setup pan responder with child elements pointerEvents="none" for steady coordinates relative to track container
   const panResponder = useRef(
@@ -79,19 +93,46 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
       onPanResponderTerminationRequest: () => false,
       onShouldBlockNativeResponder: () => true,
       onPanResponderGrant: (evt, gestureState) => {
-        if (sliderWidth <= 0) return;
-        const initialVolume = Math.max(0, Math.min(1, evt.nativeEvent.locationX / sliderWidth));
-        startVolumeRef.current = initialVolume;
-        onVolumeChange(initialVolume);
+        const width = sliderWidthRef.current;
+        if (width <= 0) return;
+        
+        // Lock parent ScrollView from scrolling
+        stateRef.current.onScrollStateChange?.(false);
+        
+        const initialVolume = Math.max(0, Math.min(1, evt.nativeEvent.locationX / width));
+        stateRef.current.startVolume = initialVolume;
+        stateRef.current.onVolumeChange(initialVolume);
       },
       onPanResponderMove: (evt, gestureState) => {
-        if (sliderWidth <= 0) return;
-        const deltaVolume = gestureState.dx / sliderWidth;
-        const newVolume = Math.max(0, Math.min(1, startVolumeRef.current + deltaVolume));
-        onVolumeChange(newVolume);
+        const width = sliderWidthRef.current;
+        if (width <= 0) return;
+        
+        const deltaVolume = gestureState.dx / width;
+        const newVolume = Math.max(0, Math.min(1, stateRef.current.startVolume + deltaVolume));
+        stateRef.current.onVolumeChange(newVolume);
+      },
+      onPanResponderRelease: () => {
+        // Unlock parent ScrollView scrolling
+        stateRef.current.onScrollStateChange?.(true);
+      },
+      onPanResponderTerminate: () => {
+        // Unlock parent ScrollView scrolling
+        stateRef.current.onScrollStateChange?.(true);
       },
     })
   ).current;
+
+  // Determine volume icon based on level
+  const renderVolumeIcon = () => {
+    const iconColor = '#FFFFFF';
+    if (volume === 0) {
+      return <VolumeX size={12} color={iconColor} />;
+    } else if (volume < 0.4) {
+      return <Volume1 size={12} color={iconColor} />;
+    } else {
+      return <Volume2 size={12} color={iconColor} />;
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -121,16 +162,8 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
         })}
       </ScrollView>
 
-      {/* Volume Slider overlay with animation */}
+      {/* iOS Control Center styled Volume Slider overlay with animation */}
       <Animated.View style={[styles.sliderRow, animatedSliderStyle]}>
-        <TouchableOpacity
-          onPress={() => onVolumeChange(Math.max(0, volume - 0.1))}
-          activeOpacity={0.6}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Text style={styles.volumeEmoji}>🔈</Text>
-        </TouchableOpacity>
-
         <View
           style={styles.sliderTrackContainer}
           onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
@@ -147,23 +180,16 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
             />
           </View>
 
-          {/* Slider Custom Rounded Thumb */}
-          <View
-            style={[
-              styles.sliderThumb,
-              { left: volume * sliderWidth - 8 },
-            ]}
-            pointerEvents="none"
-          />
+          {/* Floating UI Overlays inside track (fully transparent to touches) */}
+          <View style={styles.overlayContainer} pointerEvents="none">
+            <View style={styles.leftIconContainer}>
+              {renderVolumeIcon()}
+            </View>
+            <Text style={styles.overlayText}>
+              {Math.round(volume * 100)}% Volume
+            </Text>
+          </View>
         </View>
-
-        <TouchableOpacity
-          onPress={() => onVolumeChange(Math.min(1, volume + 0.1))}
-          activeOpacity={0.6}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Text style={styles.volumeEmoji}>🔊</Text>
-        </TouchableOpacity>
       </Animated.View>
     </View>
   );
@@ -212,39 +238,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  volumeEmoji: {
-    fontSize: 12,
-    color: '#9B9BAF',
-    marginHorizontal: 8,
-  },
   sliderTrackContainer: {
     flex: 1,
-    height: 32,
+    height: 26,
     justifyContent: 'center',
     position: 'relative',
   },
   sliderTrack: {
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: 2,
+    height: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
     width: '100%',
     overflow: 'hidden',
   },
   sliderFill: {
     height: '100%',
-    backgroundColor: '#5B4FE8',
+    backgroundColor: 'rgba(91, 79, 232, 0.85)',
+    borderRadius: 12,
   },
-  sliderThumb: {
+  overlayContainer: {
     position: 'absolute',
-    top: 8, // (32 - 16) / 2
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+  },
+  leftIconContainer: {
+    opacity: 0.85,
+  },
+  overlayText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '600',
   },
 });

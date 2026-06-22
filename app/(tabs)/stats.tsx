@@ -67,6 +67,7 @@ type PeriodType = 'day' | 'week' | 'month';
 export default function StatsScreen(): React.JSX.Element {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('week');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [focusToggle, setFocusToggle] = useState<'today' | 'week'>('week');
   const queryClient = useQueryClient();
 
   // Tab scroll registration
@@ -85,8 +86,8 @@ export default function StatsScreen(): React.JSX.Element {
   // Standard Queries
   const periodStatsQuery = usePeriodStats(selectedPeriod);
   const heatmapQuery = useHeatmapData();
-  const barChartQuery = useBarChartData();
-  const subjectBreakdownQuery = useSubjectBreakdown();
+  const barChartQuery = useBarChartData(selectedPeriod);
+  const subjectBreakdownQuery = useSubjectBreakdown(selectedPeriod);
   const todayCheckinQuery = useTodayCheckin();
   const achievementsQuery = useAchievements();
   const todayStats = useTodayStats(); // Pull streak count from here
@@ -130,7 +131,7 @@ export default function StatsScreen(): React.JSX.Element {
     return (avgMins / 60).toFixed(1);
   }, [barChartQuery.data]);
 
-  const totalWeeklyFocusMinutes = React.useMemo(() => {
+  const totalPeriodFocusMinutes = React.useMemo(() => {
     const barData = barChartQuery.data || [];
     return barData.reduce((sum, d) => sum + d.minutes, 0);
   }, [barChartQuery.data]);
@@ -550,6 +551,109 @@ Stay focused, track your goals! 🚀`;
           )}
 
           {/* ==========================================
+              FOCUS STATS SECTION
+              ========================================== */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeading}>Focus Summary</Text>
+            <View style={styles.focusToggleContainer}>
+              <TouchableOpacity
+                style={[styles.focusToggleBtn, focusToggle === 'today' && styles.focusToggleBtnActive]}
+                onPress={() => setFocusToggle('today')}
+              >
+                <Text style={[styles.focusToggleText, focusToggle === 'today' && styles.focusToggleTextActive]}>
+                  Today
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.focusToggleBtn, focusToggle === 'week' && styles.focusToggleBtnActive]}
+                onPress={() => setFocusToggle('week')}
+              >
+                <Text style={[styles.focusToggleText, focusToggle === 'week' && styles.focusToggleTextActive]}>
+                  This Week
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {enhancedStatsQuery.isLoading ? (
+            <Skeleton width="100%" height={120} borderRadius={16} style={{ marginBottom: 18 }} />
+          ) : (
+            <View style={styles.focusSummaryContainer}>
+              {/* Row of Summary Cards */}
+              <View style={styles.focusSummaryRow}>
+                {/* Total Focus */}
+                <View style={styles.focusSummaryCard}>
+                  <Text style={styles.focusCardLabel}>Total Focus</Text>
+                  <Text style={styles.focusCardValue}>
+                    {focusToggle === 'today' 
+                      ? `${enhancedStats?.todaySummary.focusMinsToday || 0}m`
+                      : `${(enhancedStats?.reportCard.thisWeekHours || 0).toFixed(1)}h`
+                    }
+                  </Text>
+                </View>
+
+                {/* Streak */}
+                <View style={styles.focusSummaryCard}>
+                  <Text style={styles.focusCardLabel}>Streak</Text>
+                  <Text style={styles.focusCardValue}>
+                    🔥 {enhancedStats?.focusStats?.focusStreak || 0}d
+                  </Text>
+                </View>
+
+                {/* Completed */}
+                <View style={styles.focusSummaryCard}>
+                  <Text style={styles.focusCardLabel}>Completed</Text>
+                  <Text style={styles.focusCardValue}>
+                    {enhancedStats?.focusStats?.completedCount || 0}
+                  </Text>
+                </View>
+
+                {/* Interrupted */}
+                <View style={[styles.focusSummaryCard, styles.focusSummaryCardInterrupted]}>
+                  <Text style={[styles.focusCardLabel, { color: '#E85858' }]}>Interrupted</Text>
+                  <Text style={[styles.focusCardValue, { color: '#E85858' }]}>
+                    {enhancedStats?.focusStats?.interruptedCount || 0}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Completed vs Interrupted Ratio Bar */}
+              <View style={styles.ratioBarCard}>
+                <View style={styles.ratioHeader}>
+                  <Text style={styles.ratioTitle}>Completion Ratio</Text>
+                  <Text style={styles.ratioValue}>
+                    {enhancedStats?.focusStats?.ratioCompleted || 100}% Completed
+                  </Text>
+                </View>
+                <View style={styles.ratioProgressTrack}>
+                  <View 
+                    style={[
+                      styles.ratioProgressFill, 
+                      { width: `${enhancedStats?.focusStats?.ratioCompleted || 100}%` }
+                    ]} 
+                  />
+                  <View 
+                    style={[
+                      styles.ratioProgressInterrupted, 
+                      { width: `${enhancedStats?.focusStats?.ratioInterrupted || 0}%` }
+                    ]} 
+                  />
+                </View>
+                <View style={styles.ratioFooter}>
+                  <View style={styles.ratioIndicator}>
+                    <View style={[styles.ratioDot, { backgroundColor: '#00B894' }]} />
+                    <Text style={styles.ratioIndicatorText}>Completed</Text>
+                  </View>
+                  <View style={styles.ratioIndicator}>
+                    <View style={[styles.ratioDot, { backgroundColor: '#E85858' }]} />
+                    <Text style={styles.ratioIndicatorText}>Interrupted</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* ==========================================
               WEEKLY REPORT CARD (Enhanced Stats Part 5)
               ========================================== */}
           {!enhancedStatsQuery.isLoading && enhancedStats?.reportCard && (
@@ -881,7 +985,7 @@ Stay focused, track your goals! 🚀`;
           </View>
 
           {/* SECTION 5: Subject Breakdown (Only show if focus minutes exist) */}
-          {!subjectBreakdownQuery.isLoading && totalWeeklyFocusMinutes > 0 && (
+          {!subjectBreakdownQuery.isLoading && totalPeriodFocusMinutes > 0 && (
             <>
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionHeading}>By Subject</Text>
@@ -889,7 +993,7 @@ Stay focused, track your goals! 🚀`;
               <View style={styles.sectionCard}>
                 <DonutChart
                   data={subjectBreakdownQuery.data}
-                  totalMinutes={totalWeeklyFocusMinutes}
+                  totalMinutes={totalPeriodFocusMinutes}
                   isLoading={subjectBreakdownQuery.isLoading}
                 />
               </View>
@@ -1529,6 +1633,138 @@ const styles = StyleSheet.create({
   sectionSubheading: {
     fontFamily: 'DMSans',
     fontSize: 12,
+    color: '#9B9BAF',
+  },
+  focusToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F2F1EE',
+    borderRadius: 8,
+    padding: 1.5,
+    gap: 1,
+  },
+  focusToggleBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: 'transparent',
+  },
+  focusToggleBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  focusToggleText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#9B9BAF',
+  },
+  focusToggleTextActive: {
+    color: '#17172A',
+    fontWeight: '600',
+  },
+  focusSummaryContainer: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  focusSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 10,
+    gap: 8,
+  },
+  focusSummaryCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 64,
+  },
+  focusSummaryCardInterrupted: {
+    backgroundColor: '#FFF5F5',
+    borderColor: '#FEE2E2',
+  },
+  focusCardLabel: {
+    fontFamily: 'DMSans',
+    fontSize: 9,
+    color: '#9B9BAF',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  focusCardValue: {
+    fontFamily: 'DMMono',
+    fontSize: 15,
+    color: '#17172A',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  ratioBarCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    padding: 12,
+    marginTop: 2,
+  },
+  ratioHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  ratioTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#5C5C70',
+    fontWeight: '600',
+  },
+  ratioValue: {
+    fontFamily: 'DMMono',
+    fontSize: 11,
+    color: '#00B894',
+    fontWeight: '700',
+  },
+  ratioProgressTrack: {
+    height: 8,
+    backgroundColor: '#E8E7E3',
+    borderRadius: 4,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  ratioProgressFill: {
+    height: '100%',
+    backgroundColor: '#00B894',
+  },
+  ratioProgressInterrupted: {
+    height: '100%',
+    backgroundColor: '#E85858',
+  },
+  ratioFooter: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'center',
+  },
+  ratioIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratioDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  ratioIndicatorText: {
+    fontFamily: 'DMSans',
+    fontSize: 9,
     color: '#9B9BAF',
   },
   achievementsGrid: {

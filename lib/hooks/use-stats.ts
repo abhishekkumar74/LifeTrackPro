@@ -118,13 +118,13 @@ export function usePeriodStats(period: 'day' | 'week' | 'month') {
       ] = await Promise.all([
         supabase
           .from('focus_sessions')
-          .select('duration_min, subject')
+          .select('duration_min, subject, status')
           .eq('user_id', userId)
           .gte('started_at', periodStart.toISOString())
           .lt('started_at', periodEnd.toISOString()),
         supabase
           .from('focus_sessions')
-          .select('duration_min')
+          .select('duration_min, status')
           .eq('user_id', userId)
           .gte('started_at', prevStart.toISOString())
           .lt('started_at', prevEnd.toISOString()),
@@ -147,9 +147,16 @@ export function usePeriodStats(period: 'day' | 'week' | 'month') {
       if (curTasksRes.error) throw curTasksRes.error;
       if (prevTasksRes.error) throw prevTasksRes.error;
 
-      // 1. Focus Minutes
-      const focusMinutes = (curSessionsRes.data || []).reduce((sum, s) => sum + s.duration_min, 0);
-      const focusMinutesPrev = (prevSessionsRes.data || []).reduce((sum, s) => sum + s.duration_min, 0);
+      const curSessions = curSessionsRes.data || [];
+      const prevSessions = prevSessionsRes.data || [];
+
+      // 1. Focus Minutes (completed sessions only)
+      const focusMinutes = curSessions
+        .filter(s => s.status !== 'interrupted')
+        .reduce((sum, s) => sum + s.duration_min, 0);
+      const focusMinutesPrev = prevSessions
+        .filter(s => s.status !== 'interrupted')
+        .reduce((sum, s) => sum + s.duration_min, 0);
       const focusChangePercent = focusMinutesPrev === 0 
         ? (focusMinutes > 0 ? 100 : 0) 
         : Math.round(((focusMinutes - focusMinutesPrev) / focusMinutesPrev) * 100);
@@ -162,23 +169,43 @@ export function usePeriodStats(period: 'day' | 'week' | 'month') {
         ? (tasksDone > 0 ? 100 : 0)
         : Math.round(((tasksDone - tasksDonePrev) / tasksDonePrev) * 100);
 
-      // 3. Sessions
-      const sessionsCount = (curSessionsRes.data || []).length;
+      // 3. Sessions (completed vs interrupted)
+      const completedCount = curSessions.filter(s => s.status !== 'interrupted').length;
+      const interruptedCount = curSessions.filter(s => s.status === 'interrupted').length;
+      const sessionsCount = completedCount;
       const avgSessionMinutes = sessionsCount > 0 ? Math.round(focusMinutes / sessionsCount) : 0;
 
-      // 4. Top Subject
-      const subjectMins: { [subject: string]: number } = {};
-      (curSessionsRes.data || []).forEach(s => {
-        if (s.subject) {
-          subjectMins[s.subject] = (subjectMins[s.subject] || 0) + s.duration_min;
-        }
-      });
+      // 4. Top Subject (completed sessions only)
+      const subjectMins: { [lowerSubject: string]: number } = {};
+      const subjectDisplayNames: { [lowerSubject: string]: string } = {};
+      curSessions
+        .filter(s => s.status !== 'interrupted')
+        .forEach(s => {
+          if (s.subject) {
+            const trimmed = s.subject.trim();
+            if (trimmed) {
+              const lower = trimmed.toLowerCase();
+              subjectMins[lower] = (subjectMins[lower] || 0) + s.duration_min;
+              
+              const existingDisplay = subjectDisplayNames[lower];
+              if (!existingDisplay) {
+                subjectDisplayNames[lower] = trimmed;
+              } else {
+                const existingUpper = (existingDisplay.match(/[A-Z]/g) || []).length;
+                const currentUpper = (trimmed.match(/[A-Z]/g) || []).length;
+                if (currentUpper > existingUpper) {
+                  subjectDisplayNames[lower] = trimmed;
+                }
+              }
+            }
+          }
+        });
       let topSubject: string | null = null;
       let maxMins = 0;
-      Object.keys(subjectMins).forEach(sub => {
-        if (subjectMins[sub] > maxMins) {
-          maxMins = subjectMins[sub];
-          topSubject = sub;
+      Object.keys(subjectMins).forEach(lower => {
+        if (subjectMins[lower] > maxMins) {
+          maxMins = subjectMins[lower];
+          topSubject = subjectDisplayNames[lower];
         }
       });
 
@@ -193,6 +220,8 @@ export function usePeriodStats(period: 'day' | 'week' | 'month') {
         sessionsCount,
         avgSessionMinutes,
         topSubject,
+        completedCount,
+        interruptedCount,
       };
     },
   });
@@ -210,7 +239,7 @@ export function useHeatmapData() {
       const today = new Date();
       const startDate = new Date(today);
       startDate.setDate(today.getDate() - 89); // Last 90 days total
-      startDate.setHours(0, 0, 0, 0);
+      startDate.setHours(12, 0, 0, 0); // Set to noon to be completely DST-safe
 
       const { data, error } = await supabase
         .from('focus_sessions')
@@ -221,19 +250,29 @@ export function useHeatmapData() {
 
       if (error) throw error;
 
+      console.log(`[HEATMAP DIAGNOSTIC] Found ${data?.length || 0} sessions for user ${session.user.id}`);
+      if (data && data.length > 0) {
+        console.log("[HEATMAP DIAGNOSTIC] Raw database sessions:", data.map(s => ({ started_at: s.started_at, duration: s.duration_min })));
+      }
+
       // Aggregate minutes by local YYYY-MM-DD
       const dateMinutesMap: { [dateStr: string]: number } = {};
       (data || []).forEach((fs) => {
         const d = new Date(fs.started_at);
         const dateStr = getLocalDateStr(d);
         dateMinutesMap[dateStr] = (dateMinutesMap[dateStr] || 0) + fs.duration_min;
+        console.log(`[HEATMAP DIAGNOSTIC] Parsed session started_at: ${fs.started_at} -> local Date object: ${d.toString()} -> local dateStr: ${dateStr}`);
       });
+
+      console.log("[HEATMAP DIAGNOSTIC] dateMinutesMap keys and values:", dateMinutesMap);
 
       // Fill in all 90 days
       const result: HeatmapDay[] = [];
+      const oneDayMs = 24 * 60 * 60 * 1000;
+      const startMs = startDate.getTime();
+
       for (let i = 0; i < 90; i++) {
-        const current = new Date(startDate);
-        current.setDate(startDate.getDate() + i);
+        const current = new Date(startMs + i * oneDayMs);
         const dateStr = getLocalDateStr(current);
         const minutes = dateMinutesMap[dateStr] || 0;
 
@@ -250,33 +289,52 @@ export function useHeatmapData() {
         });
       }
 
+      console.log("[HEATMAP DIAGNOSTIC] Today's date calculated in loop:", getLocalDateStr(new Date()));
+      console.log("[HEATMAP DIAGNOSTIC] Last element in result:", result[result.length - 1]);
+
       return result;
     },
   });
 }
 
 // Shared Hook to fetch focus sessions for the current week (to be shared between BarChart and DonutChart)
-function useWeeklyFocusSessions() {
+function usePeriodFocusSessions(period: 'day' | 'week' | 'month') {
   const { user } = useAuthStore();
   return useQuery<FocusSession[]>({
-    queryKey: ['stats', user?.id, 'weekly-sessions'],
+    queryKey: ['stats', user?.id, 'period-sessions', period],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
       const today = new Date();
-      const dayOfWeek = today.getDay();
-      const distanceToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      
-      const monday = new Date(today);
-      monday.setDate(today.getDate() - distanceToMonday);
-      monday.setHours(0, 0, 0, 0);
+      let periodStart = new Date(today);
+      let periodEnd = new Date(today);
+
+      if (period === 'day') {
+        periodStart.setHours(0, 0, 0, 0);
+        periodEnd.setHours(23, 59, 59, 999);
+      } else if (period === 'week') {
+        const dayOfWeek = today.getDay();
+        const distanceToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        
+        periodStart.setDate(today.getDate() - distanceToMonday);
+        periodStart.setHours(0, 0, 0, 0);
+        
+        periodEnd = new Date(periodStart);
+        periodEnd.setDate(periodEnd.getDate() + 6);
+        periodEnd.setHours(23, 59, 59, 999);
+      } else {
+        // Month
+        periodStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0, 0);
+        periodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+      }
 
       const { data, error } = await supabase
         .from('focus_sessions')
         .select('*')
         .eq('user_id', session.user.id)
-        .gte('started_at', monday.toISOString());
+        .gte('started_at', periodStart.toISOString())
+        .lt('started_at', periodEnd.toISOString());
 
       if (error) throw error;
       return data as FocusSession[];
@@ -285,49 +343,120 @@ function useWeeklyFocusSessions() {
 }
 
 // 3. useBarChartData Hook
-export function useBarChartData() {
-  const { data: sessions, isLoading, error } = useWeeklyFocusSessions();
+export function useBarChartData(period: 'day' | 'week' | 'month') {
+  const { data: sessions, isLoading, error } = usePeriodFocusSessions(period);
   const { user } = useAuthStore();
 
   const chartData = useQuery<BarDay[]>({
-    queryKey: ['stats', user?.id, 'bar-chart', sessions?.length],
+    queryKey: ['stats', user?.id, 'bar-chart', period, sessions?.length],
     queryFn: async () => {
       const today = new Date();
       const todayStr = getLocalDateStr(today);
-      const dayOfWeek = today.getDay();
-      const distanceToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      
-      const monday = new Date(today);
-      monday.setDate(today.getDate() - distanceToMonday);
-      monday.setHours(0, 0, 0, 0);
 
-      // Create a map of date -> minutes
-      const dateMinutesMap: { [dateStr: string]: number } = {};
-      if (sessions) {
-        sessions.forEach((s) => {
-          const d = new Date(s.started_at);
-          const dateStr = getLocalDateStr(d);
-          dateMinutesMap[dateStr] = (dateMinutesMap[dateStr] || 0) + s.duration_min;
-        });
-      }
-
-      const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
       const result: BarDay[] = [];
 
-      for (let i = 0; i < 7; i++) {
-        const current = new Date(monday);
-        current.setDate(monday.getDate() + i);
-        const dateStr = getLocalDateStr(current);
-        const isToday = dateStr === todayStr;
-        const isFuture = current.getTime() > today.getTime() && !isToday;
+      if (period === 'day') {
+        // Hourly breakdown for today (24 hours)
+        const hourMinutesMap: { [hour: number]: number } = {};
+        for (let i = 0; i < 24; i++) {
+          hourMinutesMap[i] = 0;
+        }
 
-        result.push({
-          dayLabel: dayLabels[i],
-          date: dateStr,
-          minutes: dateMinutesMap[dateStr] || 0,
-          isToday,
-          isFuture,
-        });
+        if (sessions) {
+          sessions
+            .filter(s => s.status !== 'interrupted')
+            .forEach((s) => {
+              const d = new Date(s.started_at);
+              if (getLocalDateStr(d) === todayStr) {
+                const hour = d.getHours();
+                hourMinutesMap[hour] = (hourMinutesMap[hour] || 0) + s.duration_min;
+              }
+            });
+        }
+
+        const currentHour = today.getHours();
+
+        for (let i = 0; i < 24; i++) {
+          const ampm = i >= 12 ? 'pm' : 'am';
+          const displayHour = i % 12 === 0 ? 12 : i % 12;
+          const dayLabel = `${displayHour}${ampm}`;
+          const isToday = i === currentHour;
+          const isFuture = i > currentHour;
+
+          result.push({
+            dayLabel,
+            date: `${todayStr}T${String(i).padStart(2, '0')}:00:00`,
+            minutes: hourMinutesMap[i],
+            isToday,
+            isFuture,
+          });
+        }
+      } else if (period === 'week') {
+        const dayOfWeek = today.getDay();
+        const distanceToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - distanceToMonday);
+        monday.setHours(0, 0, 0, 0);
+
+        const dateMinutesMap: { [dateStr: string]: number } = {};
+        if (sessions) {
+          sessions
+            .filter(s => s.status !== 'interrupted')
+            .forEach((s) => {
+              const d = new Date(s.started_at);
+              const dateStr = getLocalDateStr(d);
+              dateMinutesMap[dateStr] = (dateMinutesMap[dateStr] || 0) + s.duration_min;
+            });
+        }
+
+        const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+        for (let i = 0; i < 7; i++) {
+          const current = new Date(monday);
+          current.setDate(monday.getDate() + i);
+          const dateStr = getLocalDateStr(current);
+          const isToday = dateStr === todayStr;
+          const isFuture = current.getTime() > today.getTime() && !isToday;
+
+          result.push({
+            dayLabel: dayLabels[i],
+            date: dateStr,
+            minutes: dateMinutesMap[dateStr] || 0,
+            isToday,
+            isFuture,
+          });
+        }
+      } else {
+        // Month
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0, 0);
+        const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+        const daysInMonth = endOfMonth.getDate();
+
+        const dateMinutesMap: { [dateStr: string]: number } = {};
+        if (sessions) {
+          sessions
+            .filter(s => s.status !== 'interrupted')
+            .forEach((s) => {
+              const d = new Date(s.started_at);
+              const dateStr = getLocalDateStr(d);
+              dateMinutesMap[dateStr] = (dateMinutesMap[dateStr] || 0) + s.duration_min;
+            });
+        }
+
+        for (let i = 1; i <= daysInMonth; i++) {
+          const current = new Date(today.getFullYear(), today.getMonth(), i);
+          const dateStr = getLocalDateStr(current);
+          const isToday = dateStr === todayStr;
+          const isFuture = current.getTime() > today.getTime() && !isToday;
+
+          result.push({
+            dayLabel: String(i),
+            date: dateStr,
+            minutes: dateMinutesMap[dateStr] || 0,
+            isToday,
+            isFuture,
+          });
+        }
       }
 
       return result;
@@ -343,35 +472,52 @@ export function useBarChartData() {
 }
 
 // 4. useSubjectBreakdown Hook
-export function useSubjectBreakdown() {
-  const { data: sessions, isLoading, error } = useWeeklyFocusSessions();
+export function useSubjectBreakdown(period: 'day' | 'week' | 'month') {
+  const { data: sessions, isLoading, error } = usePeriodFocusSessions(period);
   const { user } = useAuthStore();
 
   const breakdownData = useQuery<SubjectSlice[]>({
-    queryKey: ['stats', user?.id, 'subject-breakdown', sessions?.length],
+    queryKey: ['stats', user?.id, 'subject-breakdown', period, sessions?.length],
     queryFn: async () => {
       if (!sessions || sessions.length === 0) return [];
 
-      const subjectMins: { [subject: string]: number } = {};
+      const subjectMins: { [lowerSubject: string]: number } = {};
+      const subjectDisplayNames: { [lowerSubject: string]: string } = {};
       let totalMinutes = 0;
 
       sessions.forEach((s) => {
         if (s.subject) {
-          subjectMins[s.subject] = (subjectMins[s.subject] || 0) + s.duration_min;
-          totalMinutes += s.duration_min;
+          const trimmed = s.subject.trim();
+          if (trimmed) {
+            const lower = trimmed.toLowerCase();
+            subjectMins[lower] = (subjectMins[lower] || 0) + s.duration_min;
+            totalMinutes += s.duration_min;
+            
+            const existingDisplay = subjectDisplayNames[lower];
+            if (!existingDisplay) {
+              subjectDisplayNames[lower] = trimmed;
+            } else {
+              const existingUpper = (existingDisplay.match(/[A-Z]/g) || []).length;
+              const currentUpper = (trimmed.match(/[A-Z]/g) || []).length;
+              if (currentUpper > existingUpper) {
+                subjectDisplayNames[lower] = trimmed;
+              }
+            }
+          }
         }
       });
 
       if (totalMinutes === 0) return [];
 
-      const result: SubjectSlice[] = Object.keys(subjectMins).map((sub) => {
-        const minutes = subjectMins[sub];
+      const result: SubjectSlice[] = Object.keys(subjectMins).map((lower) => {
+        const minutes = subjectMins[lower];
         const percentage = Math.round((minutes * 100) / totalMinutes);
+        const displayName = subjectDisplayNames[lower];
         return {
-          subject: sub,
+          subject: displayName,
           minutes,
           percentage,
-          color: getSubjectColor(sub),
+          color: getSubjectColor(displayName),
         };
       });
 
@@ -766,7 +912,9 @@ export function useEnhancedStats() {
       // TODAY'S SUMMARY
       // ==========================================
       const todaySessions = sessions.filter(s => getLocalDateStr(new Date(s.started_at)) === todayStr);
-      const todayFocusMins = todaySessions.reduce((sum, s) => sum + s.duration_min, 0);
+      const todayFocusMins = todaySessions
+        .filter(s => s.status !== 'interrupted')
+        .reduce((sum, s) => sum + s.duration_min, 0);
       const focusMinsToday = todayFocusMins;
       const hasBlockerToday = todaySessions.length > 0;
       
@@ -777,6 +925,51 @@ export function useEnhancedStats() {
 
       // Tasks completed today
       const todayTasksDone = tasks.filter(t => t.completed_at && getLocalDateStr(new Date(t.completed_at)) === todayStr).length;
+
+      // ==========================================
+      // FOCUS STREAK & SESSIONS RATIO
+      // ==========================================
+      const completedFocusDates = new Set(
+        sessions
+          .filter(s => s.status !== 'interrupted')
+          .map(s => getLocalDateStr(new Date(s.started_at)))
+      );
+
+      let focusStreak = 0;
+      const yesterdayStr = getLocalDateStr(new Date(Date.now() - 24 * 60 * 60 * 1000));
+
+      if (completedFocusDates.has(todayStr)) {
+        focusStreak = 1;
+        const checkDate = new Date();
+        while (true) {
+          checkDate.setDate(checkDate.getDate() - 1);
+          const dateStr = getLocalDateStr(checkDate);
+          if (completedFocusDates.has(dateStr)) {
+            focusStreak++;
+          } else {
+            break;
+          }
+        }
+      } else if (completedFocusDates.has(yesterdayStr)) {
+        focusStreak = 1;
+        const checkDate = new Date();
+        checkDate.setDate(checkDate.getDate() - 1);
+        while (true) {
+          checkDate.setDate(checkDate.getDate() - 1);
+          const dateStr = getLocalDateStr(checkDate);
+          if (completedFocusDates.has(dateStr)) {
+            focusStreak++;
+          } else {
+            break;
+          }
+        }
+      }
+
+      const allTimeCompletedCount = sessions.filter(s => s.status !== 'interrupted').length;
+      const allTimeInterruptedCount = sessions.filter(s => s.status === 'interrupted').length;
+      const allTimeFocusMinutes = sessions
+        .filter(s => s.status !== 'interrupted')
+        .reduce((sum, s) => sum + s.duration_min, 0);
 
       // ==========================================
       // WEEKLY HABIT CONSISTENCY
@@ -933,15 +1126,19 @@ export function useEnhancedStats() {
         }
       });
 
-      // 2. Longest focus session
-      const longestSession = sessions.reduce((max, s) => s.duration_min > max ? s.duration_min : max, 0);
+      // 2. Longest focus session (completed only)
+      const longestSession = sessions
+        .filter(s => s.status !== 'interrupted')
+        .reduce((max, s) => s.duration_min > max ? s.duration_min : max, 0);
 
-      // 3. Best focus day
+      // 3. Best focus day (completed only)
       const dayFocus: Record<string, number> = {};
-      sessions.forEach(s => {
-        const dStr = getLocalDateStr(new Date(s.started_at));
-        dayFocus[dStr] = (dayFocus[dStr] || 0) + s.duration_min;
-      });
+      sessions
+        .filter(s => s.status !== 'interrupted')
+        .forEach(s => {
+          const dStr = getLocalDateStr(new Date(s.started_at));
+          dayFocus[dStr] = (dayFocus[dStr] || 0) + s.duration_min;
+        });
       let bestFocusDayDate = '';
       let bestFocusDayMins = 0;
       Object.keys(dayFocus).forEach(dStr => {
@@ -976,10 +1173,12 @@ export function useEnhancedStats() {
         return getLocalDateStr(mon);
       };
       const weekFocus: Record<string, number> = {};
-      sessions.forEach(s => {
-        const monStr = getMondayOfDate(getLocalDateStr(new Date(s.started_at)));
-        weekFocus[monStr] = (weekFocus[monStr] || 0) + s.duration_min;
-      });
+      sessions
+        .filter(s => s.status !== 'interrupted')
+        .forEach(s => {
+          const monStr = getMondayOfDate(getLocalDateStr(new Date(s.started_at)));
+          weekFocus[monStr] = (weekFocus[monStr] || 0) + s.duration_min;
+        });
       let bestWeekMins = 0;
       Object.keys(weekFocus).forEach(wStr => {
         if (weekFocus[wStr] > bestWeekMins) {
@@ -990,11 +1189,11 @@ export function useEnhancedStats() {
       // ==========================================
       // WEEKLY REPORT CARD
       // ==========================================
-      const thisWeekSessions = sessions.filter(s => weekDates.includes(getLocalDateStr(new Date(s.started_at))));
+      const thisWeekSessions = sessions.filter(s => s.status !== 'interrupted' && weekDates.includes(getLocalDateStr(new Date(s.started_at))));
       const thisWeekMins = thisWeekSessions.reduce((sum, s) => sum + s.duration_min, 0);
       const thisWeekHours = thisWeekMins / 60;
 
-      const lastWeekSessions = sessions.filter(s => lastWeekDates.includes(getLocalDateStr(new Date(s.started_at))));
+      const lastWeekSessions = sessions.filter(s => s.status !== 'interrupted' && lastWeekDates.includes(getLocalDateStr(new Date(s.started_at))));
       const lastWeekMins = lastWeekSessions.reduce((sum, s) => sum + s.duration_min, 0);
       const lastWeekHours = lastWeekMins / 60;
 
@@ -1064,6 +1263,18 @@ export function useEnhancedStats() {
           bestDayHours: thisWeekBestDayMins / 60,
           habitConsistencyRate,
           goalsCompletedThisWeek
+        },
+        focusStats: {
+          focusStreak,
+          completedCount: allTimeCompletedCount,
+          interruptedCount: allTimeInterruptedCount,
+          totalFocusMins: allTimeFocusMinutes,
+          ratioCompleted: allTimeCompletedCount + allTimeInterruptedCount > 0 
+            ? Math.round((allTimeCompletedCount / (allTimeCompletedCount + allTimeInterruptedCount)) * 100) 
+            : 100,
+          ratioInterrupted: allTimeCompletedCount + allTimeInterruptedCount > 0 
+            ? Math.round((allTimeInterruptedCount / (allTimeCompletedCount + allTimeInterruptedCount)) * 100) 
+            : 0,
         }
       };
     }

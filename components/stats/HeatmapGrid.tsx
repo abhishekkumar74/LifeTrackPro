@@ -6,7 +6,7 @@ import {
   Dimensions,
   TouchableOpacity,
 } from 'react-native';
-import Svg, { Rect } from 'react-native-svg';
+import Svg, { Rect, Circle } from 'react-native-svg';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -24,13 +24,13 @@ export interface HeatmapDay {
 interface HeatmapGridProps {
   data?: HeatmapDay[];
   isLoading: boolean;
+  margin?: number;
 }
 
 const numCols = 12;
 const numRows = 8;
 const totalCells = numCols * numRows; // 96
 const gap = 4;
-const margin = 40;
 
 const COLORS = {
   0: '#E8E7E3',
@@ -40,7 +40,7 @@ const COLORS = {
   4: '#5B4FE8',
 };
 
-export const HeatmapGrid = React.memo<HeatmapGridProps>(({ data = [], isLoading }) => {
+export const HeatmapGrid = React.memo<HeatmapGridProps>(({ data = [], isLoading, margin = 72 }) => {
   const { width: screenWidth } = Dimensions.get('window');
   const cellSize = (screenWidth - margin - (numCols - 1) * gap) / numCols;
   const gridHeight = numRows * (cellSize + gap) - gap;
@@ -204,19 +204,33 @@ export const HeatmapGrid = React.memo<HeatmapGridProps>(({ data = [], isLoading 
             const row = idx % numRows;
             const col = Math.floor(idx / numRows);
             const isClickable = !!item.date;
+            const isFirstOfMonth = item.date && item.date.endsWith('-01');
+
+            const x = col * (cellSize + gap);
+            const y = row * (cellSize + gap);
 
             return (
-              <Rect
-                key={idx}
-                x={col * (cellSize + gap)}
-                y={row * (cellSize + gap)}
-                width={cellSize}
-                height={cellSize}
-                rx={2}
-                ry={2}
-                fill={COLORS[item.intensity]}
-                onPress={() => isClickable && handleCellPress(item, col, row)}
-              />
+              <React.Fragment key={idx}>
+                <Rect
+                  x={x}
+                  y={y}
+                  width={cellSize}
+                  height={cellSize}
+                  rx={2}
+                  ry={2}
+                  fill={COLORS[item.intensity]}
+                  onPress={() => isClickable && handleCellPress(item, col, row)}
+                />
+                {isFirstOfMonth && (
+                  <Circle
+                    cx={x + cellSize / 2}
+                    cy={y + cellSize / 2}
+                    r={2.5}
+                    fill={item.intensity >= 3 ? '#FFFFFF' : '#17172A'}
+                    onPress={() => isClickable && handleCellPress(item, col, row)}
+                  />
+                )}
+              </React.Fragment>
             );
           })}
         </Svg>

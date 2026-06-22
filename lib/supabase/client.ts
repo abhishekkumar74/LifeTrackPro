@@ -147,6 +147,7 @@ export type FocusSessionRow = {
   mood: number | null;
   started_at: string;
   ended_at: string;
+  status: 'completed' | 'interrupted';
 }
 
 export type NoteRow = {

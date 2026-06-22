@@ -202,6 +202,7 @@ CREATE TABLE IF NOT EXISTS public.focus_sessions (
   mood INTEGER CHECK (mood >= 1 AND mood <= 5),
   started_at TIMESTAMPTZ NOT NULL,
   ended_at TIMESTAMPTZ NOT NULL CHECK (ended_at > started_at),
+  status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'interrupted')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

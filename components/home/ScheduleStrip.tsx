@@ -7,7 +7,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { ScheduleBlock } from '@/types/app.types';
+import { ScheduleBlock, ScheduleSkipEntry } from '@/types/app.types';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
 
 // Constants
@@ -23,6 +23,13 @@ interface ScheduleStripProps {
   isLoading: boolean;
   onSeeAll: () => void;
   onAddSchedule?: () => void;
+  onPressBlock?: (block: ScheduleBlock) => void;
+  onLongPressBlock?: (block: ScheduleBlock) => void;
+  doneBlockIds?: string[];
+  skippedBlockIds?: string[];
+  skipsLog?: ScheduleSkipEntry[];
+  onMarkDone?: (blockId: string) => void;
+  onSkipToday?: (blockId: string) => void;
 }
 
 export const ScheduleStrip = React.memo<ScheduleStripProps>(({
@@ -30,6 +37,13 @@ export const ScheduleStrip = React.memo<ScheduleStripProps>(({
   isLoading,
   onSeeAll,
   onAddSchedule,
+  onPressBlock,
+  onLongPressBlock,
+  doneBlockIds = [],
+  skippedBlockIds = [],
+  skipsLog = [],
+  onMarkDone,
+  onSkipToday,
 }) => {
   const opacity = useSharedValue(0.4);
 
@@ -152,21 +166,61 @@ export const ScheduleStrip = React.memo<ScheduleStripProps>(({
         </View>
       ) : (
         sortedBlocks.map((block) => {
+          const isDone = doneBlockIds.includes(block.id);
+          const isSkipped = skippedBlockIds.includes(block.id);
+
+          const now = new Date();
+          const currentMinutes = now.getHours() * 60 + now.getMinutes();
+          const eParts = block.end_time.split(':');
+          const endMinutes = eParts.length >= 2 ? parseInt(eParts[0], 10) * 60 + parseInt(eParts[1], 10) : 0;
+          const isMissed = !isDone && !isSkipped && (currentMinutes > endMinutes);
+          const isActive = !isDone && !isSkipped && !isMissed && isBlockActiveNow(block.start_time, block.end_time);
+
+          // Skip limit check
+          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+          const sevenDaysAgo = todayStart - 7 * 24 * 60 * 60 * 1000;
+          const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+          const hasUsedSkipThisWeek = skipsLog.some(entry => {
+            if (entry.blockId !== block.id) return false;
+            const entryDate = new Date(entry.date).getTime();
+            return entryDate >= sevenDaysAgo && entry.date !== todayStr;
+          });
+
+          const skipReason = isSkipped 
+            ? (skipsLog.find(entry => entry.blockId === block.id && entry.date === todayStr)?.reason || 'Skipped')
+            : null;
+
           const accentColor = getSubjectColor(block.subject);
           const timeFormatted = formatTimeString(block.start_time);
           const durationFormatted = calculateDuration(block.start_time, block.end_time);
-          const isActive = isBlockActiveNow(block.start_time, block.end_time);
+
+          let itemStyle: any[] = [styles.blockItem];
+          let colorBarColor = accentColor;
+
+          if (isDone) {
+            itemStyle.push(styles.blockItemCompleted);
+            colorBarColor = '#00B894';
+          } else if (isSkipped) {
+            itemStyle.push(styles.blockItemSkipped);
+            colorBarColor = '#9B9BAF';
+          } else if (isMissed) {
+            itemStyle.push(styles.blockItemMissed);
+            colorBarColor = '#E85858';
+          } else if (isActive) {
+            itemStyle.push(styles.blockItemActive);
+          }
 
           return (
-            <View
+            <TouchableOpacity
               key={block.id}
-              style={[
-                styles.blockItem,
-                isActive && styles.blockItemActive,
-              ]}
+              style={itemStyle}
+              onPress={() => !isSkipped && !isDone && onPressBlock && onPressBlock(block)}
+              onLongPress={() => !isSkipped && !isDone && onLongPressBlock && onLongPressBlock(block)}
+              activeOpacity={isSkipped || isDone ? 1 : 0.8}
             >
               {/* Color Bar */}
-              <View style={[styles.colorBar, { backgroundColor: accentColor }]} />
+              <View style={[styles.colorBar, { backgroundColor: colorBarColor }]} />
 
               {/* Middle Title / Time */}
               <View style={styles.middleArea}>
@@ -176,18 +230,43 @@ export const ScheduleStrip = React.memo<ScheduleStripProps>(({
                       <Text style={styles.nowBadgeText}>NOW</Text>
                     </View>
                   )}
-                  <Text style={styles.timeText}>{timeFormatted}</Text>
+                  {isMissed && (
+                    <View style={styles.missedBadge}>
+                      <Text style={styles.missedBadgeText}>MISSED</Text>
+                    </View>
+                  )}
+                  <Text style={styles.timeText}>
+                    {timeFormatted}
+                    {isSkipped && ` • Skipped (${skipReason})`}
+                  </Text>
                 </View>
-                <Text style={styles.blockTitle} numberOfLines={1}>
+                <Text 
+                  style={[
+                    styles.blockTitle,
+                    isDone && styles.blockTitleCompleted,
+                    isSkipped && styles.blockTitleSkipped
+                  ]} 
+                  numberOfLines={1}
+                >
                   {block.title}
                 </Text>
               </View>
 
-              {/* Right Duration */}
-              {durationFormatted ? (
-                <Text style={styles.durationText}>{durationFormatted}</Text>
-              ) : null}
-            </View>
+              {/* Right area: duration or actions */}
+              <View style={styles.rightActionArea}>
+                {isDone ? (
+                  <View style={styles.statusBadgeCompleted}>
+                    <Text style={styles.statusBadgeTextCompleted}>DONE</Text>
+                  </View>
+                ) : isSkipped ? (
+                  <View style={styles.statusBadgeSkipped}>
+                    <Text style={styles.statusBadgeTextSkipped}>SKIPPED</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.durationText}>{durationFormatted}</Text>
+                )}
+              </View>
+            </TouchableOpacity>
           );
         })
       )}
@@ -340,5 +419,121 @@ const styles = StyleSheet.create({
     height: 11,
     backgroundColor: '#E8E7E3',
     borderRadius: 2,
+  },
+  blockItemCompleted: {
+    backgroundColor: '#F4FBF7',
+    borderColor: '#00B894',
+    borderWidth: 1,
+  },
+  blockItemSkipped: {
+    backgroundColor: '#F5F5F7',
+    borderColor: '#D2D2D7',
+    borderWidth: 1,
+    opacity: 0.8,
+  },
+  blockItemMissed: {
+    backgroundColor: '#FFF5F5',
+    borderColor: '#E85858',
+    borderWidth: 1,
+  },
+  rightActionArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginLeft: 8,
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionBtnDone: {
+    backgroundColor: '#00B894',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnTextDone: {
+    color: '#FFFFFF',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  actionBtnSkip: {
+    backgroundColor: '#F2F1EE',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#D2D2D7',
+  },
+  actionBtnTextSkip: {
+    color: '#17172A',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  statusBadgeCompleted: {
+    backgroundColor: 'rgba(0, 184, 148, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusBadgeTextCompleted: {
+    color: '#00B894',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  statusBadgeSkipped: {
+    backgroundColor: 'rgba(155, 155, 175, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusBadgeTextSkipped: {
+    color: '#9B9BAF',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  skipLimitBadge: {
+    backgroundColor: '#F2F1EE',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  skipLimitText: {
+    color: '#9B9BAF',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  missedBadge: {
+    backgroundColor: '#E85858',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginRight: 6,
+  },
+  missedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontFamily: 'DMSans-Bold',
+    fontWeight: 'bold',
+  },
+  blockTitleCompleted: {
+    color: '#9B9BAF',
+  },
+  blockTitleSkipped: {
+    color: '#9B9BAF',
   },
 });

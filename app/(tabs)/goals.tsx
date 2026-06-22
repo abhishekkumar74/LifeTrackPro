@@ -413,15 +413,17 @@ export default function GoalsScreen(): React.JSX.Element {
           standaloneTasks.length > 0 ? (
             <View style={styles.tasksSection}>
               <Text style={styles.sectionHeader}>{SECTION_TASKS}</Text>
-              {standaloneTasks.map((task) => (
-                <TaskItem
-                  key={task.id}
-                  task={task}
-                  onComplete={handleCompleteTask}
-                  onReschedule={handleReschedule}
-                  onDelete={handleDelete}
-                />
-              ))}
+              <View style={styles.tasksContainer}>
+                {standaloneTasks.map((task) => (
+                  <TaskItem
+                    key={task.id}
+                    task={task}
+                    onComplete={handleCompleteTask}
+                    onReschedule={handleReschedule}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </View>
             </View>
           ) : null
         }
@@ -771,6 +773,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: BORDER_COLOR,
     paddingTop: 16,
+  },
+  tasksContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    overflow: 'hidden',
   },
   sectionHeader: {
     fontFamily: 'DMSans-Medium',

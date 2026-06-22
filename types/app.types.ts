@@ -103,6 +103,7 @@ export interface FocusSession {
   mood: number | null; // scale 1-5
   started_at: string;
   ended_at: string;
+  status: 'completed' | 'interrupted';
 }
 
 export interface Note {
@@ -179,3 +180,10 @@ export interface HomeDashboardStats {
   totalTasksToday: number;
   currentStreak: number;
 }
+
+export interface ScheduleSkipEntry {
+  blockId: string;
+  date: string;
+  reason: 'Sick' | 'Travelling' | 'Other';
+}
+

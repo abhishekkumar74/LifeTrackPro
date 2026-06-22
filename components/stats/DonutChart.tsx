@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
   withSequence,
   useAnimatedProps,
+  SharedValue,
 } from 'react-native-reanimated';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -29,6 +30,54 @@ const radius = 50;
 const circumference = 2 * Math.PI * radius; // ~314.16
 const svgSize = 130;
 const centerPos = svgSize / 2;
+
+interface DonutSliceProps {
+  slice: SubjectSlice & { offset: number };
+  totalSlices: number;
+  centerPos: number;
+  radius: number;
+  circumference: number;
+  animatedMultiplier: SharedValue<number>;
+}
+
+const DonutSlice: React.FC<DonutSliceProps> = ({
+  slice,
+  totalSlices,
+  centerPos,
+  radius,
+  circumference,
+  animatedMultiplier,
+}) => {
+  const startOffset = -(slice.offset / 100) * circumference;
+
+  const animatedProps = useAnimatedProps(() => {
+    const scale = animatedMultiplier.value;
+    const currentLength = (slice.percentage / 100) * circumference * scale;
+    // 2 deg gap = (2 / 360) * 314.16 = 1.74px gap
+    const gapLength = totalSlices > 1 ? 1.74 : 0;
+    const drawLength = Math.max(0, currentLength - gapLength);
+
+    return {
+      strokeDasharray: `${drawLength} ${circumference}`,
+    };
+  });
+
+  return (
+    <AnimatedCircle
+      cx={centerPos}
+      cy={centerPos}
+      r={radius}
+      stroke={slice.color}
+      strokeWidth={16}
+      fill="transparent"
+      strokeDashoffset={startOffset}
+      animatedProps={animatedProps}
+      rotation={-90}
+      originX={centerPos}
+      originY={centerPos}
+    />
+  );
+};
 
 export const DonutChart: React.FC<DonutChartProps> = ({
   data = [],
@@ -106,39 +155,17 @@ export const DonutChart: React.FC<DonutChartProps> = ({
       <View style={styles.chartWrapper}>
         <Svg width={svgSize} height={svgSize}>
           {/* Rotate circles by -90 deg so donut starts at 12 o'clock */}
-          {slicesWithOffsets.map((slice, index) => {
-            const startOffset = -(slice.offset / 100) * circumference;
-            
-            // Custom hook to animate the stroke length growing clockwise
-            const animatedProps = useAnimatedProps(() => {
-              const scale = animatedMultiplier.value;
-              const currentLength = (slice.percentage / 100) * circumference * scale;
-              // 2 deg gap = (2 / 360) * 314.16 = 1.74px gap
-              const gapLength = totalSlices > 1 ? 1.74 : 0;
-              const drawLength = Math.max(0, currentLength - gapLength);
-
-              return {
-                strokeDasharray: `${drawLength} ${circumference}`,
-              };
-            });
-
-            return (
-              <AnimatedCircle
-                key={index}
-                cx={centerPos}
-                cy={centerPos}
-                r={radius}
-                stroke={slice.color}
-                strokeWidth={16}
-                fill="transparent"
-                strokeDashoffset={startOffset}
-                animatedProps={animatedProps}
-                rotation={-90}
-                originX={centerPos}
-                originY={centerPos}
-              />
-            );
-          })}
+          {slicesWithOffsets.map((slice, index) => (
+            <DonutSlice
+              key={index}
+              slice={slice}
+              totalSlices={totalSlices}
+              centerPos={centerPos}
+              radius={radius}
+              circumference={circumference}
+              animatedMultiplier={animatedMultiplier}
+            />
+          ))}
 
           {/* Center Text */}
           <SvgText

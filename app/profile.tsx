@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
@@ -183,6 +183,7 @@ const SUBCATEGORIES: Record<UserCategory, string[]> = {
 
 export default function ProfileScreen(): React.JSX.Element {
   useAndroidBackHandler();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { profile, setProfile } = useAuthStore();
   const showToast = useUiStore((state) => state.showToast);
@@ -610,7 +611,7 @@ export default function ProfileScreen(): React.JSX.Element {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent}>
         {/* HEADER */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top : 20 }]}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
@@ -859,6 +860,19 @@ export default function ProfileScreen(): React.JSX.Element {
               })}
             </View>
           </View>
+
+          {/* Manage Routines */}
+          <TouchableOpacity
+            style={[styles.row, { marginTop: 12, borderTopWidth: 1, borderTopColor: '#F2F1EE', paddingTop: 12 }]}
+            onPress={() => router.push('/routines')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.rowLabelCol}>
+              <Text style={styles.rowTitle}>Manage Routines</Text>
+              <Text style={styles.rowSubtitle}>Edit or delete recurring daily schedules</Text>
+            </View>
+            <ChevronRight size={16} color="#9B9BAF" />
+          </TouchableOpacity>
         </View>
 
         {/* DATA & PRIVACY SECTION */}
@@ -887,7 +901,7 @@ export default function ProfileScreen(): React.JSX.Element {
 
           <TouchableOpacity
             style={styles.row}
-            onPress={() => Linking.openURL('https://lifetrackpro.app/privacy')}
+            onPress={() => router.push('/privacy')}
             activeOpacity={0.7}
           >
             <View style={styles.rowLabelCol}>
@@ -911,7 +925,7 @@ export default function ProfileScreen(): React.JSX.Element {
 
           <TouchableOpacity
             style={styles.row}
-            onPress={() => Linking.openURL('https://lifetrackpro.app/terms')}
+            onPress={() => router.push('/terms')}
             activeOpacity={0.7}
           >
             <View style={styles.rowLabelCol}>
