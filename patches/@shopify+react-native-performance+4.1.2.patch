@@ -1,0 +1,21 @@
+diff --git a/node_modules/@shopify/react-native-performance/android/src/main/kotlin/com/shopify/reactnativeperformance/PerformanceMarker.kt b/node_modules/@shopify/react-native-performance/android/src/main/kotlin/com/shopify/reactnativeperformance/PerformanceMarker.kt
+index 19b8fb4..dfdf1a3 100644
+--- a/node_modules/@shopify/react-native-performance/android/src/main/kotlin/com/shopify/reactnativeperformance/PerformanceMarker.kt
++++ b/node_modules/@shopify/react-native-performance/android/src/main/kotlin/com/shopify/reactnativeperformance/PerformanceMarker.kt
+@@ -122,11 +122,11 @@ class PerformanceMarkerManager : SimpleViewManager<PerformanceMarker>() {
+     }
+ 
+     override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> {
+-        return MapBuilder.builder<String, Any>().put(
+-                "onRenderComplete",
+-                MapBuilder.of(
+-                        "registrationName", "onRenderComplete")
+-        ).build();
++        return mutableMapOf(
++            "onRenderComplete" to mapOf(
++                "registrationName" to "onRenderComplete"
++            )
++        )
+     }
+ 
+     override fun getName() = "PerformanceMarker"
