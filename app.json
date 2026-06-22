@@ -15,12 +15,11 @@
       "infoPlist": {
         "UIBackgroundModes": [
           "audio",
-          "fetch",
-          "audio",
           "fetch"
         ],
         "NSMicrophoneUsageDescription": "LifeTrack Pro does not use the microphone.",
-        "NSMotionUsageDescription": "Used for haptic feedback during focus sessions."
+        "NSMotionUsageDescription": "Used for haptic feedback during focus sessions.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
