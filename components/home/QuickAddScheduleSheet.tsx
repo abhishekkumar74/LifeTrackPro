@@ -163,7 +163,12 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
     const endTimeObj = new Date(startTimeDate.getTime() + durationMins * 60 * 1000);
     const endHour = String(endTimeObj.getHours()).padStart(2, '0');
     const endMin = String(endTimeObj.getMinutes()).padStart(2, '0');
-    const endTimeStr = `${endHour}:${endMin}:00`;
+    let endTimeStr = `${endHour}:${endMin}:00`;
+
+    // Prevent crossing midnight which violates database check constraint (end_time > start_time)
+    if (endTimeStr <= startTimeStr) {
+      endTimeStr = '23:59:00';
+    }
 
     // Determine repeating attributes
     let days: number[] = [];
