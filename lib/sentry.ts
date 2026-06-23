@@ -49,6 +49,25 @@ export function captureError(
   error: unknown,
   context?: Record<string, string>
 ) {
+  const errStr = typeof error === 'string'
+    ? error
+    : (error as any)?.message || (error as any)?.name || '';
+
+  const isIgnored = [
+    'Network request failed',
+    'Load failed',
+    'AbortError',
+    'aborted',
+    'cancelled'
+  ].some(ignored => errStr.toLowerCase().includes(ignored.toLowerCase()));
+
+  if (isIgnored) {
+    if (__DEV__) {
+      console.log('[Ignored Error]', error);
+    }
+    return;
+  }
+
   if (__DEV__) {
     console.error('[Error]', error);
     return;

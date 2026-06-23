@@ -9,6 +9,20 @@ export function handleSupabaseError(
   if (!error) return;
 
   const err = error as any;
+  const message = err?.message || '';
+  const isAbort = 
+    message.includes('AbortError') || 
+    message.includes('aborted') || 
+    message.includes('cancelled') ||
+    err?.name === 'AbortError';
+
+  if (isAbort) {
+    if (__DEV__) {
+      console.log(`[Request Aborted] Context: ${context}`, error);
+    }
+    return;
+  }
+
   const status = err?.status ?? err?.code;
 
   // User-friendly messages per error type

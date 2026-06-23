@@ -71,4 +71,16 @@ describe('handleSupabaseError', () => {
     expect(useUiStore.getState().showToast).toHaveBeenCalledWith('Too many requests. Wait a moment.', 'error');
     expect(captureError).toHaveBeenCalledWith(mockError, { context: 'test-context' });
   });
+
+  test('ignores AbortError/cancellation errors silently', async () => {
+    const mockError = { message: 'AbortError: Aborted', name: 'AbortError' };
+
+    handleSupabaseError(mockError, 'test-context');
+
+    await new Promise(process.nextTick);
+
+    expect(NetInfo.fetch).not.toHaveBeenCalled();
+    expect(useUiStore.getState().showToast).not.toHaveBeenCalled();
+    expect(captureError).not.toHaveBeenCalled();
+  });
 });
