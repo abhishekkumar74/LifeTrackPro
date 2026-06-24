@@ -4,17 +4,17 @@ describe('Date Utilities', () => {
   test('daysFromNow returns correct number of days', () => {
     expect(daysFromNow('')).toBe(0);
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toLocaleDateString('en-CA');
     expect(daysFromNow(todayStr)).toBe(0);
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const tomorrowStr = tomorrow.toLocaleDateString('en-CA');
     expect(daysFromNow(tomorrowStr)).toBe(1);
 
     const past = new Date();
     past.setDate(past.getDate() - 5);
-    const pastStr = past.toISOString().split('T')[0];
+    const pastStr = past.toLocaleDateString('en-CA');
     expect(daysFromNow(pastStr)).toBe(0);
   });
 

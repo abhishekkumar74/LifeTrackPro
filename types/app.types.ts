@@ -187,3 +187,15 @@ export interface ScheduleSkipEntry {
   reason: 'Sick' | 'Travelling' | 'Other';
 }
 
+export interface ScheduleLog {
+  id: string;
+  user_id: string;
+  block_id: string;
+  date: string;
+  status: 'completed' | 'skipped' | 'missed';
+  skip_reason: 'Sick' | 'Travelling' | 'Other' | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+

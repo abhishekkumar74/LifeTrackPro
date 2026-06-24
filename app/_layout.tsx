@@ -357,6 +357,8 @@ function RootLayout() {
                   <Stack.Screen name="profile" options={{ headerShown: false }} />
                   <Stack.Screen name="habit/[id]" options={{ headerShown: false }} />
                   <Stack.Screen name="habits/index" options={{ headerShown: false }} />
+                  <Stack.Screen name="routine_analytics" options={{ headerShown: false }} />
+                  <Stack.Screen name="routine_detail" options={{ headerShown: false }} />
                 </Stack>
                 <Toast />
               </ErrorBoundary>

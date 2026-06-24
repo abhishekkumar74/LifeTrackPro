@@ -217,6 +217,17 @@ export type DailyCheckinRow = {
   updated_at: string;
 }
 
+export type ScheduleLogRow = {
+  id: string;
+  user_id: string;
+  block_id: string;
+  date: string;
+  status: string;
+  skip_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- TABLE INTERFACES ---
 
 export type ProfileTable = {
@@ -352,6 +363,17 @@ export type DailyCheckinTable = {
   Relationships: [];
 }
 
+export type ScheduleLogTable = {
+  Row: ScheduleLogRow;
+  Insert: Omit<ScheduleLogRow, 'id' | 'created_at' | 'updated_at'> & {
+    id?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  Update: Partial<ScheduleLogRow>;
+  Relationships: [];
+}
+
 /**
  * Generic schema types definition for Supabase client.
  * Provides custom typings for relational database mapping.
@@ -371,6 +393,7 @@ export type Database = {
       syllabus_topics: SyllabusTopicTable;
       study_rooms: StudyRoomTable;
       daily_checkins: DailyCheckinTable;
+      schedule_logs: ScheduleLogTable;
     };
     Views: {
       [_ in never]: never;

@@ -23,56 +23,46 @@ export default function ManageRoutinesScreen() {
   const router = useRouter();
   const [editingBlock, setEditingBlock] = useState<ScheduleBlock | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
-  const [skipsLog, setSkipsLog] = useState<ScheduleSkipEntry[]>([]);
-  const [doneBlockIds, setDoneBlockIds] = useState<string[]>([]);
-  const [skippedBlockIds, setSkippedBlockIds] = useState<string[]>([]);
-
-  const { data: blocks = [], isLoading, refetch } = useQuery<ScheduleBlock[]>({
+  const { data = { blocks: [], doneBlockIds: [], skippedBlockIds: [], skipsLog: [] }, isLoading, refetch } = useQuery({
     queryKey: ['manageRoutinesList'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
+      const userId = session.user.id;
 
-      const { data, error } = await supabase
-        .from('schedule_blocks')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .order('start_time', { ascending: true });
+      const todayStr = new Date().toLocaleDateString('en-CA');
+      
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const yyyy = thirtyDaysAgo.getFullYear();
+      const mm = String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0');
+      const dd = String(thirtyDaysAgo.getDate()).padStart(2, '0');
+      const thirtyDaysAgoStr = `${yyyy}-${mm}-${dd}`;
 
-      if (error) throw error;
-      return data as ScheduleBlock[];
-    },
+      const [blocksRes, logsRes] = await Promise.all([
+        supabase.from('schedule_blocks').select('*').eq('user_id', userId).order('start_time', { ascending: true }),
+        supabase.from('schedule_logs').select('*').eq('user_id', userId).gte('date', thirtyDaysAgoStr)
+      ]);
+
+      if (blocksRes.error) throw blocksRes.error;
+      if (logsRes.error) throw logsRes.error;
+
+      const blocks = blocksRes.data as ScheduleBlock[];
+      const logs = logsRes.data || [];
+
+      const doneBlockIds = logs.filter(l => l.date === todayStr && l.status === 'completed').map(l => l.block_id);
+      const skippedBlockIds = logs.filter(l => l.date === todayStr && l.status === 'skipped').map(l => l.block_id);
+      const skipsLog: ScheduleSkipEntry[] = logs.filter(l => l.status === 'skipped').map(l => ({
+        blockId: l.block_id,
+        date: l.date,
+        reason: l.skip_reason as any || 'Other'
+      }));
+
+      return { blocks, doneBlockIds, skippedBlockIds, skipsLog };
+    }
   });
 
-  useEffect(() => {
-    const loadState = async () => {
-      try {
-        const today = new Date();
-        const todayStr = today.toLocaleDateString('en-CA');
-
-        // 1. Load done blocks
-        const storedDone = await AsyncStorage.getItem(`done_blocks_${todayStr}`);
-        if (storedDone) {
-          setDoneBlockIds(JSON.parse(storedDone));
-        }
-
-        // 2. Load skipped blocks
-        const storedSkipped = await AsyncStorage.getItem(`skipped_blocks_${todayStr}`);
-        if (storedSkipped) {
-          setSkippedBlockIds(JSON.parse(storedSkipped));
-        }
-
-        // 3. Load global skips log
-        const storedSkipsLog = await AsyncStorage.getItem('schedule_skips_log');
-        if (storedSkipsLog) {
-          setSkipsLog(JSON.parse(storedSkipsLog));
-        }
-      } catch (err) {
-        console.error('Failed to load skips/done state inside Settings', err);
-      }
-    };
-    loadState();
-  }, []);
+  const { blocks, doneBlockIds, skippedBlockIds, skipsLog } = data;
 
   const formatTimeString = (timeStr: string) => {
     if (!timeStr) return '';
@@ -99,26 +89,30 @@ export default function ManageRoutinesScreen() {
       const today = new Date();
       const todayStr = today.toLocaleDateString('en-CA');
 
-      // 1. Add block ID to skipped list for today
-      const newSkipped = [...skippedBlockIds, blockId];
-      setSkippedBlockIds(newSkipped);
-      await AsyncStorage.setItem(`skipped_blocks_${todayStr}`, JSON.stringify(newSkipped));
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
 
-      // 2. Add entry to global skips log
-      const newEntry: ScheduleSkipEntry = {
-        blockId,
-        date: todayStr,
-        reason,
-      };
-      const newSkipsLog = [...skipsLog, newEntry];
-      setSkipsLog(newSkipsLog);
-      await AsyncStorage.setItem('schedule_skips_log', JSON.stringify(newSkipsLog));
+      const { error } = await supabase
+        .from('schedule_logs')
+        .upsert(
+          {
+            user_id: session.user.id,
+            block_id: blockId,
+            date: todayStr,
+            status: 'skipped',
+            skip_reason: reason
+          },
+          { onConflict: 'user_id,block_id,date' }
+        );
+
+      if (error) throw error;
 
       Alert.alert('Success', 'Routine skipped for today.');
+      refetch();
     } catch (err) {
       console.error('Failed to perform skip today inside Settings', err);
     }
-  }, [skippedBlockIds, skipsLog]);
+  }, [refetch]);
 
   const handleSkipBlockToday = useCallback((blockId: string) => {
     const today = new Date();

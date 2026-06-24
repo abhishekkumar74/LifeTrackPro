@@ -11,8 +11,9 @@ import { queryClient } from '@/lib/query-client';
 import { useSyllabus } from '@/lib/hooks/use-syllabus';
 import { useCompleteTask } from '@/lib/hooks/use-tasks';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
-import { ScheduleBlock, ScheduleSkipEntry } from '@/types/app.types';
+import { ScheduleBlock, ScheduleSkipEntry, ScheduleLog } from '@/types/app.types';
 import { getTodayLocal } from '@/lib/utils/date';
+import { supabase } from '@/lib/supabase/client';
 
 // Import Home Dashboard Components
 import { HomeHeader } from '@/components/home/HomeHeader';
@@ -41,47 +42,117 @@ export default function HomeDashboardScreen(): React.JSX.Element {
   const [taskSheetVisible, setTaskSheetVisible] = useState(false);
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false);
   const [editingScheduleBlock, setEditingScheduleBlock] = useState<ScheduleBlock | null>(null);
-  const [doneBlockIds, setDoneBlockIds] = useState<string[]>([]);
-  const [skippedBlockIds, setSkippedBlockIds] = useState<string[]>([]);
-  const [skipsLog, setSkipsLog] = useState<ScheduleSkipEntry[]>([]);
   const [todayScheduleSnapshot, setTodayScheduleSnapshot] = useState<ScheduleBlock[]>([]);
   const completeTaskMutation = useCompleteTask();
 
-  // Load schedule states on mount
+  const { doneBlockIds = [], skippedBlockIds = [], skipsLog = [] } = stats;
+
+  // Synchronize missed routines for the last 3 days
   useEffect(() => {
-    const loadState = async () => {
+    if (stats.isLoading || !user) return;
+
+    const syncMissedRoutines = async () => {
       try {
-        const todayStr = getTodayLocal();
-
-        // 1. Load done blocks
-        const storedDone = await AsyncStorage.getItem(`done_blocks_${todayStr}`);
-        if (storedDone) {
-          setDoneBlockIds(JSON.parse(storedDone));
-        } else {
-          setDoneBlockIds([]);
+        const todayObj = new Date();
+        const datesToCheck = [];
+        for (let i = 0; i < 3; i++) {
+          const d = new Date(todayObj);
+          d.setDate(todayObj.getDate() - i);
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          datesToCheck.push(`${yyyy}-${mm}-${dd}`);
         }
 
-        // 2. Load skipped blocks
-        const storedSkipped = await AsyncStorage.getItem(`skipped_blocks_${todayStr}`);
-        if (storedSkipped) {
-          setSkippedBlockIds(JSON.parse(storedSkipped));
-        } else {
-          setSkippedBlockIds([]);
+        // Fetch all blocks
+        const { data: blocks, error: blocksError } = await supabase
+          .from('schedule_blocks')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+
+        if (blocksError) throw blocksError;
+        if (!blocks || blocks.length === 0) return;
+
+        // Fetch all logs for these 3 dates
+        const { data: existingLogs, error: logsError } = await supabase
+          .from('schedule_logs')
+          .select('*')
+          .eq('user_id', user.id)
+          .in('date', datesToCheck);
+
+        if (logsError) throw logsError;
+
+        const logsMap = new Set(
+          (existingLogs || []).map((l: any) => `${l.block_id}_${l.date}`)
+        );
+
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+        const missedLogsToInsert = [];
+
+        for (const dateStr of datesToCheck) {
+          const isToday = dateStr === datesToCheck[0];
+          const dateObj = new Date(dateStr);
+          const dayOfWeek = dateObj.getDay();
+
+          for (const block of blocks) {
+            let isScheduled = false;
+            if (block.specific_date) {
+              isScheduled = block.specific_date === dateStr;
+            } else if (block.days) {
+              isScheduled = block.days.includes(dayOfWeek);
+            }
+
+            if (!isScheduled) continue;
+
+            let isExpired = false;
+            if (!isToday) {
+              isExpired = true;
+            } else {
+              const eParts = block.end_time.split(':');
+              const endMinutes = eParts.length >= 2 ? parseInt(eParts[0], 10) * 60 + parseInt(eParts[1], 10) : 0;
+              isExpired = currentMinutes > endMinutes;
+            }
+
+            if (!isExpired) continue;
+
+            const key = `${block.id}_${dateStr}`;
+            if (!logsMap.has(key)) {
+              missedLogsToInsert.push({
+                user_id: user.id,
+                block_id: block.id,
+                date: dateStr,
+                status: 'missed',
+              });
+            }
+          }
         }
 
-        // 3. Load global skips log
-        const storedSkipsLog = await AsyncStorage.getItem('schedule_skips_log');
-        if (storedSkipsLog) {
-          setSkipsLog(JSON.parse(storedSkipsLog));
-        } else {
-          setSkipsLog([]);
+        if (missedLogsToInsert.length > 0) {
+          console.log(`[SYNC MISSED] Inserting ${missedLogsToInsert.length} missed routine logs`);
+          const { error: insertError } = await supabase
+            .from('schedule_logs')
+            .upsert(missedLogsToInsert, { onConflict: 'user_id,block_id,date' });
+
+          if (insertError) {
+            console.error('Failed to sync missed routines:', insertError);
+          } else {
+            stats.refetch();
+          }
         }
       } catch (err) {
-        console.error('Failed to load schedule state', err);
+        console.error('Error syncing missed routines:', err);
       }
     };
-    loadState();
-  }, []);
+
+    const timer = setTimeout(() => {
+      syncMissedRoutines();
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [stats.isLoading, user]);
 
   // Manage daily schedule snapshot and merge newly created routines
   useEffect(() => {

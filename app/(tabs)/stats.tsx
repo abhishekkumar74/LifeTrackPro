@@ -423,6 +423,89 @@ Stay focused, track your goals! 🚀`;
     );
   };
 
+  // Render Compact Schedule Compliance card with circular progress donut ring
+  const renderScheduleComplianceCompact = (scheduleGrid: any[], completionRate: number) => {
+    if (scheduleGrid.length === 0) {
+      return (
+        <View style={styles.emptyGridState}>
+          <Text style={styles.emptyGridText}>No routine schedules active this week</Text>
+        </View>
+      );
+    }
+
+    let totalSlots = 0;
+    let completedSlots = 0;
+    scheduleGrid.forEach((item) => {
+      totalSlots += item.statuses.filter((s: any) => s.isScheduled && s.status !== 'pending').length;
+      completedSlots += item.statuses.filter((s: any) => s.status === 'completed').length;
+    });
+
+    // Donut chart calculations
+    const size = 70;
+    const strokeWidth = 6;
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (circumference * completionRate) / 100;
+
+    return (
+      <TouchableOpacity
+        onPress={() => router.push('/routine_analytics')}
+        style={styles.complianceCompactCard}
+        activeOpacity={0.7}
+      >
+        <View style={styles.complianceDonutContainer}>
+          <Svg width={size} height={size}>
+            {/* Background Circle */}
+            <Circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke="#F2F1EE"
+              strokeWidth={strokeWidth}
+              fill="transparent"
+            />
+            {/* Foreground Progress Circle */}
+            <Circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke="#5B4FE8"
+              strokeWidth={strokeWidth}
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+              fill="transparent"
+              // Rotate circle to start from top
+              transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            />
+            {/* Percentage Text inside Circle */}
+            <SvgText
+              x="50%"
+              y="50%"
+              dy="4"
+              textAnchor="middle"
+              fill="#17172A"
+              fontSize="14"
+              fontWeight="bold"
+              fontFamily="DMSans-Bold"
+            >
+              {`${completionRate}%`}
+            </SvgText>
+          </Svg>
+        </View>
+        <View style={styles.complianceDetailsContainer}>
+          <Text style={styles.complianceCardTitle}>Weekly Compliance</Text>
+          <Text style={styles.complianceCardStats}>
+            {completedSlots} of {totalSlots} sessions completed
+          </Text>
+          <Text style={styles.complianceCardSubtitle}>
+            Tap to view routine history & details →
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -780,6 +863,32 @@ Stay focused, track your goals! 🚀`;
               </View>
             ) : (
               renderHabitConsistency(enhancedStats?.habitConsistency.grid || [])
+            )}
+          </View>
+
+          {/* ==========================================
+              SCHEDULE COMPLIANCE SECTION
+              ========================================== */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeading}>Schedule Compliance</Text>
+            {!enhancedStatsQuery.isLoading && enhancedStats?.scheduleCompliance && (
+              <Text style={styles.sectionSubheading}>
+                {enhancedStats.scheduleCompliance.completionRate}% completed this week
+              </Text>
+            )}
+          </View>
+          <View style={styles.sectionCard}>
+            {enhancedStatsQuery.isLoading ? (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10 }}>
+                {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                  <Skeleton key={i} width={30} height={30} borderRadius={6} />
+                ))}
+              </View>
+            ) : (
+              renderScheduleComplianceCompact(
+                enhancedStats?.scheduleCompliance.grid || [],
+                enhancedStats?.scheduleCompliance.completionRate || 0
+              )
             )}
           </View>
 
@@ -1778,5 +1887,80 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     alignItems: 'center',
     width: '100%',
+  },
+  scheduleBlockColorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  scheduleCircleNotScheduled: {
+    backgroundColor: '#F7F6F3',
+    borderWidth: 0,
+    opacity: 0.15,
+  },
+  scheduleCircleSkipped: {
+    backgroundColor: '#9B9BAF',
+  },
+  scheduleSkipIcon: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontFamily: 'DMSans-Bold',
+    fontWeight: 'bold',
+  },
+  legendContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 4,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  legendLabel: {
+    fontFamily: 'DMSans',
+    fontSize: 10,
+    color: '#5C5C70',
+  },
+  complianceCompactCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  complianceDonutContainer: {
+    marginRight: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  complianceDetailsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  complianceCardTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
+    color: '#17172A',
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  complianceCardStats: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#5C5C70',
+    marginBottom: 6,
+  },
+  complianceCardSubtitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#5B4FE8',
+    fontWeight: '600',
   },
 });

@@ -241,10 +241,10 @@ export default function FocusScreen(): React.JSX.Element {
 
       // Check if we should mark a linked routine block as done
       if (status === 'completed' && params.routineBlockId && params.routineStartTime && params.routineEndTime) {
-        // Validation 1: must be >= 25 minutes
-        const isDurationValid = focusMinutes >= 25;
+        // Validation 1: must be >= 25 minutes (or >= 1 minute in development mode for easy testing)
+        const isDurationValid = __DEV__ ? focusMinutes >= 1 : focusMinutes >= 25;
 
-        // Validation 2: must be completed within the scheduled window [routineStartTime - 15, routineEndTime + 60]
+        // Validation 2: must be completed within the scheduled window (always valid in development)
         const now = new Date();
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
@@ -261,25 +261,38 @@ export default function FocusScreen(): React.JSX.Element {
         }
 
         let isTimeWindowValid = false;
-        const windowStart = startM - 15;
-        const windowEnd = endM + 60;
-
-        if (currentMinutes >= windowStart && currentMinutes <= windowEnd) {
+        if (__DEV__) {
           isTimeWindowValid = true;
-        } else if (endM >= 1440) {
-          const adjMinutes = currentMinutes + 1440;
-          if (adjMinutes >= windowStart && adjMinutes <= windowEnd) {
+        } else {
+          const windowStart = startM - 15;
+          const windowEnd = endM + 60;
+
+          if (currentMinutes >= windowStart && currentMinutes <= windowEnd) {
             isTimeWindowValid = true;
+          } else if (endM >= 1440) {
+            const adjMinutes = currentMinutes + 1440;
+            if (adjMinutes >= windowStart && adjMinutes <= windowEnd) {
+              isTimeWindowValid = true;
+            }
           }
         }
 
         if (isDurationValid && isTimeWindowValid) {
           const todayStr = new Date().toLocaleDateString('en-CA');
-          const storedDone = await AsyncStorage.getItem(`done_blocks_${todayStr}`);
-          const doneIds: string[] = storedDone ? JSON.parse(storedDone) : [];
-          if (!doneIds.includes(params.routineBlockId)) {
-            const updated = [...doneIds, params.routineBlockId];
-            await AsyncStorage.setItem(`done_blocks_${todayStr}`, JSON.stringify(updated));
+          const { error: logError } = await supabase
+            .from('schedule_logs')
+            .upsert(
+              {
+                user_id: session.user.id,
+                block_id: params.routineBlockId,
+                date: todayStr,
+                status: 'completed',
+              },
+              { onConflict: 'user_id,block_id,date' }
+            );
+
+          if (logError) {
+            console.error('Failed to log routine completion in database:', logError);
           }
           useUiStore.getState().showToast('Routine block marked Done!', 'success');
         } else {

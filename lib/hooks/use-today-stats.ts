@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { Task, Habit, ScheduleBlock, Goal } from '@/types/app.types';
 import { getTodayLocal } from '@/lib/utils/date';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
+import { Goal, Habit, ScheduleBlock, ScheduleSkipEntry, Task } from '@/types/app.types';
+import { useCallback, useEffect, useState } from 'react';
 
 export interface TodayStats {
   topTask: Task | null;
@@ -13,15 +13,18 @@ export interface TodayStats {
   focusStreak: number;
   habits: (Habit & { completedToday: boolean })[];
   nextBlocks: ScheduleBlock[];
-  primaryGoal: (Goal & { 
+  primaryGoal: (Goal & {
     totalTasks: number;
-    doneTasks: number; 
+    doneTasks: number;
   }) | null;
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
   updateHabitCompletedToday: (habitId: string, completed: boolean) => void;
   todayTasks: Task[];
+  doneBlockIds: string[];
+  skippedBlockIds: string[];
+  skipsLog: ScheduleSkipEntry[];
 }
 
 export function useTodayStats(): TodayStats {
@@ -38,6 +41,9 @@ export function useTodayStats(): TodayStats {
     nextBlocks: ScheduleBlock[];
     primaryGoal: (Goal & { totalTasks: number; doneTasks: number }) | null;
     todayTasks: Task[];
+    doneBlockIds: string[];
+    skippedBlockIds: string[];
+    skipsLog: ScheduleSkipEntry[];
   }>({
     topTask: null,
     focusMinutesToday: 0,
@@ -49,6 +55,9 @@ export function useTodayStats(): TodayStats {
     nextBlocks: [],
     primaryGoal: null,
     todayTasks: [],
+    doneBlockIds: [],
+    skippedBlockIds: [],
+    skipsLog: [],
   });
 
   const fetchStats = useCallback(async () => {
@@ -66,6 +75,13 @@ export function useTodayStats(): TodayStats {
       const today = new Date();
       const todayStr = getTodayLocal();
 
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const yyyy = thirtyDaysAgo.getFullYear();
+      const mm = String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0');
+      const dd = String(thirtyDaysAgo.getDate()).padStart(2, '0');
+      const thirtyDaysAgoStr = `${yyyy}-${mm}-${dd}`;
+
       // Define start & end of today in ISO format for focus sessions
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
@@ -82,7 +98,9 @@ export function useTodayStats(): TodayStats {
         todayHabitLogsRes,
         scheduleBlocksRes,
         primaryGoalRes,
-        focusAllSessionsRes
+        focusAllSessionsRes,
+        todayScheduleLogsRes,
+        thirtyDaysSkipsLogsRes
       ] = await Promise.all([
         // 1. Top priority task
         supabase
@@ -143,7 +161,20 @@ export function useTodayStats(): TodayStats {
         supabase
           .from('focus_sessions')
           .select('started_at')
-          .eq('status', 'completed')
+          .eq('status', 'completed'),
+
+        // 9. Today's schedule logs
+        supabase
+          .from('schedule_logs')
+          .select('*')
+          .eq('date', todayStr),
+
+        // 10. Skips log (status = skipped in last 30 days)
+        supabase
+          .from('schedule_logs')
+          .select('*')
+          .eq('status', 'skipped')
+          .gte('date', thirtyDaysAgoStr)
       ]);
 
       // Check errors
@@ -156,6 +187,24 @@ export function useTodayStats(): TodayStats {
       if (scheduleBlocksRes.error) throw scheduleBlocksRes.error;
       if (primaryGoalRes.error) throw primaryGoalRes.error;
       if (focusAllSessionsRes.error) throw focusAllSessionsRes.error;
+      if (todayScheduleLogsRes.error) throw todayScheduleLogsRes.error;
+      if (thirtyDaysSkipsLogsRes.error) throw thirtyDaysSkipsLogsRes.error;
+
+      // Extract schedule logs details
+      const doneBlockIds = (todayScheduleLogsRes.data || [])
+        .filter(l => l.status === 'completed')
+        .map(l => l.block_id);
+
+      const skippedBlockIds = (todayScheduleLogsRes.data || [])
+        .filter(l => l.status === 'skipped')
+        .map(l => l.block_id);
+
+      const skipsLog: ScheduleSkipEntry[] = (thirtyDaysSkipsLogsRes.data || [])
+        .map(l => ({
+          blockId: l.block_id,
+          date: l.date,
+          reason: l.skip_reason as any || 'Other'
+        }));
 
       // 1. Top priority task parsing
       let topTask: Task | null = null;
@@ -311,7 +360,7 @@ export function useTodayStats(): TodayStats {
           return false;
         })
         .sort((a, b) => a.start_time.localeCompare(b.start_time))
-        .slice(0, 10) as ScheduleBlock[];
+        .slice(0, 15) as ScheduleBlock[];
 
       // 7. Primary goal with tasks count
       let primaryGoal: (Goal & { totalTasks: number; doneTasks: number }) | null = null;
@@ -362,6 +411,9 @@ export function useTodayStats(): TodayStats {
         nextBlocks,
         primaryGoal,
         todayTasks,
+        doneBlockIds,
+        skippedBlockIds,
+        skipsLog,
       });
     } catch (err) {
       handleSupabaseError(err, 'fetch_today_stats');

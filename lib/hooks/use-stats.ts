@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
-import { DailyCheckin, FocusSession } from '@/types/app.types';
+import { DailyCheckin, FocusSession, ScheduleBlock, ScheduleLog } from '@/types/app.types';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
 import { useAuthStore } from '@/lib/store/auth.store';
 
@@ -651,6 +651,51 @@ export function useLogCheckin() {
   });
 }
 
+// 7b. useUpsertScheduleLog Hook
+export function useUpsertScheduleLog() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      blockId,
+      date,
+      status,
+      skipReason = null,
+    }: {
+      blockId: string;
+      date: string;
+      status: 'completed' | 'skipped' | 'missed';
+      skipReason?: 'Sick' | 'Travelling' | 'Other' | null;
+    }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('schedule_logs')
+        .upsert(
+          {
+            user_id: session.user.id,
+            block_id: blockId,
+            date,
+            status,
+            skip_reason: skipReason,
+          },
+          { onConflict: 'user_id,block_id,date' }
+        )
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as ScheduleLog;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      queryClient.invalidateQueries({ queryKey: ['todayStats'] });
+      queryClient.invalidateQueries({ queryKey: ['manageRoutinesList'] });
+    },
+  });
+}
+
 // 8. useAchievements Hook
 export function useAchievements() {
   const { user } = useAuthStore();
@@ -885,13 +930,17 @@ export function useEnhancedStats() {
         habitLogsRes,
         tasksRes,
         checkinsRes,
-        activeHabitsRes
+        activeHabitsRes,
+        scheduleBlocksRes,
+        scheduleLogsRes
       ] = await Promise.all([
         supabase.from('focus_sessions').select('*').eq('user_id', userId),
         supabase.from('habit_logs').select('*').eq('user_id', userId),
         supabase.from('tasks').select('*').eq('user_id', userId),
         supabase.from('daily_checkins').select('*').eq('user_id', userId),
-        supabase.from('habits').select('*').eq('user_id', userId).eq('is_active', true)
+        supabase.from('habits').select('*').eq('user_id', userId).eq('is_active', true),
+        supabase.from('schedule_blocks').select('*').eq('user_id', userId).eq('is_active', true),
+        supabase.from('schedule_logs').select('*').eq('user_id', userId)
       ]);
 
       if (sessionsRes.error) throw sessionsRes.error;
@@ -899,12 +948,16 @@ export function useEnhancedStats() {
       if (tasksRes.error) throw tasksRes.error;
       if (checkinsRes.error) throw checkinsRes.error;
       if (activeHabitsRes.error) throw activeHabitsRes.error;
+      if (scheduleBlocksRes.error) throw scheduleBlocksRes.error;
+      if (scheduleLogsRes.error) throw scheduleLogsRes.error;
 
       const sessions = sessionsRes.data || [];
       const habitLogs = habitLogsRes.data || [];
       const tasks = tasksRes.data || [];
       const checkins = checkinsRes.data || [];
       const activeHabits = activeHabitsRes.data || [];
+      const scheduleBlocks = (scheduleBlocksRes.data || []) as ScheduleBlock[];
+      const scheduleLogs = (scheduleLogsRes.data || []) as ScheduleLog[];
 
       const todayStr = getLocalDateStr(new Date());
 
@@ -1031,6 +1084,85 @@ export function useEnhancedStats() {
           worstHabitName = hg.title;
         }
       });
+
+      // ==========================================
+      // WEEKLY SCHEDULE COMPLIANCE
+      // ==========================================
+      const scheduleGrid = scheduleBlocks.map(block => {
+        const blockLogs = scheduleLogs.filter(l => l.block_id === block.id);
+        const statuses = weekDates.map(date => {
+          const log = blockLogs.find(l => l.date === date);
+          
+          let isScheduled = false;
+          if (block.specific_date) {
+            isScheduled = block.specific_date === date;
+          } else if (block.days) {
+            const dateObj = new Date(date);
+            const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, etc.
+            isScheduled = block.days.includes(dayOfWeek);
+          }
+
+          let status: 'completed' | 'skipped' | 'missed' | 'pending' | 'none' = 'none';
+          
+          if (isScheduled) {
+            if (log) {
+              status = log.status as 'completed' | 'skipped' | 'missed';
+            } else if (date > todayStr) {
+              status = 'pending';
+            } else if (date < todayStr) {
+              status = 'missed';
+            } else {
+              // It is today! Check if end_time has passed
+              const now = new Date();
+              const currentMinutes = now.getHours() * 60 + now.getMinutes();
+              const eParts = block.end_time.split(':');
+              const endMinutes = eParts.length >= 2 ? parseInt(eParts[0], 10) * 60 + parseInt(eParts[1], 10) : 0;
+              
+              if (currentMinutes > endMinutes) {
+                status = 'missed';
+              } else {
+                status = 'pending';
+              }
+            }
+          }
+
+          return {
+            date,
+            isScheduled,
+            status,
+            skipReason: log?.skip_reason || null,
+          };
+        });
+
+        const activeDaysCount = statuses.filter(s => s.isScheduled).length;
+        const completedCount = statuses.filter(s => s.status === 'completed').length;
+        const skippedCount = statuses.filter(s => s.status === 'skipped').length;
+        const missedCount = statuses.filter(s => s.status === 'missed').length;
+
+        return {
+          id: block.id,
+          title: block.title,
+          subject: block.subject,
+          color: block.color,
+          statuses,
+          activeDaysCount,
+          completedCount,
+          skippedCount,
+          missedCount
+        };
+      }).filter(gridItem => gridItem.activeDaysCount > 0);
+
+      // Calculate weekly schedule completion rate
+      let totalScheduledSlots = 0;
+      let totalCompletedSlots = 0;
+      scheduleGrid.forEach(item => {
+        totalScheduledSlots += item.statuses.filter(s => s.isScheduled && s.status !== 'pending').length;
+        totalCompletedSlots += item.statuses.filter(s => s.status === 'completed').length;
+      });
+
+      const scheduleCompletionRate = totalScheduledSlots > 0
+        ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100)
+        : 100;
 
       // ==========================================
       // DAILY MOOD TREND
@@ -1239,6 +1371,10 @@ export function useEnhancedStats() {
           bestHabitCount,
           worstHabitName,
           worstHabitCount
+        },
+        scheduleCompliance: {
+          grid: scheduleGrid,
+          completionRate: scheduleCompletionRate
         },
         moodTrend: {
           moodData,

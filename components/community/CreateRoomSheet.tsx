@@ -16,14 +16,13 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
 import { useCreateRoom } from '@/lib/hooks/use-study-rooms';
+import { useSubjects } from '@/lib/hooks/use-subjects';
 
 interface CreateRoomSheetProps {
   isVisible: boolean;
   onClose: () => void;
   onCreated: (roomId: string) => void;
 }
-
-const SUBJECTS = ['None', 'Physics', 'Chemistry', 'Biology', 'Math', 'UPSC', 'Other'];
 const ROOM_TYPES = [
   { value: 'silent', icon: '🔇', label: 'Silent', description: 'No chat, pure focus' },
   { value: 'music', icon: '🎵', label: 'Music', description: 'Shared ambient sound' },
@@ -38,6 +37,15 @@ export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
 }) => {
   const sheetRef = useRef<BottomSheet>(null);
   const createRoomMutation = useCreateRoom();
+  const { data: profileSubjects = [] } = useSubjects();
+
+  const subjectsToDisplay = React.useMemo(() => {
+    const list = ['None', ...profileSubjects];
+    if (!list.includes('Other')) {
+      list.push('Other');
+    }
+    return list;
+  }, [profileSubjects]);
 
   const [roomName, setRoomName] = useState('');
   const [subject, setSubject] = useState<string | null>(null);
@@ -131,7 +139,7 @@ export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
         {/* Subject Select */}
         <Text style={styles.fieldLabel}>SUBJECT</Text>
         <View style={styles.pillContainer}>
-          {SUBJECTS.map((sub) => {
+          {subjectsToDisplay.map((sub) => {
             const isSelected = (sub === 'None' && subject === null) || subject === sub;
             return (
               <TouchableOpacity
