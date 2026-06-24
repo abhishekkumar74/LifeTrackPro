@@ -1,4 +1,9 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../supabase/client';
+import { queryClient } from '../query-client';
+import { Alert } from 'react-native';
 
 export type SoundKey = 'rain' | 'cafe' | 'ocean' | 'lofi' | 'brown_noise';
 export type FocusPreset = '25/5' | '50/10' | '90/20' | 'custom';
@@ -65,8 +70,66 @@ const getBreakDuration = (preset: FocusPreset): number => {
 
 const DEFAULT_FOCUS_MINUTES = 25;
 
-export const useFocusStore = create<FocusState>((set, get) => ({
-  // Initial Timer States
+const resyncFocusTimer = async (state: FocusState) => {
+  if (state.isRunning && state.sessionStartTimestamp) {
+    const elapsedSeconds = Math.floor((Date.now() - state.sessionStartTimestamp) / 1000);
+
+    if (elapsedSeconds >= state.totalSeconds) {
+      // Scenario C: Session completed while closed/crashed
+      const focusMinutes =
+        state.selectedPreset === 'custom'
+          ? state.customMinutes
+          : parseInt(state.selectedPreset.split('/')[0], 10);
+
+      const startedAt = new Date(state.sessionStartTimestamp).toISOString();
+      const endedAt = new Date(state.sessionStartTimestamp + state.totalSeconds * 1000).toISOString();
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { error } = await supabase.from('focus_sessions').insert({
+            user_id: session.user.id,
+            session_goal: state.sessionGoal.trim() || 'Deep Focus Session',
+            duration_min: focusMinutes,
+            subject: state.subjectTag,
+            sound_used: state.activeSound,
+            mood: null,
+            started_at: startedAt,
+            ended_at: endedAt,
+            status: 'completed',
+          });
+
+          if (error) throw error;
+
+          // Invalidate cache
+          queryClient.invalidateQueries({ queryKey: ['stats'] });
+          queryClient.invalidateQueries({ queryKey: ['todayStats'] });
+
+          Alert.alert(
+            'Focus Session Completed',
+            `Your focus session "${state.sessionGoal || 'Deep Focus'}" has been successfully logged.`
+          );
+        }
+      } catch (err) {
+        console.error('Failed to log auto-completed focus session on startup:', err);
+      }
+
+      // Reset store state
+      useFocusStore.getState().resetSession();
+    } else {
+      // Scenario C: Session still active, adjust drift
+      useFocusStore.setState({
+        secondsLeft: state.totalSeconds - elapsedSeconds,
+        elapsedSeconds: elapsedSeconds,
+      });
+    }
+  }
+};
+
+export const useFocusStore = create<FocusState>()(
+  persist(
+    (set, get) => ({
+      // Initial Timer States
   isRunning: false,
   isPaused: false,
   secondsLeft: DEFAULT_FOCUS_MINUTES * 60,
@@ -242,4 +305,21 @@ export const useFocusStore = create<FocusState>((set, get) => ({
       sessionStartTimestamp: null,
     });
   },
-}));
+  }),
+  {
+    name: 'lifetrack-focus-store',
+    storage: createJSONStorage(() => AsyncStorage),
+    onRehydrateStorage: () => {
+      return (state, error) => {
+        if (error) {
+          console.error('Error hydrating focus store:', error);
+          return;
+        }
+        if (state) {
+          resyncFocusTimer(state);
+        }
+      };
+    },
+  }
+ )
+);

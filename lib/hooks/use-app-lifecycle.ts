@@ -37,7 +37,7 @@ export function useAppLifecycle() {
 
           // Check if focus timer was running and exceeded 2 minutes background grace period
           const focus = useFocusStore.getState();
-          if (focus.isRunning && bgDuration > 120 * 1000) {
+          if (focus.isRunning && backgroundTime.current > 0 && bgDuration > 120 * 1000) {
             const elapsed = focus.elapsedSeconds;
             if (elapsed >= 300) { // 5 minutes
               const focusMinutes = Math.max(1, Math.floor(elapsed / 60));
