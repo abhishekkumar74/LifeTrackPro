@@ -11,6 +11,7 @@ import {
   Platform,
   Dimensions,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Href } from 'expo-router';
@@ -95,6 +96,39 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     return () => clearInterval(interval);
   }, [userJoinedTime]);
 
+  // Listen for real-time room inactivation or deletion
+  useEffect(() => {
+    if (!id) return;
+
+    const roomSubscription = supabase
+      .channel(`room_status_${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'study_rooms',
+          filter: `id=eq.${id}`,
+        },
+        (payload) => {
+          const updatedRoom = payload.new as StudyRoom | null;
+          if (payload.eventType === 'DELETE' || (updatedRoom && !updatedRoom.is_active)) {
+            Alert.alert(
+              'Room Ended',
+              'This study room has been ended by the host.',
+              [{ text: 'OK', onPress: () => router.back() }],
+              { cancelable: false }
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(roomSubscription);
+    };
+  }, [id]);
+
   const handleLeave = () => {
     router.back();
   };
@@ -152,11 +186,13 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     );
   }
 
-  if (roomError || !room) {
+  if (roomError || !room || !room.is_active) {
     return (
       <View style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#17172A" translucent={false} />
-        <Text style={styles.errorText}>Room not found</Text>
+        <Text style={styles.errorText}>
+          {!room || room.is_active ? 'Room not found' : 'This study room has ended'}
+        </Text>
         <TouchableOpacity style={styles.leaveButton} onPress={handleLeave}>
           <Text style={styles.leaveButtonText}>Leave Room</Text>
         </TouchableOpacity>
