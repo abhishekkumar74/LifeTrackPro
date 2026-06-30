@@ -23,8 +23,11 @@ interface SessionSummaryProps {
   duration: number; // in minutes
   subject: string | null;
   pomodoroCount: number;
-  onSave: (mood: number, note: string) => void;
+  onSave: (mood: number, note: string, focusAccuracy?: 'fully_focused' | 'partially_distracted' | 'off_track' | null, seedsEarned?: number) => void;
   onDiscard: () => void;
+  isStrictMode?: boolean;
+  isPlantWilted?: boolean;
+  selectedPlantId?: string;
 }
 
 const MOODS = [
@@ -70,9 +73,13 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
   pomodoroCount,
   onSave,
   onDiscard,
+  isStrictMode = false,
+  isPlantWilted = false,
+  selectedPlantId = 'sprout',
 }) => {
   const sheetRef = useRef<BottomSheet>(null);
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
+  const [selectedAccuracy, setSelectedAccuracy] = useState<'fully_focused' | 'partially_distracted' | 'off_track' | null>(null);
   const [note, setNote] = useState('');
 
   // Open or close bottom sheet when isVisible changes
@@ -80,6 +87,7 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
     if (isVisible) {
       // Reset form variables
       setSelectedMood(null);
+      setSelectedAccuracy(null);
       setNote('');
       sheetRef.current?.expand();
     } else {
@@ -88,9 +96,14 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
   }, [isVisible]);
 
   const handleSave = () => {
-    if (selectedMood === null) return;
+    if (!isStrictMode && selectedMood === null) return;
+    if (isStrictMode && selectedAccuracy === null) return;
     Keyboard.dismiss();
-    onSave(selectedMood, note);
+
+    const moodVal = isStrictMode ? (selectedAccuracy === 'fully_focused' ? 5 : selectedAccuracy === 'partially_distracted' ? 3 : 1) : (selectedMood || 3);
+    const seedsEarned = isStrictMode ? (isPlantWilted ? 1 : 5) : 0;
+
+    onSave(moodVal, note, isStrictMode ? selectedAccuracy : null, seedsEarned);
   };
 
   const handleDiscardPress = () => {
@@ -113,7 +126,7 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
     <BottomSheet
       ref={sheetRef}
       index={-1}
-      snapPoints={['55%']}
+      snapPoints={isStrictMode ? ['62%'] : ['55%']}
       enablePanDownToClose={false} // Force action choice
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={styles.handleIndicator}
@@ -139,28 +152,68 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
             <Text style={styles.statLabel}>SUBJECT</Text>
           </View>
 
-          <View style={styles.statCard}>
-            <Text style={styles.statValue} numberOfLines={1}>
-              {`${pomodoroCount} 🍅`}
-            </Text>
-            <Text style={styles.statLabel}>INTERVALS</Text>
-          </View>
+          {isStrictMode ? (
+            <View style={styles.statCard}>
+              <Text style={styles.statValue} numberOfLines={1}>
+                {isPlantWilted ? '🥀 Wilted' : '🌻 Bloomed'}
+              </Text>
+              <Text style={[styles.statLabel, { color: '#E8A020' }]}>
+                +{isPlantWilted ? 1 : 5} SEEDS
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.statCard}>
+              <Text style={styles.statValue} numberOfLines={1}>
+                {`${pomodoroCount} 🍅`}
+              </Text>
+              <Text style={styles.statLabel}>INTERVALS</Text>
+            </View>
+          )}
         </View>
 
         {/* Mood Label */}
-        <Text style={styles.fieldLabel}>How was your focus?</Text>
+        <Text style={styles.fieldLabel}>
+          {isStrictMode ? 'Mindfulness Reflection: How focused were you?' : 'How was your focus?'}
+        </Text>
 
-        {/* Mood Emoji Selectors */}
-        <View style={styles.moodRow}>
-          {MOODS.map((m) => (
-            <MoodEmoji
-              key={m.val}
-              emoji={m.emoji}
-              active={selectedMood === m.val}
-              onPress={() => setSelectedMood(m.val)}
-            />
-          ))}
-        </View>
+        {isStrictMode ? (
+          <View style={styles.reflectionRow}>
+            {[
+              { id: 'fully_focused', label: 'Fully Focused 🎯', color: '#00B894' },
+              { id: 'partially_distracted', label: 'Distracted 📱', color: '#E8A020' },
+              { id: 'off_track', label: 'Off Track ❌', color: '#E85858' },
+            ].map((refObj) => {
+              const active = selectedAccuracy === refObj.id;
+              return (
+                <TouchableOpacity
+                  key={refObj.id}
+                  style={[
+                    styles.reflectionBtn,
+                    active && { backgroundColor: refObj.color + '15', borderColor: refObj.color },
+                  ]}
+                  onPress={() => setSelectedAccuracy(refObj.id as any)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.reflectionBtnText, active && { color: refObj.color, fontWeight: '700' }]}>
+                    {refObj.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : (
+          /* Mood Emoji Selectors */
+          <View style={styles.moodRow}>
+            {MOODS.map((m) => (
+              <MoodEmoji
+                key={m.val}
+                emoji={m.emoji}
+                active={selectedMood === m.val}
+                onPress={() => setSelectedMood(m.val)}
+              />
+            ))}
+          </View>
+        )}
 
         {/* Optional Note Accomplishments */}
         <BottomSheetTextInput
@@ -177,10 +230,11 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
         <TouchableOpacity
           style={[
             styles.saveButton,
-            selectedMood === null && styles.saveButtonDisabled,
+            (!isStrictMode && selectedMood === null) && styles.saveButtonDisabled,
+            (isStrictMode && selectedAccuracy === null) && styles.saveButtonDisabled,
           ]}
           onPress={handleSave}
-          disabled={selectedMood === null}
+          disabled={isStrictMode ? selectedAccuracy === null : selectedMood === null}
           activeOpacity={0.8}
         >
           <Text style={styles.saveButtonText}>Save Session</Text>
@@ -325,6 +379,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#9B9BAF',
     fontWeight: '500',
+  },
+  reflectionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 24,
+  },
+  reflectionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    borderRadius: 12,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reflectionBtnText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#5C5C70',
+    textAlign: 'center',
   },
 });
 export default SessionSummary;

@@ -36,6 +36,14 @@ export interface FocusState {
   isBlockerActive: boolean;
   blockedAppsCount: number;
 
+  // Theme
+  activeTheme: 'default' | 'gold' | 'rose_gold' | 'sunset' | 'mint' | 'nebula' | 'obsidian';
+
+  // Strict Mode Plant Gamification
+  isStrictModeActive: boolean;
+  isPlantWilted: boolean;
+  selectedPlantId: string;
+
   // Actions
   setPreset: (preset: FocusPreset) => void;
   setCustomMinutes: (min: number) => void;
@@ -50,7 +58,11 @@ export interface FocusState {
   setSound: (key: SoundKey | null) => void;
   setVolume: (vol: number) => void;
   toggleBlocker: () => void;
-  resetSession: () => void;
+  setTheme: (theme: 'default' | 'gold' | 'rose_gold' | 'sunset' | 'mint' | 'nebula' | 'obsidian') => void;
+  toggleStrictMode: () => void;
+  setPlantWilted: (wilted: boolean) => void;
+  setSelectedPlant: (plantId: string) => void;
+  resetSession: (resetCount?: boolean) => void;
 }
 
 const getFocusDuration = (preset: FocusPreset, customMinutes: number): number => {
@@ -155,6 +167,14 @@ export const useFocusStore = create<FocusState>()(
   // Initial Blocker States
   isBlockerActive: false,
   blockedAppsCount: 0,
+
+  // Initial Theme States
+  activeTheme: 'default',
+
+  // Initial Strict Mode States
+  isStrictModeActive: false,
+  isPlantWilted: false,
+  selectedPlantId: 'sprout',
 
   // Actions
   setPreset: (preset) => {
@@ -286,8 +306,14 @@ export const useFocusStore = create<FocusState>()(
     blockedAppsCount: !state.isBlockerActive ? 12 : 0, // Simulate blocking 12 distraction apps
   })),
 
-  resetSession: () => {
-    const { selectedPreset, customMinutes } = get();
+  setTheme: (theme) => set({ activeTheme: theme }),
+
+  toggleStrictMode: () => set((state) => ({ isStrictModeActive: !state.isStrictModeActive })),
+  setPlantWilted: (wilted) => set({ isPlantWilted: wilted }),
+  setSelectedPlant: (plantId) => set({ selectedPlantId: plantId }),
+
+  resetSession: (resetCount = false) => {
+    const { selectedPreset, customMinutes, pomodoroCount } = get();
     const duration = getFocusDuration(selectedPreset, customMinutes);
     set({
       isRunning: false,
@@ -298,10 +324,11 @@ export const useFocusStore = create<FocusState>()(
       sessionGoal: '',
       subjectTag: null,
       linkedTaskId: null,
-      pomodoroCount: 0,
+      pomodoroCount: resetCount ? 0 : pomodoroCount,
       currentMode: 'focus',
       isBlockerActive: false,
       blockedAppsCount: 0,
+      isPlantWilted: false,
       sessionStartTimestamp: null,
     });
   },

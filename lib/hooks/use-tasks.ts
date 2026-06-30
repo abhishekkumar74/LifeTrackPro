@@ -4,52 +4,72 @@ import { supabase } from '@/lib/supabase/client';
 import { Task } from '@/types/app.types';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export function useTasks(milestoneId?: string) {
   const { user } = useAuthStore();
+  const cacheKey = `tasks_list_${user?.id}_${milestoneId || 'standalone'}`;
+
   return useQuery<Task[]>({
     queryKey: ['tasks', user?.id, milestoneId || 'standalone'],
     queryFn: async () => {
-      let query = supabase.from('tasks').select('*');
-      
-      if (milestoneId) {
-        query = query.eq('milestone_id', milestoneId);
-      } else {
-        query = query.is('milestone_id', null);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      // Sort locally: 
-      // 1. Completion status (incomplete first, completed last)
-      // 2. Priority (urgent -> important -> normal)
-      // 3. Due date
-      return (data || []).sort((a, b) => {
-        const aDone = a.completed_at !== null;
-        const bDone = b.completed_at !== null;
-        if (aDone && !bDone) return 1;
-        if (!aDone && bDone) return -1;
-
-        const priorityWeight = (p: string) => {
-          switch (p) {
-            case 'urgent': return 1;
-            case 'important': return 2;
-            default: return 3;
-          }
-        };
-
-        const wA = priorityWeight(a.priority);
-        const wB = priorityWeight(b.priority);
-        if (wA !== wB) return wA - wB;
-
-        if (a.due_date && b.due_date) {
-          return a.due_date.localeCompare(b.due_date);
+      try {
+        let query = supabase.from('tasks').select('*');
+        
+        if (milestoneId) {
+          query = query.eq('milestone_id', milestoneId);
+        } else {
+          query = query.is('milestone_id', null);
         }
-        if (a.due_date) return -1;
-        if (b.due_date) return 1;
-        return 0;
-      }) as Task[];
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        // Sort locally: 
+        // 1. Completion status (incomplete first, completed last)
+        // 2. Priority (urgent -> important -> normal)
+        // 3. Due date
+        const result = (data || []).sort((a, b) => {
+          const aDone = a.completed_at !== null;
+          const bDone = b.completed_at !== null;
+          if (aDone && !bDone) return 1;
+          if (!aDone && bDone) return -1;
+
+          const priorityWeight = (p: string) => {
+            switch (p) {
+              case 'urgent': return 1;
+              case 'important': return 2;
+              default: return 3;
+            }
+          };
+
+          const wA = priorityWeight(a.priority);
+          const wB = priorityWeight(b.priority);
+          if (wA !== wB) return wA - wB;
+
+          if (a.due_date && b.due_date) {
+            return a.due_date.localeCompare(b.due_date);
+          }
+          if (a.due_date) return -1;
+          if (b.due_date) return 1;
+          return 0;
+        }) as Task[];
+
+        AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+        return result;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) return JSON.parse(cached);
+        }
+        throw err;
+      }
     },
     enabled: !!user?.id,
   });

@@ -22,6 +22,8 @@ interface SoundPickerProps {
   volume: number;
   onVolumeChange: (vol: number) => void;
   onScrollStateChange?: (enabled: boolean) => void;
+  isPremium?: boolean;
+  onPremiumTrigger?: () => void;
 }
 
 interface ChipItem {
@@ -38,12 +40,16 @@ const SOUNDS: ChipItem[] = [
   { key: 'brown_noise', label: '⬜ Noise' },
 ];
 
+const PREMIUM_SOUNDS: (SoundKey | null)[] = ['cafe', 'lofi', 'brown_noise'];
+
 export const SoundPicker: React.FC<SoundPickerProps> = ({
   activeSound,
   onSelect,
   volume,
   onVolumeChange,
   onScrollStateChange,
+  isPremium = false,
+  onPremiumTrigger,
 }) => {
   const [sliderWidth, setSliderWidth] = useState<number>(0);
   const opacity = useSharedValue(0);
@@ -147,15 +153,32 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
       >
         {SOUNDS.map((sound) => {
           const active = activeSound === sound.key;
+          const isLocked = !isPremium && PREMIUM_SOUNDS.includes(sound.key);
+          const displayLabel = isLocked ? `${sound.label} ✨` : sound.label;
+
           return (
             <TouchableOpacity
               key={sound.key || 'none'}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => onSelect(sound.key)}
+              style={[
+                styles.chip,
+                active && styles.chipActive,
+                isLocked && styles.chipLocked,
+              ]}
+              onPress={() => {
+                if (isLocked) {
+                  onPremiumTrigger?.();
+                } else {
+                  onSelect(sound.key);
+                }
+              }}
               activeOpacity={0.7}
             >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                {sound.label}
+              <Text style={[
+                styles.chipText,
+                active && styles.chipTextActive,
+                isLocked && styles.chipTextLocked,
+              ]}>
+                {displayLabel}
               </Text>
             </TouchableOpacity>
           );
@@ -277,5 +300,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: 'rgba(255, 255, 255, 0.8)',
     fontWeight: '600',
+  },
+  chipLocked: {
+    backgroundColor: 'rgba(232, 160, 32, 0.04)',
+    borderColor: 'rgba(232, 160, 32, 0.15)',
+  },
+  chipTextLocked: {
+    color: '#E8A020',
+    opacity: 0.85,
   },
 });

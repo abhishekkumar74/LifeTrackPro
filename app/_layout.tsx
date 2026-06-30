@@ -304,7 +304,11 @@ function RootLayout() {
 
     // 2. Track authentication session state mutations
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
+      if (event === 'PASSWORD_RECOVERY') {
+        setSession(session);
+        setAuthInitialized(true);
+        router.replace('/(auth)/reset-password');
+      } else if (event === 'SIGNED_OUT') {
         clearSentryUser();
         useAuthStore.getState().clearAuth();
         queryClient.clear();
@@ -355,6 +359,7 @@ function RootLayout() {
                   <Stack.Screen name="rooms/index" options={{ headerShown: false }} />
                   <Stack.Screen name="rooms/[id]" options={{ headerShown: false }} />
                   <Stack.Screen name="profile" options={{ headerShown: false }} />
+                  <Stack.Screen name="paywall" options={{ presentation: 'modal', headerShown: false }} />
                   <Stack.Screen name="habit/[id]" options={{ headerShown: false }} />
                   <Stack.Screen name="habits/index" options={{ headerShown: false }} />
                   <Stack.Screen name="routine_analytics" options={{ headerShown: false }} />

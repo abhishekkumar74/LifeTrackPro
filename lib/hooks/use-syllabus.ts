@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { SyllabusTopic, SyllabusStatus } from '@/types/app.types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface GroupedSubject {
   chapters: {
@@ -19,53 +20,68 @@ export function useSyllabus() {
   return useQuery<GroupedSyllabus>({
     queryKey: ['syllabus'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
 
-      const { data, error } = await supabase
-        .from('syllabus_topics')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .order('subject', { ascending: true })
-        .order('chapter', { ascending: true })
-        .order('order_index', { ascending: true });
+        const { data, error } = await supabase
+          .from('syllabus_topics')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .order('subject', { ascending: true })
+          .order('chapter', { ascending: true })
+          .order('order_index', { ascending: true });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      const topics = (data || []) as SyllabusTopic[];
-      const grouped: GroupedSyllabus = {};
+        const topics = (data || []) as SyllabusTopic[];
+        const grouped: GroupedSyllabus = {};
 
-      topics.forEach((topic) => {
-        const { subject, chapter } = topic;
+        topics.forEach((topic) => {
+          const { subject, chapter } = topic;
 
-        if (!grouped[subject]) {
-          grouped[subject] = {
-            chapters: {},
-            completionPercent: 0,
-            totalCount: 0,
-            doneCount: 0,
-          };
+          if (!grouped[subject]) {
+            grouped[subject] = {
+              chapters: {},
+              completionPercent: 0,
+              totalCount: 0,
+              doneCount: 0,
+            };
+          }
+
+          if (!grouped[subject].chapters[chapter]) {
+            grouped[subject].chapters[chapter] = [];
+          }
+
+          grouped[subject].chapters[chapter].push(topic);
+          grouped[subject].totalCount++;
+          if (topic.status === 'done') {
+            grouped[subject].doneCount++;
+          }
+        });
+
+        // Calculate completion percentages
+        Object.keys(grouped).forEach((subject) => {
+          const sub = grouped[subject];
+          sub.completionPercent =
+            sub.totalCount > 0 ? Math.round((sub.doneCount / sub.totalCount) * 100) : 0;
+        });
+
+        AsyncStorage.setItem('syllabus_grouped_cache', JSON.stringify(grouped)).catch(() => {});
+        return grouped;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem('syllabus_grouped_cache');
+          if (cached) return JSON.parse(cached);
         }
-
-        if (!grouped[subject].chapters[chapter]) {
-          grouped[subject].chapters[chapter] = [];
-        }
-
-        grouped[subject].chapters[chapter].push(topic);
-        grouped[subject].totalCount++;
-        if (topic.status === 'done') {
-          grouped[subject].doneCount++;
-        }
-      });
-
-      // Calculate completion percentages
-      Object.keys(grouped).forEach((subject) => {
-        const sub = grouped[subject];
-        sub.completionPercent =
-          sub.totalCount > 0 ? Math.round((sub.doneCount / sub.totalCount) * 100) : 0;
-      });
-
-      return grouped;
+        throw err;
+      }
     },
   });
 }

@@ -51,6 +51,7 @@ export function useActiveRooms() {
           )
         `)
         .eq('is_active', true)
+        .eq('is_public', true)
         .order('member_count', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -128,15 +129,9 @@ export function useRoomPresence(roomId: string) {
       });
 
     return () => {
-      const cleanup = async () => {
-        try {
-          await channel.untrack();
-          await supabase.removeChannel(channel);
-        } catch (e) {
-          if (__DEV__) console.warn('Presence cleanup error:', e);
-        }
-      };
-      cleanup();
+      supabase.removeChannel(channel).catch((e) => {
+        if (__DEV__) console.warn('Presence cleanup error:', e);
+      });
     };
   }, [roomId, profile]);
 

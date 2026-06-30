@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase/client';
 import { DailyCheckin, FocusSession, ScheduleBlock, ScheduleLog } from '@/types/app.types';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
 import { useAuthStore } from '@/lib/store/auth.store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Helper to format Date object into local YYYY-MM-DD string
 export function getLocalDateStr(date: Date): string {
@@ -58,183 +59,208 @@ export interface Achievement {
 // 1. usePeriodStats Hook
 export function usePeriodStats(period: 'day' | 'week' | 'month') {
   const { user } = useAuthStore();
+  const cacheKey = `stats_period_${user?.id}_${period}`;
+
   return useQuery<PeriodStats>({
     queryKey: ['stats', user?.id, 'period', period],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-      const userId = session.user.id;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
+        const userId = session.user.id;
 
-      const today = new Date();
-      let periodStart = new Date(today);
-      let periodEnd = new Date(today);
-      let prevStart = new Date(today);
-      let prevEnd = new Date(today);
+        const today = new Date();
+        let periodStart = new Date(today);
+        let periodEnd = new Date(today);
+        let prevStart = new Date(today);
+        let prevEnd = new Date(today);
 
-      if (period === 'day') {
-        periodStart.setHours(0, 0, 0, 0);
-        periodEnd.setHours(23, 59, 59, 999);
+        if (period === 'day') {
+          periodStart.setHours(0, 0, 0, 0);
+          periodEnd.setHours(23, 59, 59, 999);
 
-        prevStart = new Date(periodStart);
-        prevStart.setDate(prevStart.getDate() - 1);
-        prevStart.setHours(0, 0, 0, 0);
+          prevStart = new Date(periodStart);
+          prevStart.setDate(prevStart.getDate() - 1);
+          prevStart.setHours(0, 0, 0, 0);
 
-        prevEnd = new Date(periodEnd);
-        prevEnd.setDate(prevEnd.getDate() - 1);
-        prevEnd.setHours(23, 59, 59, 999);
-      } else if (period === 'week') {
-        const dayOfWeek = today.getDay();
-        const distanceToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        
-        periodStart.setDate(today.getDate() - distanceToMonday);
-        periodStart.setHours(0, 0, 0, 0);
-        
-        periodEnd = new Date(periodStart);
-        periodEnd.setDate(periodEnd.getDate() + 6);
-        periodEnd.setHours(23, 59, 59, 999);
+          prevEnd = new Date(periodEnd);
+          prevEnd.setDate(prevEnd.getDate() - 1);
+          prevEnd.setHours(23, 59, 59, 999);
+        } else if (period === 'week') {
+          const dayOfWeek = today.getDay();
+          const distanceToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+          
+          periodStart.setDate(today.getDate() - distanceToMonday);
+          periodStart.setHours(0, 0, 0, 0);
+          
+          periodEnd = new Date(periodStart);
+          periodEnd.setDate(periodEnd.getDate() + 6);
+          periodEnd.setHours(23, 59, 59, 999);
 
-        prevStart = new Date(periodStart);
-        prevStart.setDate(prevStart.getDate() - 7);
-        prevStart.setHours(0, 0, 0, 0);
-        
-        prevEnd = new Date(prevStart);
-        prevEnd.setDate(prevEnd.getDate() + 6);
-        prevEnd.setHours(23, 59, 59, 999);
-      } else {
-        // Month
-        periodStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0, 0);
-        periodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+          prevStart = new Date(periodStart);
+          prevStart.setDate(prevStart.getDate() - 7);
+          prevStart.setHours(0, 0, 0, 0);
+          
+          prevEnd = new Date(prevStart);
+          prevEnd.setDate(prevEnd.getDate() + 6);
+          prevEnd.setHours(23, 59, 59, 999);
+        } else {
+          // Month
+          periodStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0, 0);
+          periodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
 
-        prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1, 0, 0, 0, 0);
-        prevEnd = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999);
-      }
+          prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1, 0, 0, 0, 0);
+          prevEnd = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999);
+        }
 
-      // Parallel Queries
-      const [
-        curSessionsRes,
-        prevSessionsRes,
-        curTasksRes,
-        prevTasksRes,
-      ] = await Promise.all([
-        supabase
-          .from('focus_sessions')
-          .select('duration_min, subject, status')
-          .eq('user_id', userId)
-          .gte('started_at', periodStart.toISOString())
-          .lt('started_at', periodEnd.toISOString()),
-        supabase
-          .from('focus_sessions')
-          .select('duration_min, status')
-          .eq('user_id', userId)
-          .gte('started_at', prevStart.toISOString())
-          .lt('started_at', prevEnd.toISOString()),
-        supabase
-          .from('tasks')
-          .select('completed_at')
-          .eq('user_id', userId)
-          .gte('created_at', periodStart.toISOString())
-          .lt('created_at', periodEnd.toISOString()),
-        supabase
-          .from('tasks')
-          .select('completed_at')
-          .eq('user_id', userId)
-          .gte('created_at', prevStart.toISOString())
-          .lt('created_at', prevEnd.toISOString()),
-      ]);
+        // Parallel Queries
+        const [
+          curSessionsRes,
+          prevSessionsRes,
+          curTasksRes,
+          prevTasksRes,
+        ] = await Promise.all([
+          supabase
+            .from('focus_sessions')
+            .select('duration_min, subject, status')
+            .eq('user_id', userId)
+            .gte('started_at', periodStart.toISOString())
+            .lt('started_at', periodEnd.toISOString()),
+          supabase
+            .from('focus_sessions')
+            .select('duration_min, status')
+            .eq('user_id', userId)
+            .gte('started_at', prevStart.toISOString())
+            .lt('started_at', prevEnd.toISOString()),
+          supabase
+            .from('tasks')
+            .select('completed_at')
+            .eq('user_id', userId)
+            .gte('created_at', periodStart.toISOString())
+            .lt('created_at', periodEnd.toISOString()),
+          supabase
+            .from('tasks')
+            .select('completed_at')
+            .eq('user_id', userId)
+            .gte('created_at', prevStart.toISOString())
+            .lt('created_at', prevEnd.toISOString()),
+        ]);
 
-      if (curSessionsRes.error) throw curSessionsRes.error;
-      if (prevSessionsRes.error) throw prevSessionsRes.error;
-      if (curTasksRes.error) throw curTasksRes.error;
-      if (prevTasksRes.error) throw prevTasksRes.error;
+        if (curSessionsRes.error) throw curSessionsRes.error;
+        if (prevSessionsRes.error) throw prevSessionsRes.error;
+        if (curTasksRes.error) throw curTasksRes.error;
+        if (prevTasksRes.error) throw prevTasksRes.error;
 
-      const curSessions = curSessionsRes.data || [];
-      const prevSessions = prevSessionsRes.data || [];
+        const curSessions = curSessionsRes.data || [];
+        const prevSessions = prevSessionsRes.data || [];
 
-      // 1. Focus Minutes (completed sessions only)
-      const focusMinutes = curSessions
-        .filter(s => s.status !== 'interrupted')
-        .reduce((sum, s) => sum + s.duration_min, 0);
-      const focusMinutesPrev = prevSessions
-        .filter(s => s.status !== 'interrupted')
-        .reduce((sum, s) => sum + s.duration_min, 0);
-      const focusChangePercent = focusMinutesPrev === 0 
-        ? (focusMinutes > 0 ? 100 : 0) 
-        : Math.round(((focusMinutes - focusMinutesPrev) / focusMinutesPrev) * 100);
+        // 1. Focus Minutes (completed sessions only)
+        const focusMinutes = curSessions
+          .filter(s => s.status !== 'interrupted')
+          .reduce((sum, s) => sum + s.duration_min, 0);
+        const focusMinutesPrev = prevSessions
+          .filter(s => s.status !== 'interrupted')
+          .reduce((sum, s) => sum + s.duration_min, 0);
+        const focusChangePercent = focusMinutesPrev === 0 
+          ? (focusMinutes > 0 ? 100 : 0) 
+          : Math.round(((focusMinutes - focusMinutesPrev) / focusMinutesPrev) * 100);
 
-      // 2. Tasks
-      const tasksTotal = (curTasksRes.data || []).length;
-      const tasksDone = (curTasksRes.data || []).filter(t => t.completed_at !== null).length;
-      const tasksDonePrev = (prevTasksRes.data || []).filter(t => t.completed_at !== null).length;
-      const taskChangePercent = tasksDonePrev === 0
-        ? (tasksDone > 0 ? 100 : 0)
-        : Math.round(((tasksDone - tasksDonePrev) / tasksDonePrev) * 100);
+        // 2. Tasks
+        const tasksTotal = (curTasksRes.data || []).length;
+        const tasksDone = (curTasksRes.data || []).filter(t => t.completed_at !== null).length;
+        const tasksDonePrev = (prevTasksRes.data || []).filter(t => t.completed_at !== null).length;
+        const taskChangePercent = tasksDonePrev === 0
+          ? (tasksDone > 0 ? 100 : 0)
+          : Math.round(((tasksDone - tasksDonePrev) / tasksDonePrev) * 100);
 
-      // 3. Sessions (completed vs interrupted)
-      const completedCount = curSessions.filter(s => s.status !== 'interrupted').length;
-      const interruptedCount = curSessions.filter(s => s.status === 'interrupted').length;
-      const sessionsCount = completedCount;
-      const avgSessionMinutes = sessionsCount > 0 ? Math.round(focusMinutes / sessionsCount) : 0;
+        // 3. Sessions (completed vs interrupted)
+        const completedCount = curSessions.filter(s => s.status !== 'interrupted').length;
+        const interruptedCount = curSessions.filter(s => s.status === 'interrupted').length;
+        const sessionsCount = completedCount;
+        const avgSessionMinutes = sessionsCount > 0 ? Math.round(focusMinutes / sessionsCount) : 0;
 
-      // 4. Top Subject (completed sessions only)
-      const subjectMins: { [lowerSubject: string]: number } = {};
-      const subjectDisplayNames: { [lowerSubject: string]: string } = {};
-      curSessions
-        .filter(s => s.status !== 'interrupted')
-        .forEach(s => {
-          if (s.subject) {
-            const trimmed = s.subject.trim();
-            if (trimmed) {
-              const lower = trimmed.toLowerCase();
-              subjectMins[lower] = (subjectMins[lower] || 0) + s.duration_min;
-              
-              const existingDisplay = subjectDisplayNames[lower];
-              if (!existingDisplay) {
-                subjectDisplayNames[lower] = trimmed;
-              } else {
-                const existingUpper = (existingDisplay.match(/[A-Z]/g) || []).length;
-                const currentUpper = (trimmed.match(/[A-Z]/g) || []).length;
-                if (currentUpper > existingUpper) {
+        // 4. Top Subject (completed sessions only)
+        const subjectMins: { [lowerSubject: string]: number } = {};
+        const subjectDisplayNames: { [lowerSubject: string]: string } = {};
+        curSessions
+          .filter(s => s.status !== 'interrupted')
+          .forEach(s => {
+            if (s.subject) {
+              const trimmed = s.subject.trim();
+              if (trimmed) {
+                const lower = trimmed.toLowerCase();
+                subjectMins[lower] = (subjectMins[lower] || 0) + s.duration_min;
+                
+                const existingDisplay = subjectDisplayNames[lower];
+                if (!existingDisplay) {
                   subjectDisplayNames[lower] = trimmed;
+                } else {
+                  const existingUpper = (existingDisplay.match(/[A-Z]/g) || []).length;
+                  const currentUpper = (trimmed.match(/[A-Z]/g) || []).length;
+                  if (currentUpper > existingUpper) {
+                    subjectDisplayNames[lower] = trimmed;
+                  }
                 }
               }
             }
+          });
+        let topSubject: string | null = null;
+        let maxMins = 0;
+        Object.keys(subjectMins).forEach(lower => {
+          if (subjectMins[lower] > maxMins) {
+            maxMins = subjectMins[lower];
+            topSubject = subjectDisplayNames[lower];
           }
         });
-      let topSubject: string | null = null;
-      let maxMins = 0;
-      Object.keys(subjectMins).forEach(lower => {
-        if (subjectMins[lower] > maxMins) {
-          maxMins = subjectMins[lower];
-          topSubject = subjectDisplayNames[lower];
-        }
-      });
 
-      return {
-        focusMinutes,
-        focusMinutesPrev,
-        focusChangePercent,
-        tasksTotal,
-        tasksDone,
-        tasksDonePrev,
-        taskChangePercent,
-        sessionsCount,
-        avgSessionMinutes,
-        topSubject,
-        completedCount,
-        interruptedCount,
-      };
+        const result = {
+          focusMinutes,
+          focusMinutesPrev,
+          focusChangePercent,
+          tasksTotal,
+          tasksDone,
+          tasksDonePrev,
+          taskChangePercent,
+          sessionsCount,
+          avgSessionMinutes,
+          topSubject,
+          completedCount,
+          interruptedCount,
+        };
+
+        AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+        return result;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            return JSON.parse(cached);
+          }
+        }
+        throw err;
+      }
     },
+    enabled: !!user?.id,
   });
 }
 
 // 2. useHeatmapData Hook
 export function useHeatmapData() {
   const { user } = useAuthStore();
+  const cacheKey = `stats_heatmap_${user?.id}`;
+
   return useQuery<HeatmapDay[]>({
     queryKey: ['stats', user?.id, 'heatmap'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
 
       const today = new Date();
       const startDate = new Date(today);
@@ -292,19 +318,39 @@ export function useHeatmapData() {
       console.log("[HEATMAP DIAGNOSTIC] Today's date calculated in loop:", getLocalDateStr(new Date()));
       console.log("[HEATMAP DIAGNOSTIC] Last element in result:", result[result.length - 1]);
 
+      AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
       return result;
-    },
-  });
+    } catch (err: any) {
+      const isNetError = 
+        err.message?.toLowerCase().includes('network') || 
+        err.message?.toLowerCase().includes('fetch') || 
+        err.message?.toLowerCase().includes('timeout') ||
+        err.status === 0;
+
+      if (isNetError) {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          return JSON.parse(cached);
+        }
+      }
+      throw err;
+    }
+  },
+  enabled: !!user?.id,
+});
 }
 
 // Shared Hook to fetch focus sessions for the current week (to be shared between BarChart and DonutChart)
 function usePeriodFocusSessions(period: 'day' | 'week' | 'month') {
   const { user } = useAuthStore();
+  const cacheKey = `stats_period_sessions_${user?.id}_${period}`;
+
   return useQuery<FocusSession[]>({
     queryKey: ['stats', user?.id, 'period-sessions', period],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
 
       const today = new Date();
       let periodStart = new Date(today);
@@ -337,9 +383,28 @@ function usePeriodFocusSessions(period: 'day' | 'week' | 'month') {
         .lt('started_at', periodEnd.toISOString());
 
       if (error) throw error;
-      return data as FocusSession[];
-    },
-  });
+      const result = data as FocusSession[];
+
+      AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+      return result;
+    } catch (err: any) {
+      const isNetError = 
+        err.message?.toLowerCase().includes('network') || 
+        err.message?.toLowerCase().includes('fetch') || 
+        err.message?.toLowerCase().includes('timeout') ||
+        err.status === 0;
+
+      if (isNetError) {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          return JSON.parse(cached);
+        }
+      }
+      throw err;
+    }
+  },
+  enabled: !!user?.id,
+});
 }
 
 // 3. useBarChartData Hook

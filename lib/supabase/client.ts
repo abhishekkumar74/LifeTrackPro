@@ -67,6 +67,9 @@ export type ProfileRow = {
   peak_time: string;
   xp_points: number;
   level: number;
+  is_premium: boolean;
+  focus_seeds: number;
+  unlocked_plants: string[];
   ai_insight: string | null;
   ai_insight_updated_at: string | null;
   created_at: string;
@@ -148,6 +151,7 @@ export type FocusSessionRow = {
   started_at: string;
   ended_at: string;
   status: 'completed' | 'interrupted';
+  focus_accuracy?: 'fully_focused' | 'partially_distracted' | 'off_track' | null;
 }
 
 export type NoteRow = {
@@ -232,10 +236,13 @@ export type ScheduleLogRow = {
 
 export type ProfileTable = {
   Row: ProfileRow;
-  Insert: Omit<ProfileRow, 'avatar_url' | 'xp_points' | 'level' | 'ai_insight' | 'ai_insight_updated_at' | 'created_at' | 'updated_at'> & {
+  Insert: Omit<ProfileRow, 'avatar_url' | 'xp_points' | 'level' | 'is_premium' | 'focus_seeds' | 'unlocked_plants' | 'ai_insight' | 'ai_insight_updated_at' | 'created_at' | 'updated_at'> & {
     avatar_url?: string | null;
     xp_points?: number;
     level?: number;
+    is_premium?: boolean;
+    focus_seeds?: number;
+    unlocked_plants?: string[];
     ai_insight?: string | null;
     ai_insight_updated_at?: string | null;
     created_at?: string;

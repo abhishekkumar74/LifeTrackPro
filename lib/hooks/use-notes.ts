@@ -4,6 +4,7 @@ import { Note } from '@/types/app.types';
 import { calculateNextReview } from '@/lib/utils/spaced-rep';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Map to track debounce timeouts per note ID for auto-save debouncing
 const debounceTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -43,25 +44,43 @@ const debouncedUpdate = (id: string, updates: Partial<Note>): Promise<Note> => {
 
 export function useNotes(subject?: string) {
   const { user } = useAuthStore();
+  const cacheKey = `notes_list_${user?.id}_${subject || 'all'}`;
+
   return useQuery<Note[]>({
     queryKey: ['notes', user?.id, subject],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
 
-      let query = supabase
-        .from('notes')
-        .select('*')
-        .eq('user_id', session.user.id);
+        let query = supabase
+          .from('notes')
+          .select('*')
+          .eq('user_id', session.user.id);
 
-      if (subject) {
-        query = query.eq('subject', subject);
+        if (subject) {
+          query = query.eq('subject', subject);
+        }
+
+        const { data, error } = await query.order('is_pinned', { ascending: false }).order('updated_at', { ascending: false });
+
+        if (error) throw error;
+        const result = data as Note[];
+        AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+        return result;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) return JSON.parse(cached);
+        }
+        throw err;
       }
-
-      const { data, error } = await query.order('is_pinned', { ascending: false }).order('updated_at', { ascending: false });
-
-      if (error) throw error;
-      return data as Note[];
     },
     enabled: !!user?.id,
   });
@@ -69,28 +88,46 @@ export function useNotes(subject?: string) {
 
 export function useDueRevisions() {
   const { user } = useAuthStore();
+  const cacheKey = `notes_due_revisions_${user?.id}`;
+
   return useQuery<Note[]>({
     queryKey: ['notes', user?.id, 'due'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
 
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
-      const todayStr = `${yyyy}-${mm}-${dd}`;
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const todayStr = `${yyyy}-${mm}-${dd}`;
 
-      const { data, error } = await supabase
-        .from('notes')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .lte('next_review', todayStr)
-        .not('next_review', 'is', null)
-        .order('next_review', { ascending: true });
+        const { data, error } = await supabase
+          .from('notes')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .lte('next_review', todayStr)
+          .not('next_review', 'is', null)
+          .order('next_review', { ascending: true });
 
-      if (error) throw error;
-      return data as Note[];
+        if (error) throw error;
+        const result = data as Note[];
+        AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+        return result;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) return JSON.parse(cached);
+        }
+        throw err;
+      }
     },
     enabled: !!user?.id,
   });

@@ -2,7 +2,8 @@ import { supabase } from '@/lib/supabase/client';
 import { getTodayLocal } from '@/lib/utils/date';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
 import { Goal, Habit, ScheduleBlock, ScheduleSkipEntry, Task } from '@/types/app.types';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface TodayStats {
   topTask: Task | null;
@@ -60,9 +61,18 @@ export function useTodayStats(): TodayStats {
     skipsLog: [],
   });
 
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
   const fetchStats = useCallback(async () => {
     try {
-      setIsLoading(true);
+      setIsLoading(() => {
+        const d = dataRef.current;
+        const hasData = d.habits.length > 0 || d.todayTasks.length > 0 || d.focusMinutesToday > 0;
+        return hasData ? false : true;
+      });
       setError(null);
 
       // Verify session exists
@@ -415,8 +425,45 @@ export function useTodayStats(): TodayStats {
         skippedBlockIds,
         skipsLog,
       });
-    } catch (err) {
+
+      const cachedPayload = {
+        topTask,
+        focusMinutesToday,
+        tasksTotal,
+        tasksDone,
+        habitStreak,
+        focusStreak,
+        habits,
+        nextBlocks,
+        primaryGoal,
+        todayTasks,
+        doneBlockIds,
+        skippedBlockIds,
+        skipsLog,
+      };
+      AsyncStorage.setItem('today_stats_cache', JSON.stringify(cachedPayload)).catch(() => {});
+    } catch (err: any) {
       handleSupabaseError(err, 'fetch_today_stats');
+      
+      const isNetError = 
+        err.message?.toLowerCase().includes('network') || 
+        err.message?.toLowerCase().includes('fetch') || 
+        err.message?.toLowerCase().includes('timeout') ||
+        err.status === 0;
+
+      if (isNetError) {
+        try {
+          const cached = await AsyncStorage.getItem('today_stats_cache');
+          if (cached) {
+            setData(JSON.parse(cached));
+            setIsLoading(false);
+            return;
+          }
+        } catch (localErr) {
+          if (__DEV__) console.error('Failed to read offline stats cache:', localErr);
+        }
+      }
+
       setError('Failed to fetch dashboard stats');
     } finally {
       setIsLoading(false);
@@ -439,7 +486,20 @@ export function useTodayStats(): TodayStats {
   }, []);
 
   useEffect(() => {
-    fetchStats();
+    const loadCacheAndFetch = async () => {
+      try {
+        const cached = await AsyncStorage.getItem('today_stats_cache');
+        if (cached) {
+          setData(JSON.parse(cached));
+          setIsLoading(false);
+        }
+      } catch (e) {
+        if (__DEV__) console.warn('Failed to load initial today stats cache:', e);
+      } finally {
+        fetchStats();
+      }
+    };
+    loadCacheAndFetch();
   }, [fetchStats]);
 
   return {

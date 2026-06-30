@@ -27,6 +27,9 @@ export interface UserProfile {
   peak_time: 'morning' | 'afternoon' | 'night';
   xp_points: number;
   level: number;
+  is_premium: boolean;
+  focus_seeds: number;
+  unlocked_plants: string[];
   ai_insight: string | null;
   ai_insight_updated_at: string | null;
   created_at?: string;
@@ -104,6 +107,7 @@ export interface FocusSession {
   started_at: string;
   ended_at: string;
   status: 'completed' | 'interrupted';
+  focus_accuracy?: 'fully_focused' | 'partially_distracted' | 'off_track' | null;
 }
 
 export interface Note {
@@ -196,6 +200,15 @@ export interface ScheduleLog {
   skip_reason: 'Sick' | 'Travelling' | 'Other' | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface PlantType {
+  id: string;
+  name: string;
+  emoji: string;
+  cost: number;
+  stages: [string, string, string];
+  premiumOnly?: boolean;
 }
 
 

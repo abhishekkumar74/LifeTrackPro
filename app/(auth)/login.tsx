@@ -67,6 +67,8 @@ export default function LoginScreen(): React.JSX.Element {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isForgotState, setIsForgotState] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Trigger autoFocus on mount or tab change
   useEffect(() => {
@@ -224,9 +226,44 @@ export default function LoginScreen(): React.JSX.Element {
     }
   };
 
+  const handleForgotPassword = async (): Promise<void> => {
+    if (!email.trim()) {
+      setValidationError('Please enter your email address.');
+      return;
+    }
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      setValidationError('Please enter a valid email address.');
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage(null);
+    setValidationError(null);
+    setSuccessMessage(null);
+
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: 'lifetrackpro://reset-password',
+      });
+
+      if (error) {
+        setErrorMessage(error.message);
+      } else {
+        setSuccessMessage('Password reset link sent to your email. Please check your inbox!');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+      setErrorMessage(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const isSubmitDisabled = authMethod === 'phone'
     ? (rawPhoneNumber.length < 10 || isLoading)
-    : (!email || password.length < 6 || isLoading);
+    : (isForgotState ? (!email || isLoading) : (!email || password.length < 6 || isLoading));
 
   return (
     <KeyboardAvoidingView
@@ -261,28 +298,30 @@ export default function LoginScreen(): React.JSX.Element {
         {/* SECTION 2: Input Area */}
         <View style={styles.inputSection}>
           {/* Auth Method Toggle Tabs */}
-          <View style={styles.tabContainer}>
-            <Pressable
-              style={[styles.tabButton, authMethod === 'phone' && styles.activeTabButton]}
-              onPress={() => {
-                setAuthMethod('phone');
-                setErrorMessage(null);
-                setValidationError(null);
-              }}
-            >
-              <Text style={[styles.tabButtonText, authMethod === 'phone' && styles.activeTabButtonText]}>Phone OTP</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.tabButton, authMethod === 'email' && styles.activeTabButton]}
-              onPress={() => {
-                setAuthMethod('email');
-                setErrorMessage(null);
-                setValidationError(null);
-              }}
-            >
-              <Text style={[styles.tabButtonText, authMethod === 'email' && styles.activeTabButtonText]}>Email / Pass</Text>
-            </Pressable>
-          </View>
+          {!isForgotState && (
+            <View style={styles.tabContainer}>
+              <Pressable
+                style={[styles.tabButton, authMethod === 'phone' && styles.activeTabButton]}
+                onPress={() => {
+                  setAuthMethod('phone');
+                  setErrorMessage(null);
+                  setValidationError(null);
+                }}
+              >
+                <Text style={[styles.tabButtonText, authMethod === 'phone' && styles.activeTabButtonText]}>Phone OTP</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tabButton, authMethod === 'email' && styles.activeTabButton]}
+                onPress={() => {
+                  setAuthMethod('email');
+                  setErrorMessage(null);
+                  setValidationError(null);
+                }}
+              >
+                <Text style={[styles.tabButtonText, authMethod === 'email' && styles.activeTabButtonText]}>Email / Pass</Text>
+              </Pressable>
+            </View>
+          )}
 
           {authMethod === 'phone' ? (
             <>
@@ -323,6 +362,57 @@ export default function LoginScreen(): React.JSX.Element {
                 />
               </View>
             </>
+          ) : isForgotState ? (
+            <View style={{ gap: SPACING.md }}>
+              <Text style={{ fontFamily: TYPOGRAPHY.fonts.sans, fontSize: 14, color: COLORS.t2, marginBottom: 4, lineHeight: 20 }}>
+                Enter the email address associated with your account and we will send you a password recovery link.
+              </Text>
+              <View>
+                <Text style={styles.inputLabel}>Email Address</Text>
+                <View
+                  style={[
+                    styles.inputRowContainer,
+                    isFocused && styles.inputRowContainerFocused,
+                    (validationError || errorMessage) && styles.inputRowContainerError,
+                  ]}
+                >
+                  <TextInput
+                    ref={emailInputRef}
+                    style={styles.textInput}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="name@example.com"
+                    placeholderTextColor={COLORS.t3}
+                    value={email}
+                    onChangeText={(text) => {
+                      setEmail(text);
+                      if (validationError) setValidationError(null);
+                      if (errorMessage) setErrorMessage(null);
+                      if (successMessage) setSuccessMessage(null);
+                    }}
+                    editable={!isLoading}
+                  />
+                </View>
+              </View>
+
+              <Pressable
+                onPress={() => {
+                  setIsForgotState(false);
+                  setErrorMessage(null);
+                  setValidationError(null);
+                  setSuccessMessage(null);
+                }}
+                style={({ pressed }) => [
+                  { marginTop: 12, alignSelf: 'center', padding: 8 },
+                  pressed && { opacity: 0.7 }
+                ]}
+              >
+                <Text style={{ color: COLORS.violet, fontSize: 14, fontFamily: TYPOGRAPHY.fonts.sans, fontWeight: '600' }}>
+                  Back to Sign In
+                </Text>
+              </Pressable>
+            </View>
           ) : (
             <View style={{ gap: SPACING.md }}>
               <View>
@@ -378,6 +468,24 @@ export default function LoginScreen(): React.JSX.Element {
                     editable={!isLoading}
                   />
                 </View>
+                {!isSignUp && (
+                  <Pressable
+                    onPress={() => {
+                      setIsForgotState(true);
+                      setErrorMessage(null);
+                      setValidationError(null);
+                      setSuccessMessage(null);
+                    }}
+                    style={({ pressed }) => [
+                      { alignSelf: 'flex-end', marginTop: 8 },
+                      pressed && { opacity: 0.7 }
+                    ]}
+                  >
+                    <Text style={{ color: COLORS.violet, fontSize: 13, fontFamily: TYPOGRAPHY.fonts.sans, fontWeight: '500' }}>
+                      Forgot Password?
+                    </Text>
+                  </Pressable>
+                )}
               </View>
 
               <Pressable
@@ -398,7 +506,12 @@ export default function LoginScreen(): React.JSX.Element {
             </View>
           )}
 
-          {/* Validation or Supabase Error display */}
+          {/* Validation, Success or Supabase Error display */}
+          {successMessage && (
+            <Text style={styles.successText}>
+              {successMessage}
+            </Text>
+          )}
           {(validationError || errorMessage) && (
             <Text style={styles.errorText}>
               {validationError || errorMessage}
@@ -414,53 +527,55 @@ export default function LoginScreen(): React.JSX.Element {
               isSubmitDisabled && styles.submitBtnDisabled,
               !isSubmitDisabled && pressed && styles.submitBtnPressed,
             ]}
-            onPress={authMethod === 'phone' ? handleSendOtp : handleEmailAuth}
+            onPress={authMethod === 'phone' ? handleSendOtp : (isForgotState ? handleForgotPassword : handleEmailAuth)}
             disabled={isSubmitDisabled}
             accessibilityRole="button"
-            accessibilityLabel={authMethod === 'phone' ? 'Send OTP' : (isSignUp ? 'Sign Up' : 'Sign In')}
+            accessibilityLabel={authMethod === 'phone' ? 'Send OTP' : (isForgotState ? 'Send Reset Link' : (isSignUp ? 'Sign Up' : 'Sign In'))}
           >
             {isLoading ? (
               <ActivityIndicator color={COLORS.surface} size="small" />
             ) : (
               <Text style={styles.submitBtnText}>
-                {authMethod === 'phone' ? 'Send OTP' : (isSignUp ? 'Create Account' : 'Sign In')}
+                {authMethod === 'phone' ? 'Send OTP' : (isForgotState ? 'Send Reset Link' : (isSignUp ? 'Create Account' : 'Sign In'))}
               </Text>
             )}
           </Pressable>
 
           {/* Google sign-in backup */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.googleBtn,
-              pressed && styles.googleBtnPressed,
-            ]}
-            onPress={handleGoogleSignIn}
-            disabled={isLoading}
-            accessibilityRole="button"
-            accessibilityLabel="Continue with Google"
-          >
-            <View style={styles.googleIconContainer}>
-              <Svg width="18" height="18" viewBox="0 0 24 24">
-                <Path
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  fill="#4285F4"
-                />
-                <Path
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  fill="#34A853"
-                />
-                <Path
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  fill="#FBBC05"
-                />
-                <Path
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  fill="#EA4335"
-                />
-              </Svg>
-            </View>
-            <Text style={styles.googleBtnText}>Continue with Google</Text>
-          </Pressable>
+          {!isForgotState && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.googleBtn,
+                pressed && styles.googleBtnPressed,
+              ]}
+              onPress={handleGoogleSignIn}
+              disabled={isLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Continue with Google"
+            >
+              <View style={styles.googleIconContainer}>
+                <Svg width="18" height="18" viewBox="0 0 24 24">
+                  <Path
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    fill="#4285F4"
+                  />
+                  <Path
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    fill="#34A853"
+                  />
+                  <Path
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    fill="#FBBC05"
+                  />
+                  <Path
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    fill="#EA4335"
+                  />
+                </Svg>
+              </View>
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            </Pressable>
+          )}
 
           <Text style={styles.bottomLegalText}>
             By continuing, you agree to our Terms and Privacy Policy
@@ -577,6 +692,15 @@ const styles = StyleSheet.create({
     color: COLORS.coral,
     marginTop: SPACING.sm,
     paddingLeft: SPACING.xs,
+  },
+  successText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 13,
+    color: '#00B894',
+    marginTop: SPACING.sm,
+    paddingLeft: SPACING.xs,
+    textAlign: 'center',
+    fontWeight: '500',
   },
   ctaSection: {
     paddingHorizontal: SPACING.xxl,

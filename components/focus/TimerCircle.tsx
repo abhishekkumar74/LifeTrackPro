@@ -19,13 +19,38 @@ interface TimerCircleProps {
   currentMode: 'focus' | 'short_break' | 'long_break';
 }
 
+const THEME_COLORS = {
+  default: '#5B4FE8',
+  gold: '#E8A020',
+  rose_gold: '#FDA4AF',
+  sunset: '#FF5E62',
+  mint: '#00B894',
+  nebula: '#D946EF',
+  obsidian: '#E2E8F0',
+} as const;
+
+const PLANT_STAGES: Record<string, [string, string, string]> = {
+  sprout: ['🌱', '🌿', '🌸'],
+  sunflower: ['🌱', '🪴', '🌻'],
+  rose: ['🌱', '🌿', '🌹'],
+  cactus: ['🌱', '🪴', '🌵'],
+  tree: ['🌱', '🌿', '🌳'],
+};
+
 export const TimerCircle: React.FC<TimerCircleProps> = ({
   size = 220,
   secondsLeft,
   totalSeconds,
   currentMode,
 }) => {
-  const { pomodoroCount } = useFocusStore();
+  const {
+    pomodoroCount,
+    activeTheme = 'default',
+    isStrictModeActive,
+    isPlantWilted,
+    selectedPlantId = 'sprout',
+  } = useFocusStore();
+  const themeColor = THEME_COLORS[activeTheme as keyof typeof THEME_COLORS] || '#5B4FE8';
 
   const strokeWidth = 8;
   const radius = (size - strokeWidth) / 2;
@@ -34,6 +59,14 @@ export const TimerCircle: React.FC<TimerCircleProps> = ({
 
   // Calculate current progress (value from 0 to 1)
   const progress = totalSeconds > 0 ? 1 - secondsLeft / totalSeconds : 0;
+
+  const getPlantEmoji = () => {
+    if (isPlantWilted) return '🥀';
+    const stages = PLANT_STAGES[selectedPlantId] || ['🌱', '🌿', '🌸'];
+    if (progress < 0.33) return stages[0];
+    if (progress < 0.66) return stages[1];
+    return stages[2];
+  };
 
   // Reanimated shared value for smooth animation transitions
   const animatedProgress = useSharedValue(0);
@@ -75,11 +108,11 @@ export const TimerCircle: React.FC<TimerCircleProps> = ({
   // Color mapping helper for Pomodoro progress dots
   const getDotColor = (index: number) => {
     if (currentMode === 'long_break') {
-      return '#5B4FE8'; // All done on long break
+      return themeColor; // All done on long break
     }
     const activeIndex = pomodoroCount % 4;
     if (index < activeIndex) {
-      return '#5B4FE8'; // Complete
+      return themeColor; // Complete
     }
     if (index === activeIndex && currentMode === 'focus') {
       return '#FFFFFF'; // Active focus cycle
@@ -105,7 +138,7 @@ export const TimerCircle: React.FC<TimerCircleProps> = ({
           cx={center}
           cy={center}
           r={radius}
-          stroke="#5B4FE8"
+          stroke={themeColor}
           strokeWidth={strokeWidth}
           fill="transparent"
           strokeDasharray={`${circumference} ${circumference}`}
@@ -119,10 +152,22 @@ export const TimerCircle: React.FC<TimerCircleProps> = ({
       <View style={StyleSheet.absoluteFill}>
         <View style={styles.innerContent}>
           {/* Time Display */}
-          <Text style={styles.timeText}>{timeStr}</Text>
+          <Text
+            style={[styles.timeText, { fontSize: timeStr.length > 5 ? 36 : 46 }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
+            {timeStr}
+          </Text>
 
           {/* Mode Label */}
           <Text style={styles.modeText}>{getModeLabel()}</Text>
+
+          {/* Strict Mode Sprout Growth Visuals */}
+          {isStrictModeActive && (
+            <Text style={styles.plantText}>{getPlantEmoji()}</Text>
+          )}
 
           {/* Pomodoro Dot Indicators */}
           <View style={styles.dotsRow}>
@@ -156,10 +201,11 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontFamily: 'DMMono',
-    fontSize: 56,
     color: '#FFFFFF',
     fontWeight: '600',
-    letterSpacing: -2,
+    letterSpacing: -1,
+    width: '85%',
+    textAlign: 'center',
   },
   modeText: {
     fontFamily: 'DMSans',
@@ -167,6 +213,10 @@ const styles = StyleSheet.create({
     color: '#9B9BAF',
     marginTop: 4,
     letterSpacing: 0.5,
+  },
+  plantText: {
+    fontSize: 24,
+    marginTop: 6,
   },
   dotsRow: {
     flexDirection: 'row',

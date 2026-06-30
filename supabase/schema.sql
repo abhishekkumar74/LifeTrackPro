@@ -92,6 +92,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   peak_time public.peak_time_type NOT NULL DEFAULT 'morning',
   xp_points INTEGER NOT NULL DEFAULT 0 CHECK (xp_points >= 0),
   level INTEGER NOT NULL DEFAULT 1 CHECK (level >= 1),
+  is_premium BOOLEAN NOT NULL DEFAULT false,
+  focus_seeds INTEGER NOT NULL DEFAULT 0,
+  unlocked_plants TEXT[] NOT NULL DEFAULT '{sprout}',
   ai_insight TEXT,
   ai_insight_updated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -203,6 +206,7 @@ CREATE TABLE IF NOT EXISTS public.focus_sessions (
   started_at TIMESTAMPTZ NOT NULL,
   ended_at TIMESTAMPTZ NOT NULL CHECK (ended_at > started_at),
   status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'interrupted')),
+  focus_accuracy TEXT CHECK (focus_accuracy IN ('fully_focused', 'partially_distracted', 'off_track')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -394,7 +398,8 @@ ALTER TABLE public.daily_checkins ENABLE ROW LEVEL SECURITY;
 
 -- 6.1 profiles policies
 DROP POLICY IF EXISTS "Allow select profiles for owner" ON public.profiles;
-CREATE POLICY "Allow select profiles for owner" ON public.profiles FOR SELECT TO authenticated USING (id = auth.uid());
+DROP POLICY IF EXISTS "Allow select profiles for anyone" ON public.profiles;
+CREATE POLICY "Allow select profiles for anyone" ON public.profiles FOR SELECT TO authenticated USING (true);
 
 DROP POLICY IF EXISTS "Allow insert profiles for owner" ON public.profiles;
 CREATE POLICY "Allow insert profiles for owner" ON public.profiles FOR INSERT TO authenticated WITH CHECK (id = auth.uid());
@@ -524,7 +529,8 @@ CREATE POLICY "Allow delete syllabus_topics for owner" ON public.syllabus_topics
 
 -- 6.11 study_rooms policies
 DROP POLICY IF EXISTS "Allow select active study rooms for anyone" ON public.study_rooms;
-CREATE POLICY "Allow select active study rooms for anyone" ON public.study_rooms FOR SELECT TO authenticated USING (is_active = true);
+DROP POLICY IF EXISTS "Allow select study_rooms for anyone" ON public.study_rooms;
+CREATE POLICY "Allow select study_rooms for anyone" ON public.study_rooms FOR SELECT TO authenticated USING (true);
 
 DROP POLICY IF EXISTS "Allow insert study rooms for host" ON public.study_rooms;
 CREATE POLICY "Allow insert study rooms for host" ON public.study_rooms FOR INSERT TO authenticated WITH CHECK (host_id = auth.uid());
@@ -563,3 +569,28 @@ CREATE POLICY "Allow update schedule_logs for owner" ON public.schedule_logs FOR
 
 DROP POLICY IF EXISTS "Allow delete schedule_logs for owner" ON public.schedule_logs;
 CREATE POLICY "Allow delete schedule_logs for owner" ON public.schedule_logs FOR DELETE TO authenticated USING (user_id = auth.uid());
+
+-- View for Schedule Logs with Block & Profile details
+CREATE OR REPLACE VIEW public.view_schedule_logs AS
+SELECT 
+  l.id AS log_id,
+  l.date AS log_date,
+  l.status AS log_status,
+  l.skip_reason,
+  b.title AS block_title,
+  b.subject AS block_subject,
+  b.start_time AS block_start_time,
+  b.end_time AS block_end_time,
+  p.name AS user_name,
+  p.id AS user_id,
+  b.id AS block_id
+FROM public.schedule_logs l
+LEFT JOIN public.schedule_blocks b ON l.block_id = b.id
+LEFT JOIN public.profiles p ON l.user_id = p.id;
+
+-- Migration: Add is_premium column to profiles
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS focus_seeds INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS unlocked_plants TEXT[] NOT NULL DEFAULT '{sprout}';
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS focus_accuracy TEXT CHECK (focus_accuracy IN ('fully_focused', 'partially_distracted', 'off_track'));
+

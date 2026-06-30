@@ -94,6 +94,28 @@ export async function scheduleStreakAlert(): Promise<void> {
   });
 }
 
+// 3.5 scheduleRevisionAlert
+export async function scheduleRevisionAlert(topicTitle: string, delayDays: number): Promise<void> {
+  const triggerDate = new Date();
+  triggerDate.setDate(triggerDate.getDate() + delayDays);
+  triggerDate.setHours(9, 0, 0, 0); // 9:00 AM
+
+  const cleanTitle = topicTitle.trim();
+  const seconds = Math.max(1, Math.floor((triggerDate.getTime() - Date.now()) / 1000));
+  await Notifications.scheduleNotificationAsync({
+    identifier: `revision_${cleanTitle.replace(/\s+/g, '_')}_${delayDays}`,
+    content: {
+      title: 'Time to Revise! 🧠',
+      body: `It's time to revise "${cleanTitle}" to boost memory retention! Spaced repetition is active.`,
+      sound: true,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds,
+    },
+  });
+}
+
 // 4. cancelAllNotifications
 export async function cancelAllNotifications(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();

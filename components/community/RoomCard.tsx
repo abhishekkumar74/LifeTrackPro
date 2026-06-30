@@ -11,15 +11,20 @@ interface RoomCardProps {
   onEnd?: (roomId: string) => void;
 }
 
-export const RoomCard = React.memo<RoomCardProps>(({
+export const RoomCard = ({
   room,
   currentUserId,
   onJoin,
   onEnd,
-}) => {
+}: RoomCardProps) => {
   const [timerText, setTimerText] = useState('');
 
   useEffect(() => {
+    if (!room.is_active) {
+      setTimerText('');
+      return;
+    }
+
     const updateTimer = () => {
       const diffMs = Date.now() - new Date(room.created_at).getTime();
       const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
@@ -39,7 +44,7 @@ export const RoomCard = React.memo<RoomCardProps>(({
     const interval = setInterval(updateTimer, 1000);
 
     return () => clearInterval(interval);
-  }, [room.created_at]);
+  }, [room.created_at, room.is_active]);
 
   const isHost = room.host_id === currentUserId;
   const subjectColor = room.subject ? getSubjectColor(room.subject) : '#9B9BAF';
@@ -98,15 +103,30 @@ export const RoomCard = React.memo<RoomCardProps>(({
         </View>
 
         <View style={styles.rightColumn}>
-          {isHost ? (
-            <TouchableOpacity
-              style={styles.endButton}
-              onPress={() => onEnd && onEnd(room.id)}
-              activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.endButtonText}>End</Text>
-            </TouchableOpacity>
+          {!room.is_active ? (
+            <View style={styles.endedBadge}>
+              <Text style={styles.endedBadgeText}>Ended</Text>
+            </View>
+          ) : isHost ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity
+                style={styles.joinButton}
+                onPress={() => onJoin(room.id)}
+                activeOpacity={0.8}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+              >
+                <Text style={styles.joinButtonText}>Join</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.endButton, { paddingHorizontal: 10 }]}
+                onPress={() => onEnd && onEnd(room.id)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+              >
+                <Text style={styles.endButtonText}>End</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <TouchableOpacity
               style={styles.joinButton}
@@ -131,11 +151,11 @@ export const RoomCard = React.memo<RoomCardProps>(({
       {/* BOTTOM ROW */}
       <View style={styles.bottomRow}>
         <Text style={styles.roomTypeIndicator}>{getRoomTypeLabel()}</Text>
-        <Text style={styles.timerText}>{timerText}</Text>
+        {room.is_active && <Text style={styles.timerText}>{timerText}</Text>}
       </View>
     </View>
   );
-});
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -237,5 +257,18 @@ const styles = StyleSheet.create({
     fontFamily: 'DMMono',
     fontSize: 12,
     color: '#5B4FE8',
+  },
+  endedBadge: {
+    backgroundColor: '#E8E7E3',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  endedBadgeText: {
+    color: '#5C5C70',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

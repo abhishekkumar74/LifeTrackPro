@@ -202,79 +202,129 @@ export default function ProfileScreen(): React.JSX.Element {
   const { data: totalFocusMin, isLoading: focusLoading } = useQuery({
     queryKey: ['profileFocusTime'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-      const { data, error } = await supabase
-        .from('focus_sessions')
-        .select('duration_min')
-        .eq('user_id', session.user.id);
-      if (error) throw error;
-      return (data || []).reduce((sum, fs) => sum + fs.duration_min, 0);
+      const cacheKey = `profile_focus_time_${profile?.id || 'anon'}`;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
+        const { data, error } = await supabase
+          .from('focus_sessions')
+          .select('duration_min')
+          .eq('user_id', session.user.id);
+        if (error) throw error;
+        const result = (data || []).reduce((sum, fs) => sum + fs.duration_min, 0);
+        AsyncStorage.setItem(cacheKey, String(result)).catch(() => {});
+        return result;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) return parseInt(cached, 10);
+        }
+        throw err;
+      }
     },
   });
 
   const { data: goalsCount, isLoading: goalsLoading } = useQuery({
     queryKey: ['profileGoalsCount'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-      const { count, error } = await supabase
-        .from('goals')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', session.user.id);
-      if (error) throw error;
-      return count || 0;
+      const cacheKey = `profile_goals_count_${profile?.id || 'anon'}`;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
+        const { count, error } = await supabase
+          .from('goals')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', session.user.id);
+        if (error) throw error;
+        const result = count || 0;
+        AsyncStorage.setItem(cacheKey, String(result)).catch(() => {});
+        return result;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) return parseInt(cached, 10);
+        }
+        throw err;
+      }
     },
   });
 
   const { data: habitStreak, isLoading: streakLoading } = useQuery({
     queryKey: ['profileHabitStreak'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-      const { data: logs, error } = await supabase
-        .from('habit_logs')
-        .select('date, done')
-        .eq('user_id', session.user.id)
-        .eq('done', true);
-      if (error) throw error;
+      const cacheKey = `profile_habit_streak_${profile?.id || 'anon'}`;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
+        const { data: logs, error } = await supabase
+          .from('habit_logs')
+          .select('date, done')
+          .eq('user_id', session.user.id)
+          .eq('done', true);
+        if (error) throw error;
 
-      const doneDates = new Set((logs || []).map((l) => l.date));
-      let streak = 0;
+        const doneDates = new Set((logs || []).map((l) => l.date));
+        let streak = 0;
 
-      const formatDateStr = (d: Date) => d.toLocaleDateString('en-CA');
-      const checkDate = new Date();
-      const checkDateTodayStr = formatDateStr(checkDate);
-      checkDate.setDate(checkDate.getDate() - 1);
-      const checkDateYesterdayStr = formatDateStr(checkDate);
+        const formatDateStr = (d: Date) => d.toLocaleDateString('en-CA');
+        const checkDate = new Date();
+        const checkDateTodayStr = formatDateStr(checkDate);
+        checkDate.setDate(checkDate.getDate() - 1);
+        const checkDateYesterdayStr = formatDateStr(checkDate);
 
-      if (doneDates.has(checkDateTodayStr)) {
-        streak = 1;
-        const curr = new Date();
-        while (true) {
+        if (doneDates.has(checkDateTodayStr)) {
+          streak = 1;
+          const curr = new Date();
+          while (true) {
+            curr.setDate(curr.getDate() - 1);
+            const dateStr = formatDateStr(curr);
+            if (doneDates.has(dateStr)) {
+              streak++;
+            } else {
+              break;
+            }
+          }
+        } else if (doneDates.has(checkDateYesterdayStr)) {
+          streak = 1;
+          const curr = new Date();
           curr.setDate(curr.getDate() - 1);
-          const dateStr = formatDateStr(curr);
-          if (doneDates.has(dateStr)) {
-            streak++;
-          } else {
-            break;
+          while (true) {
+            curr.setDate(curr.getDate() - 1);
+            const dateStr = formatDateStr(curr);
+            if (doneDates.has(dateStr)) {
+              streak++;
+            } else {
+              break;
+            }
           }
         }
-      } else if (doneDates.has(checkDateYesterdayStr)) {
-        streak = 1;
-        const curr = new Date();
-        curr.setDate(curr.getDate() - 1);
-        while (true) {
-          curr.setDate(curr.getDate() - 1);
-          const dateStr = formatDateStr(curr);
-          if (doneDates.has(dateStr)) {
-            streak++;
-          } else {
-            break;
-          }
+        AsyncStorage.setItem(cacheKey, String(streak)).catch(() => {});
+        return streak;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) return parseInt(cached, 10);
         }
+        throw err;
       }
-      return streak;
     },
   });
 
@@ -629,7 +679,7 @@ export default function ProfileScreen(): React.JSX.Element {
               </View>
             )}
             <View style={styles.headerNameRow}>
-              <Text style={styles.profileName}>{profile?.name || 'Achiever'}</Text>
+              <Text style={styles.profileName}>{profile?.name || 'Achiever'}{profile?.is_premium ? ' ✨' : ''}</Text>
             </View>
 
             <TouchableOpacity
@@ -675,6 +725,34 @@ export default function ProfileScreen(): React.JSX.Element {
         {/* SETTINGS SECTIONS */}
         <View style={styles.settingsSection}>
           <Text style={styles.sectionTitle}>Account</Text>
+
+          {/* LifeTrack Gold Subscription Row */}
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => router.push('/paywall')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.rowLabelCol}>
+              <Text style={styles.rowTitle}>LifeTrack Gold</Text>
+              <Text style={styles.rowSubtitle}>
+                {profile?.is_premium 
+                  ? 'Your subscription is active' 
+                  : 'Unlock exclusive themes, soundscapes & charts'}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {profile?.is_premium ? (
+                <View style={styles.premiumBadgeActive}>
+                  <Text style={styles.premiumBadgeActiveText}>ACTIVE</Text>
+                </View>
+              ) : (
+                <View style={styles.premiumBadgeUpgrade}>
+                  <Text style={styles.premiumBadgeUpgradeText}>UPGRADE</Text>
+                </View>
+              )}
+              <ChevronRight size={16} color="#9B9BAF" />
+            </View>
+          </TouchableOpacity>
 
           {/* Inline Edit Name Row */}
           {isEditingName ? (
@@ -1416,5 +1494,31 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     height: 44,
     paddingHorizontal: 12,
+  },
+  premiumBadgeActive: {
+    backgroundColor: 'rgba(232, 160, 32, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(232, 160, 32, 0.3)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  premiumBadgeActiveText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#E8A020',
+  },
+  premiumBadgeUpgrade: {
+    backgroundColor: '#5B4FE8',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  premiumBadgeUpgradeText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

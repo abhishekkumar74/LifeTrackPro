@@ -7,7 +7,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
+  ScrollView,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Href } from 'expo-router';
 import { useActiveRooms, useMyRooms, useEndRoom, RoomWithHost } from '@/lib/hooks/use-study-rooms';
@@ -43,6 +46,8 @@ export default function RoomsScreen(): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<'live' | 'my'>('live');
   const [isSheetVisible, setIsSheetVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'silent' | 'music' | 'discussion'>('all');
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -103,17 +108,26 @@ export default function RoomsScreen(): React.JSX.Element {
           onJoin={handleJoinRoom}
           onEnd={handleEndRoom}
         />
-        {isInactiveInMyTab && (
-          <View style={styles.endedBadge}>
-            <Text style={styles.endedBadgeText}>Ended</Text>
-          </View>
-        )}
       </View>
     );
   }, [activeTab, currentUserId, handleJoinRoom, handleEndRoom]);
   const isLoading = activeTab === 'live' ? isActiveLoading : isMyLoading;
   const error = activeTab === 'live' ? activeError : myError;
-  const listData = activeTab === 'live' ? activeRooms : myRooms;
+
+  const filteredActiveRooms = React.useMemo(() => {
+    return activeRooms?.filter((room) => {
+      const matchesSearch =
+        room.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (room.subject && room.subject.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      const matchesCategory =
+        selectedCategory === 'all' || room.room_type === selectedCategory;
+
+      return matchesSearch && matchesCategory;
+    }) || [];
+  }, [activeRooms, searchQuery, selectedCategory]);
+
+  const listData = activeTab === 'live' ? filteredActiveRooms : myRooms;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -166,6 +180,53 @@ export default function RoomsScreen(): React.JSX.Element {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* SEARCH AND FILTER */}
+      {activeTab === 'live' && (
+        <View style={styles.searchFilterContainer}>
+          <TextInput
+            style={styles.searchBar}
+            placeholder="Search rooms or subjects..."
+            placeholderTextColor="#9B9BAF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            maxLength={40}
+            autoCorrect={false}
+          />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScrollView}
+            style={styles.filterContainer}
+          >
+            {[
+              { id: 'all', label: 'All 🌐' },
+              { id: 'silent', label: 'Silent 🔇' },
+              { id: 'music', label: 'Music 🎵' },
+              { id: 'discussion', label: 'Discussion 💬' },
+            ].map((cat) => {
+              const isSelected = selectedCategory === cat.id;
+              return (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                  onPress={() => {
+                    try {
+                      Haptics.selectionAsync();
+                    } catch (e) {}
+                    setSelectedCategory(cat.id as any);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       {/* CONTENT LIST */}
       {isLoading ? (
@@ -371,19 +432,48 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     position: 'relative',
   },
-  endedBadge: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: '#E8E7E3',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+  searchFilterContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    gap: 12,
   },
-  endedBadgeText: {
+  searchBar: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontFamily: 'DMSans',
+    fontSize: 14,
+    color: '#17172A',
+  },
+  filterContainer: {
+    flexGrow: 0,
+  },
+  filterScrollView: {
+    gap: 8,
+    paddingRight: 20,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+  },
+  filterChipActive: {
+    backgroundColor: '#5B4FE8',
+    borderColor: '#5B4FE8',
+  },
+  filterChipText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
     color: '#5C5C70',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
   },
 });

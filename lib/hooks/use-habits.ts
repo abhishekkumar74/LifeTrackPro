@@ -4,6 +4,7 @@ import { Habit } from '@/types/app.types';
 import { getTodayLocal } from '@/lib/utils/date';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface HabitWithStatus extends Habit {
   completedToday: boolean;
@@ -33,33 +34,52 @@ interface HabitDbRow extends Habit {
 // 1. Fetch active habits for current user with today's completion status
 export function useHabits() {
   const { user } = useAuthStore();
+  const cacheKey = `habits_list_${user?.id}`;
+
   return useQuery<HabitWithStatus[]>({
     queryKey: ['habits', user?.id],
     queryFn: async () => {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) throw new Error('Not authenticated');
+      try {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (!currentUser) throw new Error('Not authenticated');
 
-      const today = getTodayLocal();
-      const { data, error } = await supabase
-        .from('habits')
-        .select(`
-          *,
-          habit_logs!left(
-            id, done, date
-          )
-        `)
-        .eq('user_id', currentUser.id)
-        .eq('is_active', true)
-        .eq('habit_logs.date', today)
-        .order('order_index', { ascending: true });
+        const today = getTodayLocal();
+        const { data, error } = await supabase
+          .from('habits')
+          .select(`
+            *,
+            habit_logs!left(
+              id, done, date
+            )
+          `)
+          .eq('user_id', currentUser.id)
+          .eq('is_active', true)
+          .eq('habit_logs.date', today)
+          .order('order_index', { ascending: true });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      return ((data as unknown as HabitDbRow[]) || []).map((h) => ({
-        ...h,
-        completedToday: h.habit_logs?.[0]?.done ?? false,
-        logId: h.habit_logs?.[0]?.id ?? null,
-      })) as HabitWithStatus[];
+        const result = ((data as unknown as HabitDbRow[]) || []).map((h) => ({
+          ...h,
+          completedToday: h.habit_logs?.[0]?.done ?? false,
+          logId: h.habit_logs?.[0]?.id ?? null,
+        })) as HabitWithStatus[];
+
+        AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+        return result;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) return JSON.parse(cached);
+        }
+        throw err;
+      }
     },
     enabled: !!user?.id,
   });

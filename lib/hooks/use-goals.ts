@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase/client';
 import { Goal, Milestone, Task } from '@/types/app.types';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type AssembledGoal = Goal & {
   totalTasks: number;
@@ -12,52 +13,70 @@ export type AssembledGoal = Goal & {
 
 export function useGoals(status: 'active' | 'achieved' = 'active') {
   const { user } = useAuthStore();
+  const cacheKey = `goals_list_${user?.id}_${status}`;
+
   return useQuery<AssembledGoal[]>({
     queryKey: ['goals', user?.id, status],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
 
-      const [goalsRes, milestonesRes, tasksRes] = await Promise.all([
-        supabase.from('goals').select('*').eq('status', status),
-        supabase.from('milestones').select('*'),
-        supabase.from('tasks').select('*'),
-      ]);
+        const [goalsRes, milestonesRes, tasksRes] = await Promise.all([
+          supabase.from('goals').select('*').eq('status', status),
+          supabase.from('milestones').select('*'),
+          supabase.from('tasks').select('*'),
+        ]);
 
-      if (goalsRes.error) throw goalsRes.error;
-      if (milestonesRes.error) throw milestonesRes.error;
-      if (tasksRes.error) throw tasksRes.error;
+        if (goalsRes.error) throw goalsRes.error;
+        if (milestonesRes.error) throw milestonesRes.error;
+        if (tasksRes.error) throw tasksRes.error;
 
-      const goals = goalsRes.data || [];
-      const milestones = milestonesRes.data || [];
-      const tasks = tasksRes.data || [];
+        const goals = goalsRes.data || [];
+        const milestones = milestonesRes.data || [];
+        const tasks = tasksRes.data || [];
 
-      const assembled = goals.map((g) => {
-        const goalMilestones = milestones
-          .filter((m) => m.goal_id === g.id)
-          .map((m) => ({
-            ...m,
-            tasks: tasks.filter((t) => t.milestone_id === m.id) as Task[],
-          }));
-        const milestoneIds = goalMilestones.map((m) => m.id);
-        const goalTasks = tasks.filter(
-          (t) => t.milestone_id && milestoneIds.includes(t.milestone_id)
-        );
+        const assembled = goals.map((g) => {
+          const goalMilestones = milestones
+            .filter((m) => m.goal_id === g.id)
+            .map((m) => ({
+              ...m,
+              tasks: tasks.filter((t) => t.milestone_id === m.id) as Task[],
+            }));
+          const milestoneIds = goalMilestones.map((m) => m.id);
+          const goalTasks = tasks.filter(
+            (t) => t.milestone_id && milestoneIds.includes(t.milestone_id)
+          );
 
-        return {
-          ...g,
-          milestones: goalMilestones,
-          totalTasks: goalTasks.length,
-          doneTasks: goalTasks.filter((t) => t.completed_at !== null).length,
-        };
-      });
+          return {
+            ...g,
+            milestones: goalMilestones,
+            totalTasks: goalTasks.length,
+            doneTasks: goalTasks.filter((t) => t.completed_at !== null).length,
+          };
+        });
 
-      // Order by: is_primary DESC, created_at ASC
-      return assembled.sort((a, b) => {
-        if (a.is_primary && !b.is_primary) return -1;
-        if (!a.is_primary && b.is_primary) return 1;
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      }) as AssembledGoal[];
+        const result = assembled.sort((a, b) => {
+          if (a.is_primary && !b.is_primary) return -1;
+          if (!a.is_primary && b.is_primary) return 1;
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        }) as AssembledGoal[];
+
+        AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+        return result;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) return JSON.parse(cached);
+        }
+        throw err;
+      }
     },
     enabled: !!user?.id,
   });
