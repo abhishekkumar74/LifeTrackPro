@@ -171,21 +171,25 @@ export default function HomeDashboardScreen(): React.JSX.Element {
           await AsyncStorage.setItem(snapshotKey, JSON.stringify(currentRoutines));
           setTodayScheduleSnapshot(currentRoutines);
         } else {
-          // Snapshot exists, load and merge only brand-new routines
+          // Snapshot exists, load, update details, and merge new routines
           const snapshotBlocks: ScheduleBlock[] = JSON.parse(storedSnapshot);
-          const snapshotIds = new Set(snapshotBlocks.map((b) => b.id));
+          const currentRoutinesMap = new Map(currentRoutines.map((b) => [b.id, b]));
 
+          // Update details of existing blocks in the snapshot with latest DB values
+          const updatedSnapshot = snapshotBlocks.map((sb) => {
+            const latest = currentRoutinesMap.get(sb.id);
+            return latest ? latest : sb;
+          });
+
+          const snapshotIds = new Set(snapshotBlocks.map((b) => b.id));
           const newRoutines = currentRoutines.filter((b) => !snapshotIds.has(b.id));
 
-          if (newRoutines.length > 0) {
-            const merged = [...snapshotBlocks, ...newRoutines].sort((a, b) =>
-              a.start_time.localeCompare(b.start_time)
-            );
-            await AsyncStorage.setItem(snapshotKey, JSON.stringify(merged));
-            setTodayScheduleSnapshot(merged);
-          } else {
-            setTodayScheduleSnapshot(snapshotBlocks);
-          }
+          const finalMerged = [...updatedSnapshot, ...newRoutines].sort((a, b) =>
+            a.start_time.localeCompare(b.start_time)
+          );
+
+          await AsyncStorage.setItem(snapshotKey, JSON.stringify(finalMerged));
+          setTodayScheduleSnapshot(finalMerged);
         }
       } catch (err) {
         console.error('Failed to manage schedule daily snapshot', err);
