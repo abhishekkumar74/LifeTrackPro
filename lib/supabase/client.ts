@@ -431,6 +431,34 @@ export type RoomMessageTable = {
   Relationships: [];
 };
 
+export interface JournalEntryRow {
+  id: string;
+  user_id: string;
+  title: string;
+  content: string;
+  achievements?: string;
+  not_to_dos?: string;
+  improvements?: string;
+  mood: number | null;
+  tags: string[];
+  entry_date: string;
+  time_of_day: string | null;
+  is_locked: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type JournalEntryTable = {
+  Row: JournalEntryRow;
+  Insert: Omit<JournalEntryRow, 'id' | 'created_at' | 'updated_at'> & {
+    id?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  Update: Partial<JournalEntryRow>;
+  Relationships: [];
+};
+
 /**
  * Generic schema types definition for Supabase client.
  * Provides custom typings for relational database mapping.
@@ -453,6 +481,7 @@ export type Database = {
       schedule_logs: ScheduleLogTable;
       transactions: TransactionTable;
       room_messages: RoomMessageTable;
+      journal_entries: JournalEntryTable;
     };
     Views: {
       [_ in never]: never;
