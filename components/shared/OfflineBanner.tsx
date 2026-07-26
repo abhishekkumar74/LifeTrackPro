@@ -1,84 +1,94 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, Text } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text } from 'react-native';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export const OfflineBanner: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const [status, setStatus] = useState<'idle' | 'offline' | 'online'>('idle');
+  const [bannerState, setBannerState] = useState<{
+    type: 'offline' | 'online';
+    text: string;
+  }>({ type: 'offline', text: '📶 Offline Mode | Using cached data' });
+
   const translateY = useSharedValue(150); // Start hidden off-screen below
-  
-  const wasOfflineRef = useRef(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timeoutRef = React.useRef<any>(null);
 
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      // NetInfo state can be null initially, we treat null as connected
-      const isConnected = state.isConnected !== false;
-      
-      if (!isConnected) {
-        // Clear any pending hide timers
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        
-        wasOfflineRef.current = true;
-        setStatus('offline');
-        translateY.value = withTiming(0, { duration: 400 });
-
-        // Auto-hide offline banner after 3.5 seconds
-        timeoutRef.current = setTimeout(() => {
-          translateY.value = withTiming(150, { duration: 400 });
-        }, 3500);
-
-      } else if (isConnected && wasOfflineRef.current) {
-        // Clear any pending hide timers
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-
-        wasOfflineRef.current = false;
-        setStatus('online');
-        translateY.value = withTiming(0, { duration: 400 });
-
-        // Auto-hide online banner after 3.5 seconds
-        timeoutRef.current = setTimeout(() => {
-          translateY.value = withTiming(150, { duration: 400 });
-          // Reset status back to idle after animation finishes
-          setTimeout(() => setStatus('idle'), 400);
-        }, 3500);
+    const showBanner = (type: 'offline' | 'online') => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
+
+      const text = type === 'offline'
+        ? '📶 Offline Mode | Using cached data'
+        : '🟢 Back Online | Connected';
+
+      setBannerState({ type, text });
+      translateY.value = withTiming(0, { duration: 400 });
+
+      // Automatically slide out after 3 seconds
+      timeoutRef.current = setTimeout(() => {
+        translateY.value = withTiming(150, { duration: 400 });
+      }, 3000);
+    };
+
+    let prevConnected: boolean | null = null;
+
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const isConnected = state.isConnected ?? true;
+
+      if (prevConnected === null) {
+        // Initial setup: only show offline banner if starting offline
+        if (!isConnected) {
+          showBanner('offline');
+        }
+        prevConnected = isConnected;
+        return;
+      }
+
+      if (prevConnected && !isConnected) {
+        // Transition: Online -> Offline
+        showBanner('offline');
+      } else if (!prevConnected && isConnected) {
+        // Transition: Offline -> Online
+        showBanner('online');
+      }
+
+      prevConnected = isConnected;
     });
 
     return () => {
       unsubscribe();
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
     };
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => {
-    // Position it safely above the bottom tab bar
-    const bottomOffset = insets.bottom > 0 ? insets.bottom + 65 : 75;
     return {
       transform: [{ translateY: translateY.value }],
-      bottom: bottomOffset,
+      bottom: insets.bottom > 0 ? insets.bottom + 8 : 12,
     };
   });
 
-  if (status === 'idle') return null;
-
-  const isGreen = status === 'online';
+  const containerBgColor = bannerState.type === 'offline' ? '#F59E0B' : '#10B981';
+  const textColor = bannerState.type === 'offline' ? '#0F172A' : '#FFFFFF';
 
   return (
-    <Animated.View style={[
-      styles.container, 
-      isGreen ? styles.onlineContainer : styles.offlineContainer, 
-      animatedStyle
-    ]}>
-      <Text style={[styles.text, isGreen ? styles.onlineText : styles.offlineText]}>
-        {isGreen ? '⚡ Back Online | Syncing data...' : '📶 Offline Mode | Using cached data'}
-      </Text>
+    <Animated.View
+      style={[
+        styles.container,
+        animatedStyle,
+        { backgroundColor: containerBgColor },
+      ]}
+    >
+      <Text style={[styles.text, { color: textColor }]}>{bannerState.text}</Text>
     </Animated.View>
   );
 };
@@ -86,8 +96,8 @@ export const OfflineBanner: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    left: 24,
-    right: 24,
+    left: 20,
+    right: 20,
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 30, // Pill shaped design
@@ -97,26 +107,14 @@ const styles = StyleSheet.create({
     zIndex: 9999,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.15,
     shadowRadius: 6,
-    elevation: 4,
-  },
-  offlineContainer: {
-    backgroundColor: '#F59E0B', // Premium Amber Yellow
-  },
-  onlineContainer: {
-    backgroundColor: '#10B981', // Emerald Green
+    elevation: 5,
   },
   text: {
     fontFamily: 'DMSans-Medium',
     fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
-  },
-  offlineText: {
-    color: '#0F172A', // Dark Slate for yellow readability
-  },
-  onlineText: {
-    color: '#FFFFFF', // White text for green high-contrast readability
   },
 });

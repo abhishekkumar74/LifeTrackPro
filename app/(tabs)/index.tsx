@@ -171,25 +171,21 @@ export default function HomeDashboardScreen(): React.JSX.Element {
           await AsyncStorage.setItem(snapshotKey, JSON.stringify(currentRoutines));
           setTodayScheduleSnapshot(currentRoutines);
         } else {
-          // Snapshot exists, load, update details, and merge new routines
+          // Snapshot exists, load and merge only brand-new routines
           const snapshotBlocks: ScheduleBlock[] = JSON.parse(storedSnapshot);
-          const currentRoutinesMap = new Map(currentRoutines.map((b) => [b.id, b]));
-
-          // Update details of existing blocks in the snapshot with latest DB values
-          const updatedSnapshot = snapshotBlocks.map((sb) => {
-            const latest = currentRoutinesMap.get(sb.id);
-            return latest ? latest : sb;
-          });
-
           const snapshotIds = new Set(snapshotBlocks.map((b) => b.id));
+
           const newRoutines = currentRoutines.filter((b) => !snapshotIds.has(b.id));
 
-          const finalMerged = [...updatedSnapshot, ...newRoutines].sort((a, b) =>
-            a.start_time.localeCompare(b.start_time)
-          );
-
-          await AsyncStorage.setItem(snapshotKey, JSON.stringify(finalMerged));
-          setTodayScheduleSnapshot(finalMerged);
+          if (newRoutines.length > 0) {
+            const merged = [...snapshotBlocks, ...newRoutines].sort((a, b) =>
+              a.start_time.localeCompare(b.start_time)
+            );
+            await AsyncStorage.setItem(snapshotKey, JSON.stringify(merged));
+            setTodayScheduleSnapshot(merged);
+          } else {
+            setTodayScheduleSnapshot(snapshotBlocks);
+          }
         }
       } catch (err) {
         console.error('Failed to manage schedule daily snapshot', err);
@@ -292,7 +288,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
           (old: any) => ({
             ...old,
             habits: old?.habits?.map((h: any) =>
-              h.id === habitId 
+              h.id === habitId
                 ? { ...h, completedToday: newDone }
                 : h
             ) ?? []
@@ -304,14 +300,14 @@ export default function HomeDashboardScreen(): React.JSX.Element {
 
   const handleStartFocus = useCallback(() => {
     if (isCse) {
-      const isInterviewPrep = !subCategory || 
-        subCategory.includes('Amazon') || 
-        subCategory.includes('Google') || 
-        subCategory.includes('Microsoft') || 
-        subCategory.includes('Meta') || 
-        subCategory.includes('FAANG') || 
-        subCategory.includes('SDE') || 
-        subCategory.includes('SWE') || 
+      const isInterviewPrep = !subCategory ||
+        subCategory.includes('Amazon') ||
+        subCategory.includes('Google') ||
+        subCategory.includes('Microsoft') ||
+        subCategory.includes('Meta') ||
+        subCategory.includes('FAANG') ||
+        subCategory.includes('SDE') ||
+        subCategory.includes('SWE') ||
         subCategory.includes('Placement') ||
         subCategory.includes('GATE');
 
@@ -320,8 +316,8 @@ export default function HomeDashboardScreen(): React.JSX.Element {
 
       if (!isInterviewPrep) {
         sub = syllabusStats.firstIncompleteTopic?.subject || 'Backend Development';
-        goalText = syllabusStats.firstIncompleteTopic 
-          ? `Practice: ${syllabusStats.firstIncompleteTopic.topic}` 
+        goalText = syllabusStats.firstIncompleteTopic
+          ? `Practice: ${syllabusStats.firstIncompleteTopic.topic}`
           : '2hr Backend practice';
       }
 

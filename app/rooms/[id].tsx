@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,13 +13,16 @@ import {
   StatusBar,
   Alert,
   Share,
+  Image,
+  ScrollView,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Href } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { StudyRoom } from '@/types/app.types';
-import { useRoomPresence, useRoomChat, RoomMember, ChatMessage } from '@/lib/hooks/use-study-rooms';
+import { useRoomPresence, useRoomChat, useEndRoom, RoomMember, ChatMessage } from '@/lib/hooks/use-study-rooms';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useUiStore } from '@/lib/store/ui.store';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
@@ -33,8 +36,25 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import { Skeleton } from '@/components/shared/Skeleton';
-import { Share2 } from 'lucide-react-native';
+import { Share2, ArrowLeft, Headphones, Play, Pause, Volume2, VolumeX, Send, Music, Smile, Maximize2, Minimize2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
+
+interface MusicStation {
+  id: string;
+  name: string;
+  asset: any;
+  genre: string;
+  icon: string;
+}
+
+const STATIONS: MusicStation[] = [
+  { id: 'lofi', name: 'Lofi Beats', asset: require('../../assets/sounds/lofi.mp3'), genre: 'Chill Beats', icon: '🎧' },
+  { id: 'rain', name: 'Rainy Cafe', asset: require('../../assets/sounds/rain.mp3'), genre: 'Study Rain', icon: '🌧️' },
+  { id: 'cafe', name: 'Quiet Cafe', asset: require('../../assets/sounds/cafe.mp3'), genre: 'Cafe Ambience', icon: '☕' },
+  { id: 'ocean', name: 'Ocean Waves', asset: require('../../assets/sounds/ocean.mp3'), genre: 'Relaxing Waves', icon: '🌊' },
+  { id: 'brown_noise', name: 'Brown Noise', asset: require('../../assets/sounds/brown_noise.mp3'), genre: 'Focus Noise', icon: '🔊' },
+];
 
 // Deterministic colors for member avatars
 const MEMBER_COLORS = ['#5B4FE8', '#00B894', '#E8A020', '#E85858', '#8B6FE8', '#0EA5E9'];
@@ -134,6 +154,153 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   // Hooks for Presence & Chat
   const { members, memberCount } = useRoomPresence(id || '');
   const { messages, sendMessage } = useRoomChat(id || '');
+  const endRoomMutation = useEndRoom();
+  const hasExpiredRef = useRef(false);
+
+  // Music State
+  const [isPlayingMusic, setIsPlayingMusic] = useState(false);
+  const [currentStation, setCurrentStation] = useState<MusicStation>(STATIONS[0]);
+  const soundInstanceRef = useRef<Audio.Sound | null>(null);
+  const loadingSoundIdRef = useRef<string | null>(null);
+  const [musicVolume, setMusicVolume] = useState(0.5);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isChatExpanded, setIsChatExpanded] = useState(false);
+
+  const safeGoBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/rooms' as Href);
+    }
+  }, []);
+
+  const playStation = useCallback(async (station: MusicStation, volume: number) => {
+    const loadId = Math.random().toString();
+    loadingSoundIdRef.current = loadId;
+
+    try {
+      // 1. Unload any existing fully loaded sound
+      if (soundInstanceRef.current) {
+        try {
+          await soundInstanceRef.current.stopAsync();
+          await soundInstanceRef.current.unloadAsync();
+        } catch (e) {}
+        soundInstanceRef.current = null;
+      }
+
+      await Audio.setAudioModeAsync({
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+
+      // 2. Load the sound asset asynchronously
+      const { sound } = await Audio.Sound.createAsync(
+        station.asset,
+        {
+          shouldPlay: true,
+          isLooping: true,
+          volume: volume,
+        }
+      );
+
+      // 3. Check if a newer play request has been initiated while we were loading
+      if (loadingSoundIdRef.current !== loadId) {
+        // Newer sound is loading, discard this one to prevent parallel playback leaks!
+        try {
+          await sound.stopAsync();
+          await sound.unloadAsync();
+        } catch (e) {}
+        return;
+      }
+
+      soundInstanceRef.current = sound;
+      setIsPlayingMusic(true);
+    } catch (err) {
+      if (__DEV__) console.warn('Failed to play station stream:', err);
+      // Only reset state if this is still the active request
+      if (loadingSoundIdRef.current === loadId) {
+        setIsPlayingMusic(false);
+      }
+    }
+  }, []);
+
+  const stopMusic = useCallback(async () => {
+    loadingSoundIdRef.current = null; // cancel any pending loads
+    try {
+      if (soundInstanceRef.current) {
+        await soundInstanceRef.current.stopAsync();
+        await soundInstanceRef.current.unloadAsync();
+        soundInstanceRef.current = null;
+      }
+    } catch (e) {}
+    setIsPlayingMusic(false);
+  }, []);
+
+  const changeVolume = useCallback(async (vol: number) => {
+    setMusicVolume(vol);
+    try {
+      if (soundInstanceRef.current) {
+        await soundInstanceRef.current.setVolumeAsync(vol);
+      }
+    } catch (e) {}
+  }, []);
+
+  const handleHostSelectStation = useCallback((station: MusicStation) => {
+    setCurrentStation(station);
+    playStation(station, musicVolume);
+
+    if (reactionChannelRef.current) {
+      reactionChannelRef.current.send({
+        type: 'broadcast',
+        event: 'music',
+        payload: {
+          stationId: station.id,
+          isPlaying: true,
+        },
+      });
+    }
+  }, [musicVolume, playStation]);
+
+  const handleHostTogglePlay = useCallback(() => {
+    const nextPlaying = !isPlayingMusic;
+    if (nextPlaying) {
+      playStation(currentStation, musicVolume);
+    } else {
+      stopMusic();
+    }
+
+    if (reactionChannelRef.current) {
+      reactionChannelRef.current.send({
+        type: 'broadcast',
+        event: 'music',
+        payload: {
+          stationId: currentStation.id,
+          isPlaying: nextPlaying,
+        },
+      });
+    }
+  }, [isPlayingMusic, currentStation, musicVolume, playStation, stopMusic]);
+
+  const handleMemberTogglePlay = useCallback(() => {
+    if (isPlayingMusic) {
+      stopMusic();
+    } else {
+      playStation(currentStation, musicVolume);
+    }
+  }, [isPlayingMusic, currentStation, musicVolume, playStation, stopMusic]);
+
+  // Clean up sound on unmount
+  useEffect(() => {
+    return () => {
+      loadingSoundIdRef.current = null;
+      if (soundInstanceRef.current) {
+        soundInstanceRef.current.stopAsync().catch(() => {});
+        soundInstanceRef.current.unloadAsync().catch(() => {});
+      }
+    };
+  }, []);
 
   // Local State
   const [userJoinedTime] = useState<number>(Date.now());
@@ -158,11 +325,11 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       Alert.alert(
         'Study Room Full',
         'Free hosted study rooms are limited to maximum 4 concurrent members. Host must upgrade to Gold to unlock mega rooms!',
-        [{ text: 'OK', onPress: () => router.back() }],
+        [{ text: 'OK', onPress: () => safeGoBack() }],
         { cancelable: false }
       );
     }
-  }, [isRoomLoading, room, isHost, hostIsPremium, memberCount]);
+  }, [isRoomLoading, room, isHost, hostIsPremium, memberCount, safeGoBack]);
 
   useEffect(() => {
     if (!id) return;
@@ -207,6 +374,15 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           ]);
         }
       })
+      .on('broadcast', { event: 'music' }, ({ payload }) => {
+        const station = STATIONS.find((s) => s.id === payload.stationId) || STATIONS[0];
+        setCurrentStation(station);
+        if (payload.isPlaying) {
+          playStation(station, musicVolume);
+        } else {
+          stopMusic();
+        }
+      })
       .subscribe();
 
     reactionChannelRef.current = channel;
@@ -214,7 +390,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [id, currentUserId]);
+  }, [id, currentUserId, playStation, stopMusic, musicVolume]);
 
   const sendCheerOrNudge = (targetUserId: string, type: 'cheer' | 'nudge') => {
     if (reactionChannelRef.current) {
@@ -268,27 +444,56 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     }
   };
 
-  // Timer Count Up
+  const handleRoomExpired = useCallback(async () => {
+    if (hasExpiredRef.current) return;
+    hasExpiredRef.current = true;
+
+    try {
+      if (isHost) {
+        await endRoomMutation.mutateAsync(id || '');
+      }
+    } catch (e) {}
+
+    Alert.alert(
+      'Session Finished ⏱',
+      'This study room group session time limit has been reached.',
+      [{ text: 'OK', onPress: () => safeGoBack() }],
+      { cancelable: false }
+    );
+  }, [id, isHost, endRoomMutation, safeGoBack]);
+
+  // Shared Group Countdown Timer
   useEffect(() => {
+    if (!room || !room.created_at) return;
+
+    const createdAt = new Date(room.created_at).getTime();
+    const durationMs = room.timer_minutes * 60 * 1000;
+    const expiresAt = createdAt + durationMs;
+
     const updateTimer = () => {
-      const diffMs = Date.now() - userJoinedTime;
-      const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
-      const hrs = Math.floor(diffSecs / 3600);
-      const mins = Math.floor((diffSecs % 3600) / 60);
-      const secs = diffSecs % 60;
+      const now = Date.now();
+      const remainingSecs = Math.max(0, Math.floor((expiresAt - now) / 1000));
+      
+      const hrs = Math.floor(remainingSecs / 3600);
+      const mins = Math.floor((remainingSecs % 3600) / 60);
+      const secs = remainingSecs % 60;
       const pad = (n: number) => String(n).padStart(2, '0');
 
       if (hrs > 0) {
-        setTimerText(`${hrs}:${pad(mins)}:${pad(secs)}`);
+        setTimerText(`${pad(hrs)}:${pad(mins)}:${pad(secs)}`);
       } else {
         setTimerText(`${pad(mins)}:${pad(secs)}`);
+      }
+
+      if (remainingSecs <= 0) {
+        handleRoomExpired();
       }
     };
 
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [userJoinedTime]);
+  }, [room, handleRoomExpired]);
 
   const formatFocusTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -393,7 +598,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
             Alert.alert(
               'Room Ended',
               'This study room has been ended by the host.',
-              [{ text: 'OK', onPress: () => router.back() }],
+              [{ text: 'OK', onPress: () => safeGoBack() }],
               { cancelable: false }
             );
           }
@@ -404,10 +609,46 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     return () => {
       supabase.removeChannel(roomSubscription);
     };
-  }, [id]);
+  }, [id, safeGoBack]);
 
   const handleLeave = () => {
-    router.back();
+    if (isChatExpanded) {
+      Keyboard.dismiss();
+      setIsChatExpanded(false);
+      return;
+    }
+    if (isHost) {
+      Alert.alert(
+        'Leave Study Room',
+        'You are the host. Would you like to end the session for everyone or keep it running?',
+        [
+          {
+            text: 'End Room for Everyone',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await endRoomMutation.mutateAsync(id || '');
+                safeGoBack();
+              } catch (e) {
+                safeGoBack();
+              }
+            },
+          },
+          {
+            text: 'Keep Room Running',
+            onPress: () => {
+              safeGoBack();
+            },
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+        ]
+      );
+    } else {
+      safeGoBack();
+    }
   };
 
   const handleSend = () => {
@@ -582,59 +823,158 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       >
         {/* TOP BAR */}
         <View style={styles.topBar}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity style={styles.leaveTopButton} onPress={handleLeave} activeOpacity={0.7}>
-              <Text style={styles.leaveTopButtonText}>← Leave</Text>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.backIconButton} onPress={handleLeave} activeOpacity={0.7}>
+            <ArrowLeft size={20} color="#9B9BAF" />
+          </TouchableOpacity>
 
+          <View style={styles.titleContainer}>
+            <Text style={styles.roomTitle} numberOfLines={1}>
+              {room.name}
+            </Text>
+            <View style={styles.subjectBadge}>
+              <Text style={styles.subjectBadgeText}>
+                {room.subject || 'General Focus'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity style={styles.shareTopButton} onPress={handleShare} activeOpacity={0.7}>
               <Share2 size={16} color="#FFFFFF" />
             </TouchableOpacity>
-          </View>
 
-          <Text style={styles.roomTitle} numberOfLines={1}>
-            {room.name}
-          </Text>
-
-          <View style={styles.memberBadge}>
-            <Text style={styles.memberBadgeText}>{memberCount} studying</Text>
+            <View style={styles.memberBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.memberBadgeText}>{memberCount} online</Text>
+            </View>
           </View>
         </View>
 
-        {/* SHARED TIMER */}
-        <View style={styles.timerSection}>
-          <Text style={styles.timerDisplay}>
-            {focusActive ? formatFocusTime(focusTimeLeft) : timerText}
-          </Text>
-          <Text style={styles.timerSub}>
-            {focusActive ? 'personal focus session' : 'studying together'}
-          </Text>
-        </View>
+        {!isChatExpanded ? (
+          <>
+            {/* SHARED TIMER */}
+            <View style={styles.timerCard}>
+              <Text style={styles.timerDisplay}>
+                {focusActive ? formatFocusTime(focusTimeLeft) : timerText}
+              </Text>
+              <View style={styles.timerLabelRow}>
+                <View style={styles.pulseActiveIndicator} />
+                <Text style={styles.timerSub}>
+                  {focusActive ? 'Personal Focus Session' : 'Group Session Timer'}
+                </Text>
+              </View>
+            </View>
 
-        {/* MEMBERS GRID */}
-        <View style={styles.membersSection}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <Text style={styles.sectionLabel}>IN THIS ROOM</Text>
-            <Text style={styles.interactionSubtitle}>Tap friend to Cheer/Nudge ✨</Text>
-          </View>
-          <FlatList
-            data={members}
-            keyExtractor={(item) => item.userId}
-            numColumns={4}
-            columnWrapperStyle={styles.membersGridRow}
-            removeClippedSubviews={Platform.OS === 'android'}
-            renderItem={({ item }) => (
-              <MemberBubble member={item} formatTimeAgo={formatTimeAgo} onPress={handleMemberPress} />
+            {/* MUSIC PLAYER BAR (only for Music Rooms) */}
+            {room.room_type === 'music' && (
+              <View style={styles.musicBar}>
+                <View style={styles.musicRowHeader}>
+                  <View style={styles.musicInfo}>
+                    <View style={styles.musicIconWrapper}>
+                      <Music size={18} color="#5B4FE8" />
+                    </View>
+                    <View>
+                      <Text style={styles.musicStationName}>{currentStation.name}</Text>
+                      <Text style={styles.musicStationGenre}>{currentStation.genre}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.musicControls}>
+                    {/* Play/Pause */}
+                    <TouchableOpacity
+                      style={[styles.musicPlayButton, isPlayingMusic && styles.musicPlayButtonActive]}
+                      onPress={isHost ? handleHostTogglePlay : handleMemberTogglePlay}
+                      activeOpacity={0.8}
+                    >
+                      {isPlayingMusic ? (
+                        <Pause size={14} color="#FFFFFF" fill="#FFFFFF" />
+                      ) : (
+                        <Play size={14} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 2 }} />
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Mute/Volume (Cycles 0 -> 0.5 -> 1.0) */}
+                    <TouchableOpacity
+                      style={styles.musicMuteButton}
+                      onPress={() => {
+                        const nextVol = musicVolume === 0 ? 0.5 : musicVolume === 0.5 ? 1.0 : 0;
+                        changeVolume(nextVol);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      {musicVolume === 0 ? (
+                        <VolumeX size={14} color="#E85858" />
+                      ) : (
+                        <Volume2 size={14} color={musicVolume === 1.0 ? '#00B894' : '#9B9BAF'} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Station selector (only for Host) */}
+                {isHost ? (
+                  <View style={styles.stationSelectorContainer}>
+                    <Text style={styles.hostControlTag}>HOST STATION CONTROL</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.stationSelectorContent}
+                      style={styles.stationSelector}
+                    >
+                      {STATIONS.map((station) => {
+                        const active = currentStation.id === station.id;
+                        return (
+                          <TouchableOpacity
+                            key={station.id}
+                            style={[styles.stationChip, active && styles.stationChipActive]}
+                            onPress={() => handleHostSelectStation(station)}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.stationEmoji}>{station.icon}</Text>
+                            <Text style={[styles.stationChipText, active && styles.stationChipTextActive]}>
+                              {station.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                ) : (
+                  <View style={styles.memberMusicTag}>
+                    <Text style={styles.memberMusicTagText}>
+                      🔊 Synced with host's audio stream. You can pause or adjust volume locally.
+                    </Text>
+                  </View>
+                )}
+              </View>
             )}
-            contentContainerStyle={styles.membersGridContent}
-            style={{ maxHeight: COLUMN_WIDTH * 2 + 30 }}
-            scrollEnabled={members.length > 8}
-          />
-        </View>
+
+            {/* MEMBERS GRID */}
+            <View style={styles.membersSection}>
+              <View style={styles.membersHeaderRow}>
+                <Text style={styles.sectionLabel}>STUDENTS STUDYING</Text>
+                <Text style={styles.interactionSubtitle}>Tap avatar to Cheer or Nudge ✨</Text>
+              </View>
+              <FlatList
+                data={members}
+                keyExtractor={(item) => item.userId}
+                numColumns={4}
+                columnWrapperStyle={styles.membersGridRow}
+                removeClippedSubviews={Platform.OS === 'android'}
+                renderItem={({ item }) => (
+                  <MemberBubble member={item} formatTimeAgo={formatTimeAgo} onPress={handleMemberPress} />
+                )}
+                contentContainerStyle={styles.membersGridContent}
+                style={{ flexGrow: 0 }}
+                scrollEnabled={members.length > 8}
+              />
+            </View>
+          </>
+        ) : null}
 
         {/* CHAT SECTION */}
         {showChat ? (
-          <View style={styles.chatSection}>
+          <View style={[styles.chatSection, isChatExpanded && styles.chatSectionExpanded]}>
             <View style={styles.chatHeader}>
               <View style={styles.chatDivider} />
               <Text style={styles.sectionLabel}>{getChatHeaderLabel()}</Text>
@@ -642,26 +982,66 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
             <FlatList
               data={[...messages].reverse()}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item, index) => `${item.id}_${index}`}
               inverted
               removeClippedSubviews={Platform.OS === 'android'}
+              onScrollBeginDrag={() => {
+                if (isChatExpanded) {
+                  Keyboard.dismiss();
+                  setIsChatExpanded(false);
+                }
+              }}
               renderItem={({ item }) => (
                 <MessageRow message={item} />
               )}
               contentContainerStyle={styles.chatListContent}
+              style={{ flex: 1 }}
             />
 
+            {/* EMOJI PICKER POPUP */}
+            {showEmojiPicker && (
+              <View style={styles.emojiPickerPopup}>
+                {['👍', '🔥', '👏', '🎯', '🚀', '💡'].map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={styles.emojiPickerButton}
+                    onPress={() => {
+                      sendReaction(emoji);
+                      setShowEmojiPicker(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.emojiPickerText}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
             <View style={styles.inputRow}>
+              <TouchableOpacity
+                style={styles.emojiTriggerButton}
+                onPress={() => setShowEmojiPicker((prev) => !prev)}
+                activeOpacity={0.8}
+              >
+                <Smile size={20} color={showEmojiPicker ? '#5B4FE8' : '#9B9BAF'} />
+              </TouchableOpacity>
+
               <TextInput
                 style={styles.chatInput}
                 placeholder={getChatPlaceholder()}
-                placeholderTextColor="rgba(255,255,255,0.4)"
+                placeholderTextColor="rgba(255,255,255,0.3)"
                 value={messageInput}
                 onChangeText={setMessageInput}
                 maxLength={200}
+                returnKeyType="send"
+                onSubmitEditing={handleSend}
+                blurOnSubmit={false}
+                onFocus={() => {
+                  setIsChatExpanded(true);
+                }}
               />
               <TouchableOpacity style={styles.sendButton} onPress={handleSend} activeOpacity={0.8}>
-                <Text style={styles.sendButtonText}>→</Text>
+                <Send size={16} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           </View>
@@ -669,32 +1049,36 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           <View style={{ flex: 1 }} />
         )}
 
-        {/* EMOJI REACTIONS BAR */}
-        <View style={styles.reactionsContainer}>
-          {['👍', '🔥', '👏', '🎯', '🚀', '💡'].map((emoji) => (
+        {/* START FOCUS BUTTON (Only in normal view) */}
+        {!isChatExpanded && (
+          <View style={[styles.bottomContainer, !showChat && styles.bottomContainerNoChat]}>
             <TouchableOpacity
-              key={emoji}
-              style={styles.reactionButton}
-              onPress={() => sendReaction(emoji)}
-              activeOpacity={0.7}
+              style={[styles.focusButton, focusActive && styles.stopFocusButton]}
+              onPress={handleStartFocus}
+              activeOpacity={0.8}
             >
-              <Text style={styles.reactionText}>{emoji}</Text>
+              <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+                <Defs>
+                  <LinearGradient id="btnGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <Stop offset="0%" stopColor={focusActive ? '#FF5E7E' : '#5B4FE8'} />
+                    <Stop offset="100%" stopColor={focusActive ? '#E85858' : '#8B6FE8'} />
+                  </LinearGradient>
+                </Defs>
+                <Rect width="100%" height="100%" rx={12} fill="url(#btnGrad)" />
+              </Svg>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {focusActive ? (
+                  <Pause size={16} color="#FFFFFF" fill="#FFFFFF" />
+                ) : (
+                  <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
+                )}
+                <Text style={styles.focusButtonText}>
+                  {focusActive ? 'Stop Focus Session' : 'Start My Focus Session'}
+                </Text>
+              </View>
             </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* START FOCUS BUTTON */}
-        <View style={[styles.bottomContainer, !showChat && styles.bottomContainerNoChat]}>
-          <TouchableOpacity
-            style={[styles.focusButton, focusActive && styles.stopFocusButton]}
-            onPress={handleStartFocus}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.focusButtonText}>
-              {focusActive ? '⏹ Stop Focus Session' : '▶ Start My Focus Session'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       {/* FLOATING REACTIONS CANVAS */}
@@ -778,18 +1162,37 @@ const MessageRow = React.memo<{ message: ChatMessage }>(({ message }) => {
   const isMe = profile?.id === message.userId;
   const avatarColor = getColorForUser(message.userId);
 
+  const formatMessageTime = (isoString: string) => {
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch (e) {
+      return '';
+    }
+  };
+
   return (
     <View style={[styles.messageRow, isMe && styles.messageRowOwn]}>
       {!isMe && (
         <View style={[styles.msgAvatar, { backgroundColor: avatarColor }]}>
-          <Text style={styles.msgAvatarText}>{message.userInitials}</Text>
+          {message.userAvatar ? (
+            <Image
+              source={{ uri: message.userAvatar }}
+              style={styles.msgAvatarImage}
+            />
+          ) : (
+            <Text style={styles.msgAvatarText}>{message.userInitials}</Text>
+          )}
         </View>
       )}
 
-      <View style={styles.messageBubbleColumn}>
+      <View style={[styles.messageBubbleColumn, isMe && styles.messageBubbleColumnOwn]}>
         {!isMe && <Text style={styles.messageSenderName}>{message.userName}</Text>}
         <View style={[styles.messageBubble, isMe ? styles.messageBubbleOwn : styles.messageBubbleOther]}>
           <Text style={styles.messageText}>{message.text}</Text>
+          <Text style={[styles.messageTimeText, isMe ? styles.messageTimeTextOwn : styles.messageTimeTextOther]}>
+            {formatMessageTime(message.sentAt)}
+          </Text>
         </View>
       </View>
     </View>
@@ -829,78 +1232,147 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
-  leaveTopButton: {
-    paddingVertical: 6,
+  backIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  leaveTopButtonText: {
-    fontFamily: 'DMSans',
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  roomTitle: {
+  titleContainer: {
     flex: 1,
-    textAlign: 'center',
-    fontFamily: 'DMSans-Medium',
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    alignItems: 'center',
     marginHorizontal: 12,
   },
+  roomTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  subjectBadge: {
+    backgroundColor: 'rgba(91, 79, 232, 0.1)',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 3,
+  },
+  subjectBadgeText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 9,
+    color: '#8B6FE8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  shareTopButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   memberBadge: {
-    backgroundColor: '#D4F5EE',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 184, 148, 0.12)',
     borderRadius: 12,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#00B894',
   },
   memberBadgeText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    fontWeight: '600',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    fontWeight: 'bold',
     color: '#00B894',
   },
-  timerSection: {
+  timerCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderRadius: 20,
+    marginHorizontal: 20,
+    marginVertical: 10,
+    paddingVertical: 12,
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.03)',
+    shadowColor: '#5B4FE8',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 2,
   },
   timerDisplay: {
     fontFamily: 'DMMono',
-    fontSize: 48,
+    fontSize: 42,
     color: '#FFFFFF',
-    letterSpacing: -2,
+    fontWeight: '700',
+    letterSpacing: -1,
+  },
+  timerLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  pulseActiveIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#5B4FE8',
   },
   timerSub: {
     fontFamily: 'DMSans',
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(255,255,255,0.4)',
-    marginTop: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   membersSection: {
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 10,
+  },
+  membersHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   sectionLabel: {
-    fontFamily: 'DMSans',
+    fontFamily: 'DMSans-Bold',
     fontSize: 10,
-    color: '#9B9BAF',
-    letterSpacing: 1,
-    marginBottom: 12,
+    fontWeight: 'bold',
+    color: 'rgba(255, 255, 255, 0.4)',
+    letterSpacing: 0.8,
   },
   interactionSubtitle: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 9,
+    fontSize: 10,
     color: '#E8A020',
-    marginBottom: 12,
   },
   membersGridContent: {
-    paddingBottom: 8,
+    paddingBottom: 4,
   },
   membersGridRow: {
     gap: 8,
     justifyContent: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   memberBubbleContainer: {
     width: COLUMN_WIDTH,
@@ -922,33 +1394,101 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   memberName: {
-    fontFamily: 'DMSans',
-    fontSize: 11,
-    color: '#FFFFFF',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#EDEDEF',
     marginTop: 6,
     textAlign: 'center',
     width: '100%',
   },
   memberJoinedTime: {
-    fontFamily: 'DMMono',
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.3)',
+    fontFamily: 'DMSans',
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.4)',
     marginTop: 2,
     textAlign: 'center',
   },
   chatSection: {
     flex: 1,
     borderTopWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    paddingTop: 16,
+    borderColor: 'rgba(255,255,255,0.05)',
+    paddingTop: 10,
+  },
+  chatSectionExpanded: {
+    flex: 1,
+    paddingTop: 4,
+    backgroundColor: '#17172A',
   },
   chatHeader: {
     paddingHorizontal: 20,
   },
+  chatHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  expandChatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(91,79,232,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(91,79,232,0.3)',
+  },
+  expandChatButtonText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#8B6FE8',
+    fontWeight: '700',
+  },
+  expandedChatHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#1E1E36',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  expandedTitleCol: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  expandedRoomTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  expandedRoomSub: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9B9BAF',
+    marginTop: 2,
+  },
+  minimizeChatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#5B4FE8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  minimizeChatButtonText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
   chatDivider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    marginBottom: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginBottom: 10,
   },
   chatListContent: {
     paddingHorizontal: 20,
@@ -972,6 +1512,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  msgAvatarImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
   msgAvatarText: {
     fontFamily: 'DMSans-Bold',
@@ -982,73 +1528,98 @@ const styles = StyleSheet.create({
   messageBubbleColumn: {
     gap: 4,
   },
+  messageBubbleColumnOwn: {
+    alignItems: 'flex-end',
+  },
   messageSenderName: {
     fontFamily: 'DMSans',
     fontSize: 10,
     color: '#9B9BAF',
   },
   messageBubble: {
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minWidth: 60,
   },
   messageBubbleOwn: {
     backgroundColor: '#5B4FE8',
-    borderBottomRightRadius: 2,
+    borderTopRightRadius: 4,
   },
   messageBubbleOther: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderBottomLeftRadius: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderTopLeftRadius: 4,
   },
   messageText: {
     fontFamily: 'DMSans',
     fontSize: 13,
     color: '#FFFFFF',
   },
+  messageTimeText: {
+    fontSize: 9,
+    fontFamily: 'DMSans',
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+  messageTimeTextOwn: {
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  messageTimeTextOther: {
+    color: 'rgba(255, 255, 255, 0.4)',
+  },
   inputRow: {
     flexDirection: 'row',
-    padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderTopWidth: 1,
+    borderColor: 'rgba(255,255,255,0.04)',
+    gap: 10,
     alignItems: 'center',
   },
   chatInput: {
     flex: 1,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
     paddingHorizontal: 16,
     color: '#FFFFFF',
     fontFamily: 'DMSans',
-    fontSize: 14,
+    fontSize: 13,
   },
   sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#5B4FE8',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
+    shadowColor: '#5B4FE8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
   bottomContainer: {
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: '#17172A',
+    borderTopWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.04)',
   },
   bottomContainerNoChat: {
     marginTop: 'auto',
   },
   focusButton: {
-    backgroundColor: '#5B4FE8',
-    height: 52,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
     shadowColor: '#5B4FE8',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -1056,43 +1627,184 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   stopFocusButton: {
-    backgroundColor: '#E85858',
     shadowColor: '#E85858',
   },
   focusButtonText: {
     color: '#FFFFFF',
-    fontFamily: 'DMSans-Medium',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  shareTopButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   reactionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 12,
-    marginVertical: 12,
-    paddingHorizontal: 20,
+    display: 'none',
   },
-  reactionButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  emojiPickerPopup: {
+    position: 'absolute',
+    bottom: 56,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#1E1E30',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 10,
+  },
+  emojiPickerButton: {
+    padding: 6,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
-  reactionText: {
-    fontSize: 20,
+  emojiPickerText: {
+    fontSize: 22,
+  },
+  emojiTriggerButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  musicBar: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 16,
+    marginHorizontal: 20,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    marginBottom: 10,
+  },
+  musicRowHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  musicInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  musicIconWrapper: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: 'rgba(91, 79, 232, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  musicStationName: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  musicStationGenre: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.35)',
+    marginTop: 1,
+  },
+  musicControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  musicPlayButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#5B4FE8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#5B4FE8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  musicPlayButtonActive: {
+    backgroundColor: '#3B36B3',
+  },
+  musicMuteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stationSelectorContainer: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    paddingTop: 8,
+  },
+  hostControlTag: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#E8A020',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  stationSelector: {
+    flexGrow: 0,
+  },
+  stationSelectorContent: {
+    gap: 6,
+    paddingRight: 10,
+  },
+  stationChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  stationChipActive: {
+    backgroundColor: 'rgba(91, 79, 232, 0.15)',
+    borderColor: '#5B4FE8',
+  },
+  stationEmoji: {
+    fontSize: 12,
+  },
+  stationChipText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  stationChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  memberMusicTag: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    paddingTop: 8,
+  },
+  memberMusicTagText: {
+    fontFamily: 'DMSans',
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.3)',
+    lineHeight: 14,
   },
 });

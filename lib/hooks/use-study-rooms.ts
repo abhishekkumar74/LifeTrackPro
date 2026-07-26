@@ -25,6 +25,7 @@ export interface ChatMessage {
   userId: string;
   userName: string;
   userInitials: string;
+  userAvatar?: string | null;
   text: string;
   sentAt: string;
 }
@@ -122,9 +123,6 @@ export function useRoomPresence(roomId: string) {
         }
         if (status === 'CHANNEL_ERROR') {
           handleSupabaseError(err || new Error('Presence channel error'), 'room_presence_channel');
-        }
-        if (status === 'TIMED_OUT') {
-          setTimeout(() => channel.subscribe(), 2000);
         }
       });
 
@@ -257,35 +255,109 @@ export function useMyRooms() {
 // 5. useRoomChat
 export function useRoomChat(roomId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const { profile } = useAuthStore();
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   const lastMessageTime = useRef<number>(0);
 
+  // 1. Fetch initial message history from Database & subscribe to Realtime changes
   useEffect(() => {
-    const chatChannel = supabase.channel(`room_chat:${roomId}`, {
-      config: {
-        broadcast: { self: true },
-      },
-    });
+    if (!roomId) return;
 
-    chatChannel
-      .on('broadcast', { event: 'message' }, ({ payload }) => {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === payload.id)) return prev;
-          return [...prev, payload];
-        });
-      })
-      .subscribe();
+    let isMounted = true;
 
-    setChannel(chatChannel);
+    const fetchHistory = async () => {
+      try {
+        setIsLoading(true);
+        const { data, error } = await supabase
+          .from('room_messages')
+          .select('*')
+          .eq('room_id', roomId)
+          .order('created_at', { ascending: true })
+          .limit(100);
+
+        if (error) {
+          if (__DEV__) console.warn('Failed to load room messages:', error);
+        } else if (data && isMounted) {
+          const formatted: ChatMessage[] = data.map((msg) => ({
+            id: msg.id,
+            userId: msg.user_id,
+            userName: msg.user_name,
+            userInitials: msg.user_initials,
+            userAvatar: msg.user_avatar || null,
+            text: msg.text,
+            sentAt: msg.created_at,
+          }));
+          setMessages(formatted);
+        }
+      } catch (err) {
+        if (__DEV__) console.warn('Error in fetchHistory:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    fetchHistory();
+
+    // 2. Realtime Postgres Changes Subscription for new room messages
+    const realtimeChannel = supabase
+      .channel(`room_db_chat:${roomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'room_messages',
+          filter: `room_id=eq.${roomId}`,
+        },
+        (payload) => {
+          const newRow = payload.new as any;
+          if (!newRow) return;
+
+          const newMsg: ChatMessage = {
+            id: newRow.id,
+            userId: newRow.user_id,
+            userName: newRow.user_name,
+            userInitials: newRow.user_initials,
+            userAvatar: newRow.user_avatar || null,
+            text: newRow.text,
+            sentAt: newRow.created_at,
+          };
+
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+
+            const hasTempMatch = prev.some(
+              (m) => m.id.startsWith('temp_') && m.userId === newMsg.userId && m.text === newMsg.text
+            );
+
+            if (hasTempMatch) {
+              return prev.map((m) =>
+                m.id.startsWith('temp_') && m.userId === newMsg.userId && m.text === newMsg.text
+                  ? newMsg
+                  : m
+              );
+            }
+
+            return [...prev, newMsg];
+          });
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR') {
+          if (__DEV__) console.warn('Realtime chat channel error:', err);
+        }
+      });
 
     return () => {
-      supabase.removeChannel(chatChannel);
+      isMounted = false;
+      supabase.removeChannel(realtimeChannel).catch((e) => {
+        if (__DEV__) console.warn('Realtime chat cleanup error:', e);
+      });
     };
   }, [roomId]);
 
   const sendMessage = async (text: string) => {
-    if (!profile || !channel) return;
+    if (!profile) return;
 
     // 1. Must be authenticated
     const { data: { user } } = await supabase.auth.getUser();
@@ -306,8 +378,8 @@ export function useRoomChat(roomId: string) {
 
     // 5. Rate limiting (client-side)
     const now = Date.now();
-    if (now - lastMessageTime.current < 2000) {
-      return; // Max 1 message per 2 seconds
+    if (now - lastMessageTime.current < 1500) {
+      return; // Max 1 message per 1.5 seconds
     }
     lastMessageTime.current = now;
 
@@ -315,38 +387,58 @@ export function useRoomChat(roomId: string) {
     const sanitized = trimmed.replace(/[<>]/g, '').trim();
     if (!sanitized) return;
 
-    const generateId = () => Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     const userInitials = profile.name ? profile.name.charAt(0).toUpperCase() : 'U';
 
-    const messagePayload: ChatMessage = {
-      id: generateId(),
+    const optimisticId = 'temp_' + Math.random().toString(36).substring(2, 9);
+    const optimisticMsg: ChatMessage = {
+      id: optimisticId,
       userId: user.id,
-      userName: userInitials, // Never send full name
+      userName: profile.name || 'Anonymous User',
       userInitials,
+      userAvatar: profile.avatar_url || null,
       text: sanitized,
       sentAt: new Date().toISOString(),
     };
 
-    setMessages((prev) => {
-      if (prev.some((m) => m.id === messagePayload.id)) return prev;
-      return [...prev, messagePayload];
-    });
+    // Optimistically add to UI for instantaneous response
+    setMessages((prev) => [...prev, optimisticMsg]);
 
     try {
-      await channel.send({
-        type: 'broadcast',
-        event: 'message',
-        payload: messagePayload,
-      });
-    } catch (e) {
-      if (__DEV__) {
-        console.warn('Failed to broadcast:', e);
+      // Insert into Supabase table (persists permanently & triggers postgres_changes for all users)
+      const { data, error } = await supabase
+        .from('room_messages')
+        .insert({
+          room_id: roomId,
+          user_id: user.id,
+          user_name: profile.name || 'Anonymous User',
+          user_initials: userInitials,
+          user_avatar: profile.avatar_url || null,
+          text: sanitized,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        if (__DEV__) console.warn('Failed to insert room message:', error);
+      } else if (data) {
+        // Replace optimistic message with real DB record ID
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === data.id)) {
+            return prev.filter((m) => m.id !== optimisticId);
+          }
+          return prev.map((m) =>
+            m.id === optimisticId ? { ...m, id: data.id, sentAt: data.created_at } : m
+          );
+        });
       }
+    } catch (e) {
+      if (__DEV__) console.warn('Failed to send room message:', e);
     }
   };
 
   return {
     messages,
+    isLoading,
     sendMessage,
   };
 }

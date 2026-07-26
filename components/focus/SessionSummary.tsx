@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Keyboard,
+  ActivityIndicator,
 } from 'react-native';
 import BottomSheet, {
   BottomSheetView,
@@ -81,6 +82,7 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
   const [selectedAccuracy, setSelectedAccuracy] = useState<'fully_focused' | 'partially_distracted' | 'off_track' | null>(null);
   const [note, setNote] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Open or close bottom sheet when isVisible changes
   useEffect(() => {
@@ -89,13 +91,15 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
       setSelectedMood(null);
       setSelectedAccuracy(null);
       setNote('');
+      setIsSaving(false);
       sheetRef.current?.expand();
     } else {
       sheetRef.current?.close();
     }
   }, [isVisible]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isSaving) return;
     if (!isStrictMode && selectedMood === null) return;
     if (isStrictMode && selectedAccuracy === null) return;
     Keyboard.dismiss();
@@ -103,10 +107,16 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
     const moodVal = isStrictMode ? (selectedAccuracy === 'fully_focused' ? 5 : selectedAccuracy === 'partially_distracted' ? 3 : 1) : (selectedMood || 3);
     const seedsEarned = isStrictMode ? (isPlantWilted ? 1 : 5) : 0;
 
-    onSave(moodVal, note, isStrictMode ? selectedAccuracy : null, seedsEarned);
+    setIsSaving(true);
+    try {
+      await onSave(moodVal, note, isStrictMode ? selectedAccuracy : null, seedsEarned);
+    } catch (e) {
+      setIsSaving(false);
+    }
   };
 
   const handleDiscardPress = () => {
+    if (isSaving) return;
     Keyboard.dismiss();
     onDiscard();
   };
@@ -230,14 +240,18 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
         <TouchableOpacity
           style={[
             styles.saveButton,
-            (!isStrictMode && selectedMood === null) && styles.saveButtonDisabled,
-            (isStrictMode && selectedAccuracy === null) && styles.saveButtonDisabled,
+            (isSaving || (!isStrictMode && selectedMood === null)) && styles.saveButtonDisabled,
+            (isSaving || (isStrictMode && selectedAccuracy === null)) && styles.saveButtonDisabled,
           ]}
           onPress={handleSave}
-          disabled={isStrictMode ? selectedAccuracy === null : selectedMood === null}
+          disabled={isSaving || (isStrictMode ? selectedAccuracy === null : selectedMood === null)}
           activeOpacity={0.8}
         >
-          <Text style={styles.saveButtonText}>Save Session</Text>
+          {isSaving ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.saveButtonText}>Save Session</Text>
+          )}
         </TouchableOpacity>
 
         {/* Discard Session Link */}

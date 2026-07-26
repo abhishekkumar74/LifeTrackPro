@@ -1,54 +1,54 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
+import { useNotificationPermission } from '@/lib/hooks/use-permissions';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Switch,
-  Alert,
-  Share,
-  Platform,
-  ActivityIndicator,
-  Image,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase/client';
+  cancelAllNotifications,
+  scheduleMorningBrief,
+  scheduleStreakAlert,
+} from '@/lib/notifications';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useUiStore } from '@/lib/store/ui.store';
+import { supabase } from '@/lib/supabase/client';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
-import { UserProfile, UserCategory } from '@/types/app.types';
-import * as Linking from 'expo-linking';
+import { UserCategory, UserProfile } from '@/types/app.types';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetBackdropProps,
+  BottomSheetTextInput,
+  BottomSheetView,
+} from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as Linking from 'expo-linking';
+import * as Notifications from 'expo-notifications';
+import { router } from 'expo-router';
 import {
   ArrowLeft,
   Check,
-  Plus,
-  Minus,
-  LogOut,
   ChevronRight,
-  Shield,
   FileText,
-  Upload,
+  LogOut,
   MessageSquare,
+  Minus,
+  Plus,
+  Shield,
+  Upload,
 } from 'lucide-react-native';
-import * as Notifications from 'expo-notifications';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  scheduleMorningBrief,
-  scheduleStreakAlert,
-  cancelAllNotifications,
-} from '@/lib/notifications';
-import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
-import { useNotificationPermission } from '@/lib/hooks/use-permissions';
-import BottomSheet, {
-  BottomSheetView,
-  BottomSheetTextInput,
-  BottomSheetBackdrop,
-  BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const CATEGORIES: UserCategory[] = ['student', 'cse_student', 'employee', 'creator', 'entrepreneur', 'educator', 'aspirant'];
 const PEAK_TIMES: ('morning' | 'afternoon' | 'night')[] = ['morning', 'afternoon', 'night'];
@@ -202,137 +202,87 @@ export default function ProfileScreen(): React.JSX.Element {
   const { data: totalFocusMin, isLoading: focusLoading } = useQuery({
     queryKey: ['profileFocusTime'],
     queryFn: async () => {
-      const cacheKey = `profile_focus_time_${profile?.id || 'anon'}`;
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
-        const { data, error } = await supabase
-          .from('focus_sessions')
-          .select('duration_min')
-          .eq('user_id', session.user.id);
-        if (error) throw error;
-        const result = (data || []).reduce((sum, fs) => sum + fs.duration_min, 0);
-        AsyncStorage.setItem(cacheKey, String(result)).catch(() => {});
-        return result;
-      } catch (err: any) {
-        const isNetError = 
-          err.message?.toLowerCase().includes('network') || 
-          err.message?.toLowerCase().includes('fetch') || 
-          err.message?.toLowerCase().includes('timeout') ||
-          err.status === 0;
-
-        if (isNetError) {
-          const cached = await AsyncStorage.getItem(cacheKey);
-          if (cached) return parseInt(cached, 10);
-        }
-        throw err;
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const { data, error } = await supabase
+        .from('focus_sessions')
+        .select('duration_min')
+        .eq('user_id', session.user.id);
+      if (error) throw error;
+      return (data || []).reduce((sum, fs) => sum + fs.duration_min, 0);
     },
   });
 
   const { data: goalsCount, isLoading: goalsLoading } = useQuery({
     queryKey: ['profileGoalsCount'],
     queryFn: async () => {
-      const cacheKey = `profile_goals_count_${profile?.id || 'anon'}`;
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
-        const { count, error } = await supabase
-          .from('goals')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', session.user.id);
-        if (error) throw error;
-        const result = count || 0;
-        AsyncStorage.setItem(cacheKey, String(result)).catch(() => {});
-        return result;
-      } catch (err: any) {
-        const isNetError = 
-          err.message?.toLowerCase().includes('network') || 
-          err.message?.toLowerCase().includes('fetch') || 
-          err.message?.toLowerCase().includes('timeout') ||
-          err.status === 0;
-
-        if (isNetError) {
-          const cached = await AsyncStorage.getItem(cacheKey);
-          if (cached) return parseInt(cached, 10);
-        }
-        throw err;
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const { count, error } = await supabase
+        .from('goals')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id);
+      if (error) throw error;
+      return count || 0;
     },
   });
 
   const { data: habitStreak, isLoading: streakLoading } = useQuery({
     queryKey: ['profileHabitStreak'],
     queryFn: async () => {
-      const cacheKey = `profile_habit_streak_${profile?.id || 'anon'}`;
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
-        const { data: logs, error } = await supabase
-          .from('habit_logs')
-          .select('date, done')
-          .eq('user_id', session.user.id)
-          .eq('done', true);
-        if (error) throw error;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const { data: logs, error } = await supabase
+        .from('habit_logs')
+        .select('date, done')
+        .eq('user_id', session.user.id)
+        .eq('done', true);
+      if (error) throw error;
 
-        const doneDates = new Set((logs || []).map((l) => l.date));
-        let streak = 0;
+      const doneDates = new Set((logs || []).map((l) => l.date));
+      let streak = 0;
 
-        const formatDateStr = (d: Date) => d.toLocaleDateString('en-CA');
-        const checkDate = new Date();
-        const checkDateTodayStr = formatDateStr(checkDate);
-        checkDate.setDate(checkDate.getDate() - 1);
-        const checkDateYesterdayStr = formatDateStr(checkDate);
+      const formatDateStr = (d: Date) => d.toLocaleDateString('en-CA');
+      const checkDate = new Date();
+      const checkDateTodayStr = formatDateStr(checkDate);
+      checkDate.setDate(checkDate.getDate() - 1);
+      const checkDateYesterdayStr = formatDateStr(checkDate);
 
-        if (doneDates.has(checkDateTodayStr)) {
-          streak = 1;
-          const curr = new Date();
-          while (true) {
-            curr.setDate(curr.getDate() - 1);
-            const dateStr = formatDateStr(curr);
-            if (doneDates.has(dateStr)) {
-              streak++;
-            } else {
-              break;
-            }
-          }
-        } else if (doneDates.has(checkDateYesterdayStr)) {
-          streak = 1;
-          const curr = new Date();
+      if (doneDates.has(checkDateTodayStr)) {
+        streak = 1;
+        const curr = new Date();
+        while (true) {
           curr.setDate(curr.getDate() - 1);
-          while (true) {
-            curr.setDate(curr.getDate() - 1);
-            const dateStr = formatDateStr(curr);
-            if (doneDates.has(dateStr)) {
-              streak++;
-            } else {
-              break;
-            }
+          const dateStr = formatDateStr(curr);
+          if (doneDates.has(dateStr)) {
+            streak++;
+          } else {
+            break;
           }
         }
-        AsyncStorage.setItem(cacheKey, String(streak)).catch(() => {});
-        return streak;
-      } catch (err: any) {
-        const isNetError = 
-          err.message?.toLowerCase().includes('network') || 
-          err.message?.toLowerCase().includes('fetch') || 
-          err.message?.toLowerCase().includes('timeout') ||
-          err.status === 0;
-
-        if (isNetError) {
-          const cached = await AsyncStorage.getItem(cacheKey);
-          if (cached) return parseInt(cached, 10);
+      } else if (doneDates.has(checkDateYesterdayStr)) {
+        streak = 1;
+        const curr = new Date();
+        curr.setDate(curr.getDate() - 1);
+        while (true) {
+          curr.setDate(curr.getDate() - 1);
+          const dateStr = formatDateStr(curr);
+          if (doneDates.has(dateStr)) {
+            streak++;
+          } else {
+            break;
+          }
         }
-        throw err;
       }
+      return streak;
     },
   });
 
   const focusHoursVal = (totalFocusMin && totalFocusMin > 0)
     ? (() => {
-        const val = (totalFocusMin / 60.0).toFixed(1);
-        return val === '0.0' ? '—' : val;
-      })()
+      const val = (totalFocusMin / 60.0).toFixed(1);
+      return val === '0.0' ? '—' : val;
+    })()
     : '—';
 
   const goalsCountVal = (goalsCount && goalsCount > 0) ? String(goalsCount) : '—';
@@ -453,7 +403,7 @@ export default function ProfileScreen(): React.JSX.Element {
     setSelectedSubcategories([]);
     setCustomSubcategoryText('');
     setSubCategorySearchQuery('');
-    
+
     updateProfileMutation.mutate(
       { category: cat, sub_category: [] },
       {
@@ -554,7 +504,7 @@ export default function ProfileScreen(): React.JSX.Element {
       const topTitle = tasks && tasks[0] ? tasks[0].title : 'Complete your daily habits';
       await scheduleMorningBrief(topTitle);
     } else {
-      await Notifications.cancelScheduledNotificationAsync('morning_brief').catch(() => {});
+      await Notifications.cancelScheduledNotificationAsync('morning_brief').catch(() => { });
     }
   };
 
@@ -571,7 +521,7 @@ export default function ProfileScreen(): React.JSX.Element {
     if (value) {
       await scheduleStreakAlert();
     } else {
-      await Notifications.cancelScheduledNotificationAsync('streak_alert').catch(() => {});
+      await Notifications.cancelScheduledNotificationAsync('streak_alert').catch(() => { });
     }
   };
 
@@ -735,8 +685,8 @@ export default function ProfileScreen(): React.JSX.Element {
             <View style={styles.rowLabelCol}>
               <Text style={styles.rowTitle}>LifeTrack Gold</Text>
               <Text style={styles.rowSubtitle}>
-                {profile?.is_premium 
-                  ? 'Your subscription is active' 
+                {profile?.is_premium
+                  ? 'Your subscription is active'
                   : 'Unlock exclusive themes, soundscapes & charts'}
               </Text>
             </View>
@@ -848,19 +798,19 @@ export default function ProfileScreen(): React.JSX.Element {
                 {(category === 'student' || category === 'cse_student') ? 'Preparation / Exams' : 'Sub-category'}
               </Text>
               <Text style={styles.rowSubtitle}>
-                {(category === 'student' || category === 'cse_student') 
-                  ? 'Exams or subjects you are preparing for' 
+                {(category === 'student' || category === 'cse_student')
+                  ? 'Exams or subjects you are preparing for'
                   : 'Your specific focus area'}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text 
-                style={[styles.rowVal, { maxWidth: 150 }]} 
-                numberOfLines={1} 
+              <Text
+                style={[styles.rowVal, { maxWidth: 150 }]}
+                numberOfLines={1}
                 ellipsizeMode="tail"
               >
-                {profile?.sub_category && profile.sub_category.length > 0 
-                  ? profile.sub_category.join(', ') 
+                {profile?.sub_category && profile.sub_category.length > 0
+                  ? profile.sub_category.join(', ')
                   : 'None selected'}
               </Text>
               <ChevronRight size={16} color="#9B9BAF" />
@@ -1034,8 +984,8 @@ export default function ProfileScreen(): React.JSX.Element {
             <Text style={styles.sheetTitle}>
               {(category === 'student' || category === 'cse_student') ? 'Select Preparations / Exams' : 'Select Sub-category'}
             </Text>
-            <TouchableOpacity 
-              style={styles.sheetSaveButton} 
+            <TouchableOpacity
+              style={styles.sheetSaveButton}
               onPress={handleSaveSubcategories}
               disabled={updateProfileMutation.isPending}
             >
@@ -1061,8 +1011,8 @@ export default function ProfileScreen(): React.JSX.Element {
             </View>
           )}
 
-          <ScrollView 
-            style={styles.sheetScrollView} 
+          <ScrollView
+            style={styles.sheetScrollView}
             contentContainerStyle={styles.sheetScrollContent}
             keyboardShouldPersistTaps="handled"
           >

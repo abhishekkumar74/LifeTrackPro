@@ -232,6 +232,22 @@ export type ScheduleLogRow = {
   updated_at: string;
 }
 
+export type TransactionRow = {
+  id: string;
+  user_id: string;
+  amount: number;
+  type: 'income' | 'expense';
+  merchant: string;
+  category: string;
+  date: string;
+  time: string;
+  source: 'manual' | 'sms' | 'screenshot' | 'invoice' | 'statement';
+  raw_text: string | null;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- TABLE INTERFACES ---
 
 export type ProfileTable = {
@@ -381,6 +397,40 @@ export type ScheduleLogTable = {
   Relationships: [];
 }
 
+export type TransactionTable = {
+  Row: TransactionRow;
+  Insert: Omit<TransactionRow, 'id' | 'raw_text' | 'image_url' | 'created_at' | 'updated_at'> & {
+    id?: string;
+    raw_text?: string | null;
+    image_url?: string | null;
+    created_at?: string;
+    updated_at?: string;
+  };
+  Update: Partial<TransactionRow>;
+  Relationships: [];
+};
+
+export interface RoomMessageRow {
+  id: string;
+  room_id: string;
+  user_id: string;
+  user_name: string;
+  user_initials: string;
+  user_avatar: string | null;
+  text: string;
+  created_at: string;
+}
+
+export type RoomMessageTable = {
+  Row: RoomMessageRow;
+  Insert: Omit<RoomMessageRow, 'id' | 'created_at'> & {
+    id?: string;
+    created_at?: string;
+  };
+  Update: Partial<RoomMessageRow>;
+  Relationships: [];
+};
+
 /**
  * Generic schema types definition for Supabase client.
  * Provides custom typings for relational database mapping.
@@ -401,6 +451,8 @@ export type Database = {
       study_rooms: StudyRoomTable;
       daily_checkins: DailyCheckinTable;
       schedule_logs: ScheduleLogTable;
+      transactions: TransactionTable;
+      room_messages: RoomMessageTable;
     };
     Views: {
       [_ in never]: never;

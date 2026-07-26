@@ -116,6 +116,14 @@ export default function RoomsScreen(): React.JSX.Element {
 
   const filteredActiveRooms = React.useMemo(() => {
     return activeRooms?.filter((room) => {
+      // Exclude rooms whose timers have expired
+      const createdAt = new Date(room.created_at).getTime();
+      const durationMs = room.timer_minutes * 60 * 1000;
+      const expiresAt = createdAt + durationMs;
+      if (Date.now() > expiresAt) {
+        return false;
+      }
+
       const matchesSearch =
         room.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (room.subject && room.subject.toLowerCase().includes(searchQuery.toLowerCase()));

@@ -33,13 +33,8 @@
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.POST_NOTIFICATIONS",
-        "android.permission.INTERNET",
-        "android.permission.VIBRATE",
-        "android.permission.WAKE_LOCK",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.RECEIVE_SMS",
+        "android.permission.READ_SMS"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -56,6 +51,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-share-intent",
       [
         "expo-splash-screen",
         {

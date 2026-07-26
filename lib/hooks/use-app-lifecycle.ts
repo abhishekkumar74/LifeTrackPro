@@ -79,7 +79,7 @@ export function useAppLifecycle() {
           }
 
           // Was in background > 5 minutes? (Auth & React Query Refresh)
-          if (bgDuration > 5 * 60 * 1000) {
+          if (backgroundTime.current > 0 && bgDuration > 5 * 60 * 1000) {
             
             // 1. Refresh auth session
             const { error } = await supabase.auth.refreshSession();

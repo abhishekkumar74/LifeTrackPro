@@ -361,6 +361,13 @@ export default function FocusScreen(): React.JSX.Element {
     focusAccuracy?: 'fully_focused' | 'partially_distracted' | 'off_track' | null,
     seedsEarned?: number
   ) => {
+    if (elapsedSeconds <= 0) {
+      if (__DEV__) {
+        console.warn('Cannot save session with 0 elapsed seconds (violates check constraint).');
+      }
+      return;
+    }
+
     const endedAt = new Date().toISOString();
     const startedAt = new Date(Date.now() - elapsedSeconds * 1000).toISOString();
 
