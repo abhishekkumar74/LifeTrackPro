@@ -23,7 +23,7 @@ import {
   useDeleteJournalEntry,
 } from '@/lib/hooks/use-journal';
 
-export default function CozyJournalEditorScreen(): React.JSX.Element {
+export default function AuthenticPhysicalJournalEditorScreen(): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = !id || id === 'new';
 
@@ -60,7 +60,7 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
     const month = now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
     const year = now.getFullYear();
     const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    return `${dayName}, ${day} ${month} ${year} • ${time}`;
+    return `📜 VINTAGE DIARY • ${dayName}, ${day} ${month} ${year} • ${time}`;
   };
 
   const handleAddTag = () => {
@@ -139,7 +139,7 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#121019" />
+      <StatusBar barStyle="light-content" backgroundColor="#151210" />
 
       {/* TOP NAV BAR */}
       <View style={styles.topBar}>
@@ -163,10 +163,10 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
             activeOpacity={0.85}
           >
             {createMutation.isPending || updateMutation.isPending ? (
-              <ActivityIndicator size="small" color="#121019" />
+              <ActivityIndicator size="small" color="#151210" />
             ) : (
               <>
-                <Save size={15} color="#121019" />
+                <Save size={15} color="#151210" />
                 <Text style={styles.saveButtonText}>Save</Text>
               </>
             )}
@@ -180,7 +180,7 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
       >
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           
-          {/* ELEGANT DATE STAMP BADGE */}
+          {/* ELEGANT LEATHER STAMP BADGE */}
           <View style={styles.diaryHeaderStampRow}>
             <View style={styles.dateStampBadge}>
               <Calendar size={13} color="#E5A93C" />
@@ -188,29 +188,30 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
             </View>
           </View>
 
-          {/* ENTRY TITLE */}
+          {/* VINTAGE EMBOSSED TITLE */}
           <View style={styles.titleContainer}>
             <TextInput
               style={styles.titleInput}
               placeholder="Diary Page Title (e.g. Daily Reflection)..."
-              placeholderTextColor="rgba(244,239,235,0.3)"
+              placeholderTextColor="rgba(245,239,230,0.3)"
               value={title}
               onChangeText={setTitle}
               maxLength={80}
             />
           </View>
 
-          {/* 1. DAILY DIARY & PERSONAL THOUGHTS (PRIMARY CANVAS AT TOP) */}
+          {/* 1. DAILY DIARY & PERSONAL THOUGHTS (PRIMARY VINTAGE CANVAS) */}
           <View style={styles.notebookSectionCard}>
             <View style={[styles.notebookCardHeader, { backgroundColor: 'rgba(162,155,254,0.12)' }]}>
               <BookOpen size={16} color="#A29BFE" />
               <Text style={[styles.notebookHeaderTitle, { color: '#A29BFE' }]}>DAILY THOUGHTS & REFLECTIONS</Text>
             </View>
             <View style={styles.ruledPaperContainerMain}>
+              <View style={styles.redMarginLine} />
               <TextInput
                 style={styles.ruledInputMain}
                 placeholder="Dear Diary, today was a productive day. I felt focused working on my goals and..."
-                placeholderTextColor="rgba(244,239,235,0.3)"
+                placeholderTextColor="rgba(245,239,230,0.3)"
                 value={content}
                 onChangeText={setContent}
                 multiline
@@ -226,10 +227,11 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
               <Text style={[styles.notebookHeaderTitle, { color: '#7BB69D' }]}>WINS & ACHIEVEMENTS</Text>
             </View>
             <View style={styles.ruledPaperContainerSuccess}>
+              <View style={styles.redMarginLine} />
               <TextInput
                 style={styles.ruledInput}
                 placeholder="• Completed focus blocks&#10;• Solved a difficult problem&#10;• Woke up energized..."
-                placeholderTextColor="rgba(244,239,235,0.3)"
+                placeholderTextColor="rgba(245,239,230,0.3)"
                 value={achievements}
                 onChangeText={setAchievements}
                 multiline
@@ -245,10 +247,11 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
               <Text style={[styles.notebookHeaderTitle, { color: '#D97757' }]}>NOT-TO-DO LIST (MISTAKES TO AVOID)</Text>
             </View>
             <View style={styles.ruledPaperContainerDanger}>
+              <View style={styles.redMarginLine} />
               <TextInput
                 style={styles.ruledInput}
                 placeholder="• Scrolling social media in the morning&#10;• Procrastinating core tasks..."
-                placeholderTextColor="rgba(244,239,235,0.3)"
+                placeholderTextColor="rgba(245,239,230,0.3)"
                 value={notToDos}
                 onChangeText={setNotToDos}
                 multiline
@@ -264,10 +267,11 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
               <Text style={[styles.notebookHeaderTitle, { color: '#E5A93C' }]}>GROWTH & LEARNINGS</Text>
             </View>
             <View style={styles.ruledPaperContainerWarning}>
+              <View style={styles.redMarginLine} />
               <TextInput
                 style={styles.ruledInput}
                 placeholder="• Plan task list the night before&#10;• Take active 5-minute breaks..."
-                placeholderTextColor="rgba(244,239,235,0.3)"
+                placeholderTextColor="rgba(245,239,230,0.3)"
                 value={improvements}
                 onChangeText={setImprovements}
                 multiline
@@ -276,7 +280,7 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
             </View>
           </View>
 
-          {/* TAGS FOOTER ROW */}
+          {/* TAGS FOOTER */}
           <View style={styles.sectionGroup}>
             <Text style={styles.sectionLabel}>TAGS & CATEGORIES</Text>
 
@@ -297,7 +301,7 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
               <TextInput
                 style={styles.tagInput}
                 placeholder="Add tag (e.g. growth)..."
-                placeholderTextColor="rgba(244,239,235,0.3)"
+                placeholderTextColor="rgba(245,239,230,0.3)"
                 value={tagInput}
                 onChangeText={setTagInput}
                 onSubmitEditing={handleAddTag}
@@ -316,13 +320,13 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121019',
+    backgroundColor: '#151210',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#121019',
+    backgroundColor: '#151210',
   },
   topBar: {
     flexDirection: 'row',
@@ -331,21 +335,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: '#1B1726',
+    borderBottomColor: 'rgba(229,169,60,0.12)',
+    backgroundColor: '#1E1A17',
   },
   backButton: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: '#241F32',
+    backgroundColor: '#27221F',
     justifyContent: 'center',
     alignItems: 'center',
   },
   topBarTitle: {
     fontFamily: 'DMSans-Bold',
     fontSize: 17,
-    color: '#F4EFEB',
+    color: '#F5EFE6',
     fontWeight: 'bold',
   },
   deleteIconButton: {
@@ -370,7 +374,7 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 13,
-    color: '#121019',
+    color: '#151210',
     fontWeight: 'bold',
   },
   scrollContent: {
@@ -385,12 +389,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#1B1726',
+    backgroundColor: '#27221F',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(229,169,60,0.25)',
+    borderColor: 'rgba(229,169,60,0.3)',
   },
   dateStampText: {
     fontFamily: 'DMSans-Bold',
@@ -403,16 +407,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   titleInput: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 19,
-    color: '#F4EFEB',
-    fontWeight: 'bold',
-    backgroundColor: '#1B1726',
+    fontFamily: 'InstrumentSerif',
+    fontSize: 24,
+    color: '#E5A93C',
+    backgroundColor: '#1E1A17',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: 'rgba(229,169,60,0.2)',
   },
   sectionGroup: {
     marginTop: 10,
@@ -426,9 +429,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginBottom: 8,
   },
-  // LUXURY PARCHMENT CARDS
+  // VINTAGE PHYSICAL NOTEBOOK CARDS
   notebookSectionCard: {
-    backgroundColor: '#1B1726',
+    backgroundColor: '#1E1A17',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.07)',
@@ -451,40 +454,48 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   ruledPaperContainerSuccess: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#7BB69D',
-    backgroundColor: '#1B1726',
+    flexDirection: 'row',
+    backgroundColor: '#1E1A17',
   },
   ruledPaperContainerDanger: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#D97757',
-    backgroundColor: '#1B1726',
+    flexDirection: 'row',
+    backgroundColor: '#1E1A17',
   },
   ruledPaperContainerWarning: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#E5A93C',
-    backgroundColor: '#1B1726',
+    flexDirection: 'row',
+    backgroundColor: '#1E1A17',
   },
   ruledPaperContainerMain: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#A29BFE',
-    backgroundColor: '#1B1726',
+    flexDirection: 'row',
+    backgroundColor: '#1E1A17',
+  },
+  redMarginLine: {
+    width: 2,
+    backgroundColor: 'rgba(232, 88, 88, 0.45)',
+    marginRight: 10,
+    marginLeft: 12,
+    marginVertical: 10,
   },
   ruledInput: {
-    fontFamily: 'DMSans',
-    fontSize: 14,
-    color: '#F4EFEB',
-    padding: 14,
+    flex: 1,
+    fontFamily: 'InstrumentSerif',
+    fontSize: 20,
+    color: '#F5EFE6',
+    paddingVertical: 12,
+    paddingRight: 14,
     minHeight: 90,
-    lineHeight: 22,
+    lineHeight: 28,
   },
   ruledInputMain: {
-    fontFamily: 'DMSans',
-    fontSize: 15,
-    color: '#F4EFEB',
-    padding: 16,
-    minHeight: 180,
-    lineHeight: 24,
+    flex: 1,
+    fontFamily: 'InstrumentSerif',
+    fontSize: 23,
+    color: '#F5EFE6',
+    paddingVertical: 14,
+    paddingRight: 16,
+    minHeight: 190,
+    lineHeight: 33,
+    letterSpacing: 0.2,
   },
   tagsContainer: {
     flexDirection: 'row',
@@ -516,8 +527,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: 'DMSans',
     fontSize: 13,
-    color: '#F4EFEB',
-    backgroundColor: '#1B1726',
+    color: '#F5EFE6',
+    backgroundColor: '#1E1A17',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,
@@ -525,7 +536,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.07)',
   },
   addTagButton: {
-    backgroundColor: '#241F32',
+    backgroundColor: '#27221F',
     paddingHorizontal: 16,
     justifyContent: 'center',
     borderRadius: 10,
