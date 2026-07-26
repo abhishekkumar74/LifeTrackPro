@@ -826,23 +826,23 @@ export default function ProfileScreen(): React.JSX.Element {
           <TouchableOpacity
             style={styles.journalVaultCard}
             onPress={() => router.push('/journal' as any)}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
             <View style={styles.journalVaultIconCol}>
-              <Lock size={20} color="#E8A020" />
+              <Lock size={18} color="#E5A93C" />
             </View>
             <View style={styles.journalVaultTextCol}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={styles.journalVaultTitle}>Secret Journal Vault</Text>
                 <View style={styles.journalVaultBadge}>
-                  <Text style={styles.journalVaultBadgeText}>PIN PROTECTED</Text>
+                  <Text style={styles.journalVaultBadgeText}>PIN VAULT</Text>
                 </View>
               </View>
-              <Text style={styles.journalVaultSub}>
-                Private daily reflections, mood tracking & locked diary entries.
+              <Text style={styles.journalVaultSub} numberOfLines={1}>
+                Private daily reflections & growth logs
               </Text>
             </View>
-            <ChevronRight size={18} color="#E8A020" />
+            <ChevronRight size={16} color="#E5A93C" />
           </TouchableOpacity>
         </View>
 
@@ -1502,51 +1502,52 @@ const styles = StyleSheet.create({
   journalVaultCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#17172A',
-    padding: 16,
+    backgroundColor: '#1E1A29',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(232, 160, 32, 0.3)',
-    gap: 14,
+    borderColor: 'rgba(229, 169, 60, 0.25)',
+    gap: 12,
   },
   journalVaultIconCol: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(232, 160, 32, 0.15)',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#241F32',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(232, 160, 32, 0.3)',
+    borderColor: 'rgba(229, 169, 60, 0.3)',
   },
   journalVaultTextCol: {
     flex: 1,
   },
   journalVaultTitle: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#F4EFEB',
   },
   journalVaultBadge: {
-    backgroundColor: 'rgba(232, 160, 32, 0.15)',
+    backgroundColor: 'rgba(229, 169, 60, 0.15)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(232, 160, 32, 0.3)',
+    borderColor: 'rgba(229, 169, 60, 0.3)',
   },
   journalVaultBadgeText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 8,
     fontWeight: 'bold',
-    color: '#E8A020',
+    color: '#E5A93C',
+    letterSpacing: 0.5,
   },
   journalVaultSub: {
     fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#9B9BAF',
-    marginTop: 3,
-    lineHeight: 16,
+    fontSize: 11,
+    color: '#A8A2B5',
+    marginTop: 2,
   },
 });

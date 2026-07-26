@@ -241,11 +241,8 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
           {/* 1. DAILY DIARY & PERSONAL THOUGHTS (TOP CANVAS) */}
           <View style={styles.notebookSectionCard}>
             <View style={[styles.notebookCardHeader, { backgroundColor: 'rgba(162,155,254,0.12)' }]}>
-              <View style={styles.headerTitleRow}>
-                <BookOpen size={16} color="#A29BFE" />
-                <Text style={[styles.notebookHeaderTitle, { color: '#A29BFE' }]}>✍️ DAILY DIARY & PERSONAL THOUGHTS</Text>
-              </View>
-              <Text style={styles.notebookHeaderSub}>Ruled notebook page for freeform diary writing & inner reflections.</Text>
+              <BookOpen size={16} color="#A29BFE" />
+              <Text style={[styles.notebookHeaderTitle, { color: '#A29BFE' }]}>✍️ DAILY DIARY & THOUGHTS</Text>
             </View>
             <View style={styles.ruledPaperContainerMain}>
               <TextInput
@@ -263,11 +260,8 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
           {/* 2. ACHIEVEMENTS OF THE DAY */}
           <View style={styles.notebookSectionCard}>
             <View style={[styles.notebookCardHeader, { backgroundColor: 'rgba(123,182,157,0.12)' }]}>
-              <View style={styles.headerTitleRow}>
-                <Award size={16} color="#7BB69D" />
-                <Text style={[styles.notebookHeaderTitle, { color: '#7BB69D' }]}>🏆 ACHIEVEMENTS OF THE DAY</Text>
-              </View>
-              <Text style={styles.notebookHeaderSub}>What wins, progress, or proud moments did you achieve today?</Text>
+              <Award size={16} color="#7BB69D" />
+              <Text style={[styles.notebookHeaderTitle, { color: '#7BB69D' }]}>🏆 ACHIEVEMENTS OF THE DAY</Text>
             </View>
             <View style={styles.ruledPaperContainerSuccess}>
               <TextInput
@@ -282,14 +276,11 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
             </View>
           </View>
 
-          {/* 3. NOT-TO-DO LIST (MISTAKES TO AVOID) */}
+          {/* 3. NOT-TO-DO LIST */}
           <View style={styles.notebookSectionCard}>
             <View style={[styles.notebookCardHeader, { backgroundColor: 'rgba(217,119,87,0.12)' }]}>
-              <View style={styles.headerTitleRow}>
-                <ShieldAlert size={16} color="#D97757" />
-                <Text style={[styles.notebookHeaderTitle, { color: '#D97757' }]}>🚫 NOT-TO-DO LIST (MISTAKES TO AVOID)</Text>
-              </View>
-              <Text style={styles.notebookHeaderSub}>What distractions or bad habits wasted time? Don't repeat these!</Text>
+              <ShieldAlert size={16} color="#D97757" />
+              <Text style={[styles.notebookHeaderTitle, { color: '#D97757' }]}>🚫 NOT-TO-DO LIST</Text>
             </View>
             <View style={styles.ruledPaperContainerDanger}>
               <TextInput
@@ -307,11 +298,8 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
           {/* 4. WHERE I CAN DO BETTER */}
           <View style={styles.notebookSectionCard}>
             <View style={[styles.notebookCardHeader, { backgroundColor: 'rgba(229,169,60,0.12)' }]}>
-              <View style={styles.headerTitleRow}>
-                <TrendingUp size={16} color="#E5A93C" />
-                <Text style={[styles.notebookHeaderTitle, { color: '#E5A93C' }]}>📈 WHERE I CAN DO BETTER (LEARNINGS)</Text>
-              </View>
-              <Text style={styles.notebookHeaderSub}>What key lesson did you learn today to grow closer to your goals?</Text>
+              <TrendingUp size={16} color="#E5A93C" />
+              <Text style={[styles.notebookHeaderTitle, { color: '#E5A93C' }]}>📈 WHERE TO IMPROVE</Text>
             </View>
             <View style={styles.ruledPaperContainerWarning}>
               <TextInput
@@ -502,28 +490,19 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   notebookCardHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
-  headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 3,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
   },
   notebookHeaderTitle: {
     fontFamily: 'DMSans-Bold',
     fontSize: 12,
     fontWeight: 'bold',
     letterSpacing: 0.8,
-  },
-  notebookHeaderSub: {
-    fontFamily: 'DMSans',
-    fontSize: 11,
-    color: '#A8A2B5',
-    lineHeight: 16,
   },
   ruledPaperContainerSuccess: {
     borderLeftWidth: 3,
