@@ -6,7 +6,20 @@ import {
 } from '@/lib/hooks/use-journal';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Award, BookOpen, Calendar, Save, ShieldAlert, Trash2, TrendingUp } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Award,
+  BookOpen,
+  Calendar,
+  Check,
+  Clock,
+  Save,
+  ShieldAlert,
+  Sparkles,
+  Tag,
+  Trash2,
+  TrendingUp,
+} from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,6 +35,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
+type JournalSection = 'reflections' | 'wins' | 'avoid' | 'growth';
 
 export default function CozyJournalEditorScreen(): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -39,6 +54,7 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
   const [improvements, setImprovements] = useState<string>('');
   const [tagInput, setTagInput] = useState<string>('');
   const [tags, setTags] = useState<string[]>(['reflections']);
+  const [activeSection, setActiveSection] = useState<JournalSection>('reflections');
 
   useEffect(() => {
     if (existingEntry) {
@@ -106,7 +122,7 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
       }
       router.back();
     } catch (e) {
-      // Error handled by mutation callback
+      // Handled by mutation callback
     }
   };
 
@@ -139,20 +155,20 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#121019" />
+      <StatusBar barStyle="light-content" backgroundColor="#0F0C1B" />
 
-      {/* TOP NAV BAR */}
+      {/* TOP ELEGANT HEADER */}
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft size={20} color="#A8A2B5" />
+          <ArrowLeft size={18} color="#C4BFCF" />
         </TouchableOpacity>
 
-        <Text style={styles.topBarTitle}>{isNew ? 'New Diary Page' : 'Edit Diary Page'}</Text>
+        <Text style={styles.topBarTitle}>{isNew ? 'New Journal Entry' : 'Edit Journal Entry'}</Text>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {!isNew && (
             <TouchableOpacity style={styles.deleteIconButton} onPress={handleDelete}>
-              <Trash2 size={18} color="#D97757" />
+              <Trash2 size={16} color="#E07A5F" />
             </TouchableOpacity>
           )}
 
@@ -163,10 +179,10 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
             activeOpacity={0.85}
           >
             {createMutation.isPending || updateMutation.isPending ? (
-              <ActivityIndicator size="small" color="#121019" />
+              <ActivityIndicator size="small" color="#0F0C1B" />
             ) : (
               <>
-                <Save size={15} color="#121019" />
+                <Check size={15} color="#0F0C1B" />
                 <Text style={styles.saveButtonText}>Save</Text>
               </>
             )}
@@ -178,133 +194,198 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* UNIFIED LUXURY JOURNAL SHEET */}
+          <View style={styles.journalCanvas}>
+            {/* Top Red Margin Line (Notebook Margin Accent) */}
+            <View style={styles.notebookMarginAccent} />
 
-          {/* ELEGANT DATE STAMP BADGE */}
-          <View style={styles.diaryHeaderStampRow}>
-            <View style={styles.dateStampBadge}>
-              <Calendar size={13} color="#E5A93C" />
-              <Text style={styles.dateStampText}>{formatHeaderDateStamp()}</Text>
+            {/* Date & Time Stamp */}
+            <View style={styles.dateStampRow}>
+              <View style={styles.dateStampBadge}>
+                <Calendar size={12} color="#E5A93C" />
+                <Text style={styles.dateStampText}>{formatHeaderDateStamp()}</Text>
+              </View>
             </View>
-          </View>
 
-          {/* ENTRY TITLE */}
-          <View style={styles.titleContainer}>
+            {/* Seamless Title Input */}
             <TextInput
               style={styles.titleInput}
-              placeholder="Diary Page Title (e.g. Daily Reflection)..."
-              placeholderTextColor="rgba(244,239,235,0.3)"
+              placeholder="Title your entry..."
+              placeholderTextColor="rgba(247, 244, 239, 0.3)"
               value={title}
               onChangeText={setTitle}
               maxLength={80}
             />
-          </View>
 
-          {/* 1. DAILY DIARY & PERSONAL THOUGHTS (PRIMARY CANVAS AT TOP) */}
-          <View style={styles.notebookSectionCard}>
-            <View style={[styles.notebookCardHeader, { backgroundColor: 'rgba(162,155,254,0.12)' }]}>
-              <BookOpen size={16} color="#A29BFE" />
-              <Text style={[styles.notebookHeaderTitle, { color: '#A29BFE' }]}>DAILY THOUGHTS & REFLECTIONS</Text>
-            </View>
-            <View style={styles.ruledPaperContainerMain}>
-              <TextInput
-                style={styles.ruledInputMain}
-                placeholder="Dear Diary, today was a productive day. I felt focused working on my goals and..."
-                placeholderTextColor="rgba(244,239,235,0.3)"
-                value={content}
-                onChangeText={setContent}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          </View>
-
-          {/* 2. ACHIEVEMENTS OF THE DAY */}
-          <View style={styles.notebookSectionCard}>
-            <View style={[styles.notebookCardHeader, { backgroundColor: 'rgba(123,182,157,0.12)' }]}>
-              <Award size={16} color="#7BB69D" />
-              <Text style={[styles.notebookHeaderTitle, { color: '#7BB69D' }]}>WINS & ACHIEVEMENTS</Text>
-            </View>
-            <View style={styles.ruledPaperContainerSuccess}>
-              <TextInput
-                style={styles.ruledInput}
-                placeholder="• Completed focus blocks&#10;• Solved a difficult problem&#10;• Woke up energized..."
-                placeholderTextColor="rgba(244,239,235,0.3)"
-                value={achievements}
-                onChangeText={setAchievements}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          </View>
-
-          {/* 3. NOT-TO-DO LIST */}
-          <View style={styles.notebookSectionCard}>
-            <View style={[styles.notebookCardHeader, { backgroundColor: 'rgba(217,119,87,0.12)' }]}>
-              <ShieldAlert size={16} color="#D97757" />
-              <Text style={[styles.notebookHeaderTitle, { color: '#D97757' }]}>NOT-TO-DO LIST (MISTAKES TO AVOID)</Text>
-            </View>
-            <View style={styles.ruledPaperContainerDanger}>
-              <TextInput
-                style={styles.ruledInput}
-                placeholder="• Scrolling social media in the morning&#10;• Procrastinating core tasks..."
-                placeholderTextColor="rgba(244,239,235,0.3)"
-                value={notToDos}
-                onChangeText={setNotToDos}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          </View>
-
-          {/* 4. WHERE TO IMPROVE */}
-          <View style={styles.notebookSectionCard}>
-            <View style={[styles.notebookCardHeader, { backgroundColor: 'rgba(229,169,60,0.12)' }]}>
-              <TrendingUp size={16} color="#E5A93C" />
-              <Text style={[styles.notebookHeaderTitle, { color: '#E5A93C' }]}>GROWTH & LEARNINGS</Text>
-            </View>
-            <View style={styles.ruledPaperContainerWarning}>
-              <TextInput
-                style={styles.ruledInput}
-                placeholder="• Plan task list the night before&#10;• Take active 5-minute breaks..."
-                placeholderTextColor="rgba(244,239,235,0.3)"
-                value={improvements}
-                onChangeText={setImprovements}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          </View>
-
-          {/* TAGS FOOTER ROW */}
-          <View style={styles.sectionGroup}>
-            <Text style={styles.sectionLabel}>TAGS & CATEGORIES</Text>
-
-            <View style={styles.tagsContainer}>
-              {tags.map((t, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  style={styles.activeTagPill}
-                  onPress={() => handleRemoveTag(t)}
-                >
-                  <Text style={styles.activeTagText}>#{t}</Text>
-                  <Text style={{ fontSize: 10, color: '#A29BFE', marginLeft: 4 }}>✕</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.addTagRow}>
-              <TextInput
-                style={styles.tagInput}
-                placeholder="Add tag (e.g. growth)..."
-                placeholderTextColor="rgba(244,239,235,0.3)"
-                value={tagInput}
-                onChangeText={setTagInput}
-                onSubmitEditing={handleAddTag}
-              />
-              <TouchableOpacity style={styles.addTagButton} onPress={handleAddTag}>
-                <Text style={styles.addTagButtonText}>Add</Text>
+            {/* SECTION TABS (Sleek Segmented Switcher to keep layout clean & uncluttered) */}
+            <View style={styles.segmentedTabContainer}>
+              <TouchableOpacity
+                style={[styles.segmentTab, activeSection === 'reflections' && styles.segmentTabActive]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActiveSection('reflections');
+                }}
+              >
+                <BookOpen size={13} color={activeSection === 'reflections' ? '#A29BFE' : '#9B94AA'} />
+                <Text style={[styles.segmentTabText, activeSection === 'reflections' && { color: '#A29BFE' }]}>
+                  Thoughts
+                </Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.segmentTab, activeSection === 'wins' && styles.segmentTabActive]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActiveSection('wins');
+                }}
+              >
+                <Award size={13} color={activeSection === 'wins' ? '#4EBA8E' : '#9B94AA'} />
+                <Text style={[styles.segmentTabText, activeSection === 'wins' && { color: '#4EBA8E' }]}>
+                  Wins
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.segmentTab, activeSection === 'avoid' && styles.segmentTabActive]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActiveSection('avoid');
+                }}
+              >
+                <ShieldAlert size={13} color={activeSection === 'avoid' ? '#E07A5F' : '#9B94AA'} />
+                <Text style={[styles.segmentTabText, activeSection === 'avoid' && { color: '#E07A5F' }]}>
+                  Avoid
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.segmentTab, activeSection === 'growth' && styles.segmentTabActive]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActiveSection('growth');
+                }}
+              >
+                <TrendingUp size={13} color={activeSection === 'growth' ? '#E5A93C' : '#9B94AA'} />
+                <Text style={[styles.segmentTabText, activeSection === 'growth' && { color: '#E5A93C' }]}>
+                  Growth
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* EXPANSIVE JOURNAL CANVAS FOR ACTIVE SECTION */}
+            <View style={styles.activeSectionArea}>
+              {activeSection === 'reflections' && (
+                <View style={styles.sectionBlock}>
+                  <View style={styles.sectionHeaderRow}>
+                    <BookOpen size={15} color="#A29BFE" />
+                    <Text style={[styles.sectionTitle, { color: '#A29BFE' }]}>DAILY THOUGHTS & REFLECTIONS</Text>
+                  </View>
+                  <TextInput
+                    style={styles.journalTextArea}
+                    placeholder="Dear Diary, today was a productive day. I felt focused working on my goals and..."
+                    placeholderTextColor="rgba(247, 244, 239, 0.28)"
+                    value={content}
+                    onChangeText={setContent}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
+              )}
+
+              {activeSection === 'wins' && (
+                <View style={styles.sectionBlock}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Award size={15} color="#4EBA8E" />
+                    <Text style={[styles.sectionTitle, { color: '#4EBA8E' }]}>WINS & ACHIEVEMENTS</Text>
+                  </View>
+                  <TextInput
+                    style={styles.journalTextArea}
+                    placeholder="• Completed focus blocks&#10;• Solved a difficult problem&#10;• Woke up energized..."
+                    placeholderTextColor="rgba(247, 244, 239, 0.28)"
+                    value={achievements}
+                    onChangeText={setAchievements}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
+              )}
+
+              {activeSection === 'avoid' && (
+                <View style={styles.sectionBlock}>
+                  <View style={styles.sectionHeaderRow}>
+                    <ShieldAlert size={15} color="#E07A5F" />
+                    <Text style={[styles.sectionTitle, { color: '#E07A5F' }]}>NOT-TO-DO LIST (MISTAKES TO AVOID)</Text>
+                  </View>
+                  <TextInput
+                    style={styles.journalTextArea}
+                    placeholder="• Scrolling social media in the morning&#10;• Procrastinating core tasks..."
+                    placeholderTextColor="rgba(247, 244, 239, 0.28)"
+                    value={notToDos}
+                    onChangeText={setNotToDos}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
+              )}
+
+              {activeSection === 'growth' && (
+                <View style={styles.sectionBlock}>
+                  <View style={styles.sectionHeaderRow}>
+                    <TrendingUp size={15} color="#E5A93C" />
+                    <Text style={[styles.sectionTitle, { color: '#E5A93C' }]}>GROWTH & LEARNINGS</Text>
+                  </View>
+                  <TextInput
+                    style={styles.journalTextArea}
+                    placeholder="• Plan task list the night before&#10;• Take active 5-minute breaks..."
+                    placeholderTextColor="rgba(247, 244, 239, 0.28)"
+                    value={improvements}
+                    onChangeText={setImprovements}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
+              )}
+            </View>
+
+            {/* SEAMLESS INLINE TAGS FOOTER */}
+            <View style={styles.tagsFooterSection}>
+              <View style={styles.tagsHeaderRow}>
+                <Tag size={13} color="#9B94AA" />
+                <Text style={styles.tagsHeaderLabel}>TAGS & CATEGORIES</Text>
+              </View>
+
+              <View style={styles.tagsContainer}>
+                {tags.map((t, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.activeTagPill}
+                    onPress={() => handleRemoveTag(t)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.activeTagText}>#{t}</Text>
+                    <Text style={styles.removeTagCross}>✕</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.addTagRow}>
+                <TextInput
+                  style={styles.tagInput}
+                  placeholder="Add tag (e.g. growth)..."
+                  placeholderTextColor="rgba(247, 244, 239, 0.28)"
+                  value={tagInput}
+                  onChangeText={setTagInput}
+                  onSubmitEditing={handleAddTag}
+                />
+                <TouchableOpacity style={styles.addTagButton} onPress={handleAddTag} activeOpacity={0.8}>
+                  <Text style={styles.addTagButtonText}>Add Tag</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -316,226 +397,255 @@ export default function CozyJournalEditorScreen(): React.JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121019',
+    backgroundColor: '#0F0C1B',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#121019',
+    backgroundColor: '#0F0C1B',
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: '#1B1726',
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: '#141022',
   },
   backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#241F32',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#1E1830',
     justifyContent: 'center',
     alignItems: 'center',
   },
   topBarTitle: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 17,
-    color: '#F4EFEB',
-    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#F7F4EF',
+    fontWeight: '700',
   },
   deleteIconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: 'rgba(217,119,87,0.15)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(224, 122, 95, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(217,119,87,0.3)',
+    borderColor: 'rgba(224, 122, 95, 0.25)',
   },
   saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: '#E5A93C',
-    paddingHorizontal: 14,
+    paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 10,
   },
   saveButtonText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 13,
-    color: '#121019',
-    fontWeight: 'bold',
+    color: '#0F0C1B',
+    fontWeight: '700',
   },
   scrollContent: {
-    padding: 18,
-    paddingBottom: 60,
+    padding: 16,
+    paddingBottom: 40,
   },
-  diaryHeaderStampRow: {
+  // UNIFIED LUXURY DIARY CANVAS
+  journalCanvas: {
+    backgroundColor: '#181427',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 20,
+    position: 'relative',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  notebookMarginAccent: {
+    position: 'absolute',
+    left: 16,
+    top: 20,
+    bottom: 20,
+    width: 2,
+    backgroundColor: 'rgba(229, 169, 60, 0.25)',
+    borderRadius: 1,
+  },
+  dateStampRow: {
     alignItems: 'flex-start',
-    marginBottom: 14,
+    marginBottom: 12,
+    paddingLeft: 12,
   },
   dateStampBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#1B1726',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
+    gap: 6,
+    backgroundColor: 'rgba(229, 169, 60, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(229,169,60,0.25)',
+    borderColor: 'rgba(229, 169, 60, 0.25)',
   },
   dateStampText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 11,
     color: '#E5A93C',
-    fontWeight: 'bold',
-    letterSpacing: 0.6,
-  },
-  titleContainer: {
-    marginBottom: 16,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   titleInput: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 19,
-    color: '#F4EFEB',
-    fontWeight: 'bold',
-    backgroundColor: '#1B1726',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 14,
+    fontSize: 22,
+    color: '#F7F4EF',
+    fontWeight: '700',
+    paddingLeft: 12,
+    paddingVertical: 6,
+    marginBottom: 16,
+  },
+  // SEGMENTED SECTION SWITCHER
+  segmentedTabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#120F1F',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 18,
+    marginLeft: 12,
+  },
+  segmentTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  segmentTabActive: {
+    backgroundColor: '#1F1932',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  sectionGroup: {
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  sectionLabel: {
+  segmentTabText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 11,
-    color: '#A8A2B5',
-    fontWeight: 'bold',
-    letterSpacing: 0.8,
-    marginBottom: 8,
+    color: '#9B94AA',
+    fontWeight: '600',
   },
-  // LUXURY PARCHMENT CARDS
-  notebookSectionCard: {
-    backgroundColor: '#1B1726',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+  // ACTIVE SECTION CANVAS
+  activeSectionArea: {
+    paddingLeft: 12,
     marginBottom: 16,
-    overflow: 'hidden',
   },
-  notebookCardHeader: {
+  sectionBlock: {
+    minHeight: 240,
+  },
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    marginBottom: 12,
   },
-  notebookHeaderTitle: {
+  sectionTitle: {
     fontFamily: 'DMSans-Bold',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '700',
     letterSpacing: 0.8,
   },
-  ruledPaperContainerSuccess: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#7BB69D',
-    backgroundColor: '#1B1726',
-  },
-  ruledPaperContainerDanger: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#D97757',
-    backgroundColor: '#1B1726',
-  },
-  ruledPaperContainerWarning: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#E5A93C',
-    backgroundColor: '#1B1726',
-  },
-  ruledPaperContainerMain: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#A29BFE',
-    backgroundColor: '#1B1726',
-  },
-  ruledInput: {
-    fontFamily: 'DMSans',
-    fontSize: 14,
-    color: '#F4EFEB',
-    padding: 14,
-    minHeight: 90,
-    lineHeight: 22,
-  },
-  ruledInputMain: {
+  journalTextArea: {
     fontFamily: 'DMSans',
     fontSize: 15,
-    color: '#F4EFEB',
-    padding: 16,
-    minHeight: 180,
-    lineHeight: 24,
+    color: '#F7F4EF',
+    lineHeight: 25,
+    minHeight: 200,
+    textAlignVertical: 'top',
+    paddingTop: 4,
+  },
+  // INLINE TAGS FOOTER
+  tagsFooterSection: {
+    paddingLeft: 12,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  tagsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  tagsHeaderLabel: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#9B94AA',
+    fontWeight: '700',
+    letterSpacing: 0.6,
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   activeTagPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(162,155,254,0.15)',
+    backgroundColor: 'rgba(162, 155, 254, 0.15)',
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(162,155,254,0.3)',
+    borderColor: 'rgba(162, 155, 254, 0.3)',
   },
   activeTagText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 11,
     color: '#A29BFE',
-    fontWeight: 'bold',
+    fontWeight: '600',
+  },
+  removeTagCross: {
+    fontSize: 10,
+    color: '#A29BFE',
+    marginLeft: 6,
   },
   addTagRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   tagInput: {
     flex: 1,
     fontFamily: 'DMSans',
     fontSize: 13,
-    color: '#F4EFEB',
-    backgroundColor: '#1B1726',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    color: '#F7F4EF',
+    backgroundColor: '#120F1F',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   addTagButton: {
-    backgroundColor: '#241F32',
+    backgroundColor: '#241E38',
     paddingHorizontal: 16,
     justifyContent: 'center',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   addTagButtonText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 12,
     color: '#A29BFE',
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
 });

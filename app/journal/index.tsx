@@ -515,29 +515,29 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#13111C',
+    backgroundColor: '#0F0C1B',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#13111C',
+    backgroundColor: '#0F0C1B',
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(229,169,60,0.1)',
-    backgroundColor: '#1B1726',
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: '#141022',
   },
   backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#241F32',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#1E1830',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -546,9 +546,9 @@ const styles = StyleSheet.create({
   },
   topBarTitle: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 18,
-    color: '#F4EFEB',
-    fontWeight: 'bold',
+    fontSize: 17,
+    color: '#F7F4EF',
+    fontWeight: '700',
   },
   unlockedBadge: {
     flexDirection: 'row',
@@ -559,28 +559,28 @@ const styles = StyleSheet.create({
   unlockedBadgeText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 10,
-    color: '#7BB69D',
+    color: '#4EBA8E',
     fontWeight: '600',
   },
   resetPinHeaderButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: 'rgba(162,155,254,0.15)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(162, 155, 254, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(162,155,254,0.3)',
+    borderColor: 'rgba(162, 155, 254, 0.25)',
   },
   lockButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: 'rgba(217,119,87,0.15)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(224, 122, 95, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(217,119,87,0.3)',
+    borderColor: 'rgba(224, 122, 95, 0.25)',
   },
   // LOCK SCREEN
   lockContent: {
@@ -603,14 +603,14 @@ const styles = StyleSheet.create({
   lockTitle: {
     fontFamily: 'DMSans-Bold',
     fontSize: 22,
-    color: '#F4EFEB',
+    color: '#F7F4EF',
     fontWeight: 'bold',
     textAlign: 'center',
   },
   lockSubtitle: {
     fontFamily: 'DMSans',
     fontSize: 13,
-    color: '#A8A2B5',
+    color: '#9B94AA',
     textAlign: 'center',
     marginTop: 8,
     lineHeight: 18,
@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     borderWidth: 1.5,
-    borderColor: 'rgba(244,239,235,0.3)',
+    borderColor: 'rgba(247,244,239,0.3)',
     backgroundColor: 'transparent',
   },
   pinDotFilled: {
@@ -635,7 +635,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 12,
-    color: '#D97757',
+    color: '#E07A5F',
     marginBottom: 10,
   },
   keypadGrid: {
@@ -651,7 +651,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#241F32',
+    backgroundColor: '#1E1830',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center',
@@ -664,7 +664,7 @@ const styles = StyleSheet.create({
   keypadText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 22,
-    color: '#F4EFEB',
+    color: '#F7F4EF',
     fontWeight: 'bold',
   },
   forgotPinButton: {
@@ -688,14 +688,14 @@ const styles = StyleSheet.create({
   // RECOVERY MODAL
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(19,17,28,0.9)',
+    backgroundColor: 'rgba(15,12,27,0.92)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
   },
   modalCard: {
     width: '100%',
-    backgroundColor: '#1E1A29',
+    backgroundColor: '#181427',
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
@@ -716,14 +716,14 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontFamily: 'DMSans-Bold',
     fontSize: 18,
-    color: '#F4EFEB',
+    color: '#F7F4EF',
     fontWeight: 'bold',
     textAlign: 'center',
   },
   modalSub: {
     fontFamily: 'DMSans',
     fontSize: 12,
-    color: '#A8A2B5',
+    color: '#9B94AA',
     textAlign: 'center',
     marginTop: 6,
     marginBottom: 16,
@@ -733,8 +733,8 @@ const styles = StyleSheet.create({
     width: '100%',
     fontFamily: 'DMSans',
     fontSize: 14,
-    color: '#F4EFEB',
-    backgroundColor: '#241F32',
+    color: '#F7F4EF',
+    backgroundColor: '#120F1F',
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 12,
@@ -745,7 +745,7 @@ const styles = StyleSheet.create({
   modalErrorText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 11,
-    color: '#D97757',
+    color: '#E07A5F',
     marginBottom: 10,
   },
   modalActionsRow: {
@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
   },
   modalCancelButton: {
     flex: 1,
-    backgroundColor: '#241F32',
+    backgroundColor: '#1E1830',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
@@ -766,7 +766,7 @@ const styles = StyleSheet.create({
   modalCancelText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 13,
-    color: '#A8A2B5',
+    color: '#9B94AA',
   },
   modalVerifyButton: {
     flex: 1,
@@ -778,19 +778,19 @@ const styles = StyleSheet.create({
   modalVerifyText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 13,
-    color: '#13111C',
+    color: '#0F0C1B',
     fontWeight: 'bold',
   },
   // TIMELINE
   listContent: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 100,
   },
   streakCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1E1A29',
+    backgroundColor: '#181427',
     padding: 16,
     borderRadius: 18,
     borderWidth: 1,
@@ -809,13 +809,13 @@ const styles = StyleSheet.create({
   streakNumber: {
     fontFamily: 'DMSans-Bold',
     fontSize: 16,
-    color: '#F4EFEB',
+    color: '#F7F4EF',
     fontWeight: 'bold',
   },
   streakSub: {
     fontFamily: 'DMSans',
     fontSize: 11,
-    color: '#A8A2B5',
+    color: '#9B94AA',
     marginTop: 2,
   },
   totalEntriesBadge: {
@@ -843,7 +843,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontFamily: 'DMSans-Bold',
     fontSize: 11,
-    color: '#A8A2B5',
+    color: '#9B94AA',
     fontWeight: 'bold',
     letterSpacing: 0.8,
     marginBottom: 14,
@@ -855,21 +855,21 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: 'DMSans-Bold',
     fontSize: 16,
-    color: '#F4EFEB',
+    color: '#F7F4EF',
     marginTop: 14,
     fontWeight: 'bold',
   },
   emptySub: {
     fontFamily: 'DMSans',
     fontSize: 12,
-    color: '#A8A2B5',
+    color: '#9B94AA',
     textAlign: 'center',
     marginTop: 6,
     maxWidth: 240,
     lineHeight: 18,
   },
   entryCard: {
-    backgroundColor: '#1E1A29',
+    backgroundColor: '#181427',
     padding: 16,
     borderRadius: 18,
     borderWidth: 1,
