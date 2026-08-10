@@ -219,7 +219,7 @@ export function useVaultPin() {
       setIsUnlocked(true);
       return true;
     } catch (e) {
-      console.error('Failed to save vault pin:', e);
+      if (__DEV__) console.warn('Failed to save vault pin:', e);
       return false;
     }
   };
@@ -233,7 +233,7 @@ export function useVaultPin() {
       }
       return false;
     } catch (e) {
-      console.error('Failed to verify vault pin:', e);
+      if (__DEV__) console.warn('Failed to verify vault pin:', e);
       return false;
     }
   };
@@ -249,7 +249,7 @@ export function useVaultPin() {
       setIsUnlocked(false);
       return true;
     } catch (e) {
-      console.error('Failed to reset vault pin:', e);
+      if (__DEV__) console.warn('Failed to reset vault pin:', e);
       return false;
     }
   };

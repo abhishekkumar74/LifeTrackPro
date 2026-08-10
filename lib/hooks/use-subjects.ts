@@ -96,7 +96,7 @@ export function useSubjects() {
         return result.sort((a, b) => a.localeCompare(b));
       } catch (err) {
         captureError(err, { context: 'useSubjects_queryFn' });
-        console.error('Error in useSubjects queryFn:', err);
+        if (__DEV__) console.warn('Error in useSubjects queryFn:', err);
         return profileSubjects;
       }
     },

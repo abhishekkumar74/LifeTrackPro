@@ -137,13 +137,13 @@ export default function HomeDashboardScreen(): React.JSX.Element {
             .upsert(missedLogsToInsert, { onConflict: 'user_id,block_id,date' });
 
           if (insertError) {
-            console.error('Failed to sync missed routines:', insertError);
+            if (__DEV__) console.warn('Failed to sync missed routines:', insertError);
           } else {
             stats.refetch();
           }
         }
       } catch (err) {
-        console.error('Error syncing missed routines:', err);
+        if (__DEV__) console.warn('Error syncing missed routines:', err);
       }
     };
 
@@ -188,7 +188,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
           }
         }
       } catch (err) {
-        console.error('Failed to manage schedule daily snapshot', err);
+        if (__DEV__) console.warn('Failed to manage schedule daily snapshot', err);
       }
     };
 

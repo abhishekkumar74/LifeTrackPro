@@ -31,7 +31,7 @@ import { requestNotificationPermission, useNotificationResponse, scheduleMorning
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
 
-// Ignore non-fatal fetch cancellation/abort and network failure redboxes in LogBox
+// Ignore non-fatal fetch cancellation/abort, background sync, and network failure redboxes in LogBox
 LogBox.ignoreLogs([
   'AbortError',
   'Aborted',
@@ -39,6 +39,11 @@ LogBox.ignoreLogs([
   'cancelled',
   'Network request failed',
   'TypeError: Network request failed',
+  'Error syncing missed routines',
+  'Failed to sync missed routines',
+  'Not authenticated',
+  'Font registration was unsuccessful',
+  'Expo AV has been deprecated',
 ]);
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {

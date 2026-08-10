@@ -331,7 +331,7 @@ export default function FocusScreen(): React.JSX.Element {
       queryClient.invalidateQueries({ queryKey: ['syllabus'] });
     } catch (err) {
       if (__DEV__) {
-        console.error('Failed to update topic status:', err);
+        console.warn('Failed to update topic status:', err);
       }
     } finally {
       topicSheetRef.current?.close();
@@ -498,7 +498,7 @@ export default function FocusScreen(): React.JSX.Element {
             );
 
           if (logError) {
-            console.error('Failed to log routine completion in database:', logError);
+            if (__DEV__) console.warn('Failed to log routine completion in database:', logError);
           }
           useUiStore.getState().showToast('Routine block marked Done!', 'success');
         } else {
@@ -583,12 +583,12 @@ export default function FocusScreen(): React.JSX.Element {
           );
           return;
         } catch (localErr) {
-          if (__DEV__) console.error('Failed to write offline cache:', localErr);
+          if (__DEV__) console.warn('Failed to write offline cache:', localErr);
         }
       }
 
       if (__DEV__) {
-        console.error('Failed to save focus session:', err);
+        console.warn('Failed to save focus session:', err);
       }
       Alert.alert(
         'Failed to save session',

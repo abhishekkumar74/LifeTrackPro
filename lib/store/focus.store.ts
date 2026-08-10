@@ -123,7 +123,7 @@ const resyncFocusTimer = async (state: FocusState) => {
           );
         }
       } catch (err) {
-        console.error('Failed to log auto-completed focus session on startup:', err);
+        if (__DEV__) console.warn('Failed to log auto-completed focus session on startup:', err);
       }
 
       // Reset store state
@@ -339,7 +339,7 @@ export const useFocusStore = create<FocusState>()(
     onRehydrateStorage: () => {
       return (state, error) => {
         if (error) {
-          console.error('Error hydrating focus store:', error);
+          if (__DEV__) console.warn('Error hydrating focus store:', error);
           return;
         }
         if (state) {

@@ -60,7 +60,7 @@ export function useAppLifecycle() {
                   });
                 }
               } catch (err) {
-                console.error('Failed to log background interrupted focus session:', err);
+                if (__DEV__) console.warn('Failed to log background interrupted focus session:', err);
               }
 
               Alert.alert(
@@ -84,7 +84,7 @@ export function useAppLifecycle() {
             // 1. Refresh auth session
             const { error } = await supabase.auth.refreshSession();
             if (error && __DEV__) {
-              console.error(
+              console.warn(
                 'Session refresh failed:', error
               );
             }

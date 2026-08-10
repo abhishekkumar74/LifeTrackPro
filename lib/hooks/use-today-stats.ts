@@ -460,7 +460,7 @@ export function useTodayStats(): TodayStats {
             return;
           }
         } catch (localErr) {
-          if (__DEV__) console.error('Failed to read offline stats cache:', localErr);
+          if (__DEV__) console.warn('Failed to read offline stats cache:', localErr);
         }
       }
 
