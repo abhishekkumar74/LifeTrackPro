@@ -506,7 +506,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-export const supabase = createClient<Database>(
+export const supabase = createClient<any>(
   supabaseUrl,
   supabaseAnonKey,
   {
@@ -520,19 +520,47 @@ export const supabase = createClient<Database>(
       headers: {
         'x-app-version': Constants.expoConfig?.version ?? '1.0.0',
       },
-      // Custom fetch with timeout
-      fetch: (url, options = {}) => {
+      // Custom fetch with timeout & abort signal handling
+      fetch: async (url, options = {}) => {
         const controller = new AbortController();
         const timeoutId = setTimeout(
-          () => controller.abort(),
-          15000  // 15 second timeout
+          () => controller.abort('Request timed out'),
+          30000 // 30 second timeout
         );
-        return fetch(url, {
-          ...options,
-          signal: controller.signal,
-        }).finally(() => {
+
+        if (options.signal) {
+          if (options.signal.aborted) {
+            controller.abort(options.signal.reason);
+          } else {
+            options.signal.addEventListener(
+              'abort',
+              () => controller.abort(options.signal?.reason),
+              { once: true }
+            );
+          }
+        }
+
+        try {
+          return await fetch(url, {
+            ...options,
+            signal: controller.signal,
+          });
+        } catch (err: any) {
+          if (
+            err?.name === 'AbortError' ||
+            err?.message === 'Aborted' ||
+            err?.message?.includes('aborted') ||
+            err?.message?.includes('Aborted')
+          ) {
+            throw new Error('Network request timed out or was cancelled. Please try again.');
+          }
+          if (err?.message === 'Network request failed' || err?.message?.includes('Network request failed')) {
+            throw new Error('Network connection error. Please check your internet connection and try again.');
+          }
+          throw err;
+        } finally {
           clearTimeout(timeoutId);
-        });
+        }
       },
     },
   }

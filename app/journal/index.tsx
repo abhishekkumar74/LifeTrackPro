@@ -1,22 +1,22 @@
+import { JournalEntry, useDeleteJournalEntry, useJournalEntries, useVaultPin } from '@/lib/hooks/use-journal';
+import { supabase } from '@/lib/supabase/client';
+import * as Haptics from 'expo-haptics';
+import { Href, router } from 'expo-router';
+import { ArrowLeft, Calendar, ChevronRight, KeyRound, Lock, Plus, ShieldCheck, Sparkles, Trash2, Unlock } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  StatusBar,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
+  FlatList,
   Modal,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
   TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { router, Href } from 'expo-router';
-import { ArrowLeft, Plus, Lock, Unlock, Sparkles, Calendar, Trash2, ChevronRight, ShieldCheck, KeyRound } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
-import { useJournalEntries, useVaultPin, useDeleteJournalEntry, JournalEntry } from '@/lib/hooks/use-journal';
-import { supabase } from '@/lib/supabase/client';
 
 export default function CozyJournalVaultScreen(): React.JSX.Element {
   const { hasPin, isUnlocked, loading: pinLoading, savePin, verifyPin, lockVault, resetPin } = useVaultPin();
@@ -901,17 +901,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   entryTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 20,
-    color: '#E5A93C',
-    marginBottom: 4,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
+    color: '#F4EFEB',
+    fontWeight: 'bold',
+    marginBottom: 6,
   },
   entrySnippet: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 17,
-    color: '#F4EFEB',
-    lineHeight: 23,
-    marginBottom: 10,
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: 'rgba(244,239,235,0.75)',
+    lineHeight: 19,
+    marginBottom: 12,
   },
   entrySectionPreview: {
     fontFamily: 'DMSans',

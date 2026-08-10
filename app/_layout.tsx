@@ -25,11 +25,21 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import LoadingScreen from '@/components/shared/LoadingScreen';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Toast } from '@/components/shared/Toast';
-import { Platform, UIManager, View, Text, ActivityIndicator } from 'react-native';
+import { Platform, UIManager, View, Text, ActivityIndicator, LogBox } from 'react-native';
 import { UserProfile } from '@/types/app.types';
 import { requestNotificationPermission, useNotificationResponse, scheduleMorningBrief } from '@/lib/notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
+
+// Ignore non-fatal fetch cancellation/abort and network failure redboxes in LogBox
+LogBox.ignoreLogs([
+  'AbortError',
+  'Aborted',
+  'canceled',
+  'cancelled',
+  'Network request failed',
+  'TypeError: Network request failed',
+]);
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);

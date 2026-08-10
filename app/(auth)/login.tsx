@@ -1,26 +1,28 @@
-import React, { useState, useEffect, useRef } from 'react';
+import CountryPicker, { COUNTRIES, Country } from '@/components/ui/CountryPicker';
+import { STRINGS } from '@/constants/strings';
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useAuthStore } from '@/lib/store/auth.store';
+import { supabase } from '@/lib/supabase/client';
+import { UserProfile } from '@/types/app.types';
+import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Pressable,
   ActivityIndicator,
+  Dimensions,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Dimensions,
+  Pressable,
   ScrollView,
-  Keyboard,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import * as Haptics from 'expo-haptics';
-import * as WebBrowser from 'expo-web-browser';
-import Svg, { Path, Circle } from 'react-native-svg';
-import { supabase } from '@/lib/supabase/client';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
-import { STRINGS } from '@/constants/strings';
-import CountryPicker, { Country, COUNTRIES } from '@/components/ui/CountryPicker';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 // Ensure the browser closes the session correctly on web redirect
 WebBrowser.maybeCompleteAuthSession();
@@ -60,7 +62,7 @@ export default function LoginScreen(): React.JSX.Element {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
-  
+
   // UI states
   const [isFocused, setIsFocused] = useState(false);
   const [countryPickerVisible, setCountryPickerVisible] = useState(false);
@@ -783,6 +785,25 @@ const styles = StyleSheet.create({
   },
   activeTabButtonText: {
     color: COLORS.surface,
+  },
+  demoBtn: {
+    backgroundColor: COLORS.bg,
+    borderWidth: 1,
+    borderColor: COLORS.violet,
+    borderRadius: RADIUS.md + 2,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  demoBtnPressed: {
+    opacity: 0.8,
+  },
+  demoBtnText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 15,
+    color: COLORS.violet,
+    fontWeight: '600',
   },
 });
 
