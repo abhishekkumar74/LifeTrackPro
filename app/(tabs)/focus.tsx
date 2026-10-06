@@ -27,7 +27,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { supabase } from '@/lib/supabase/client';
 import { useUiStore } from '@/lib/store/ui.store';
 import { useQueryClient } from '@tanstack/react-query';
-import { AdManager } from '@/components/ads';
+import { AdManager, AdRewarded } from '@/components/ads';
 
 // Custom Hooks & Stores
 import { useFocusStore, SoundKey, FocusPreset } from '@/lib/store/focus.store';
@@ -693,6 +693,28 @@ export default function FocusScreen(): React.JSX.Element {
 
   const handleSoundSelect = useCallback(async (key: SoundKey | null) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Opt-in Rewarded Video Ad for unlocking premium ambient soundscapes
+    if (key && (key === 'lofi' || key === 'cafe' || key === 'brown_noise')) {
+      Alert.alert(
+        'Unlock Soundscape 🎧',
+        `Watch a short video ad to unlock ${key.toUpperCase()} ambient audio for your focus session.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Watch Ad & Unlock',
+            onPress: () => {
+              AdRewarded.showRewardAd(async () => {
+                setSound(key);
+                await ambient.play(key, soundVolume);
+              });
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     setSound(key);
     if (key) {
       await ambient.play(key, soundVolume);
