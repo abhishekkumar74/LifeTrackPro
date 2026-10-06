@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle, Platform } from 'react-native';
 import { getAdUnitId, isTestAdEnabled, isAdMobNativeModuleAvailable } from '@/lib/config/ads';
 import { AdManager } from './AdManager';
 
@@ -15,8 +15,8 @@ export const AdBanner: React.FC<AdBannerProps> = ({
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // If native module is missing (e.g. Expo Go), or ads suppressed, or failed to load, render nothing
-  if (!isAdMobNativeModuleAvailable() || !AdManager.canShowAds() || hasError) {
+  // If web, or ads suppressed, or failed to load, render nothing
+  if (Platform.OS === 'web' || !AdManager.canShowAds() || hasError) {
     return null;
   }
 

@@ -1,4 +1,5 @@
-import { getAdUnitId, AD_FREQUENCY_LIMITS, isAdMobNativeModuleAvailable } from '@/lib/config/ads';
+import { Platform } from 'react-native';
+import { getAdUnitId, AD_FREQUENCY_LIMITS } from '@/lib/config/ads';
 import { AdManager } from './AdManager';
 
 class AdInterstitialManager {
@@ -16,7 +17,7 @@ class AdInterstitialManager {
    * Preload an interstitial ad safely
    */
   preload() {
-    if (!isAdMobNativeModuleAvailable()) return;
+    if (Platform.OS === 'web' || !AdManager.canShowAds()) return;
     if (this.isLoading || this.isLoaded) return;
 
     try {

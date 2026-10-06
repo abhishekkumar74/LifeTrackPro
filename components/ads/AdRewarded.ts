@@ -1,4 +1,5 @@
-import { getAdUnitId, isAdMobNativeModuleAvailable } from '@/lib/config/ads';
+import { Platform } from 'react-native';
+import { getAdUnitId } from '@/lib/config/ads';
 import { AdManager } from './AdManager';
 
 class AdRewardedManager {
@@ -14,7 +15,7 @@ class AdRewardedManager {
    * Preload rewarded video ad safely
    */
   preload() {
-    if (!isAdMobNativeModuleAvailable()) return;
+    if (Platform.OS === 'web' || !AdManager.canShowAds()) return;
     if (this.isLoading || this.isLoaded) return;
 
     try {
