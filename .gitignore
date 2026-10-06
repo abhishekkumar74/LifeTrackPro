@@ -48,7 +48,8 @@ yarn-error.*
 
 # macOS
 .DS_Store
-Icon*
+Icon?
+!**/icon.png
 *.html
 *.pem
 
