@@ -97,6 +97,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
   const [saveStatus, setSaveStatus] = useState<'SAVED' | 'SAVING...'>('SAVED');
   const isInitialLoad = useRef(true);
   const isCreating = useRef(false);
+  const draftCheckedRef = useRef(false);
 
   // Bottom Sheet Refs
   const pickerSheetRef = useRef<BottomSheet>(null);
@@ -127,29 +128,31 @@ export default function NoteEditorScreen(): React.JSX.Element {
 
   useAndroidBackHandler(handleBack);
 
-  // Synchronize local states when note is retrieved
+  // Synchronize local states when note is retrieved on initial load
   useEffect(() => {
-    if (note && note.id !== 'new') {
+    if (note && note.id !== 'new' && isInitialLoad.current) {
       setTitle(note.title || '');
       setContent(note.content || '');
       setSubject(note.subject);
       setChapter(note.chapter);
       setTags(note.tags || []);
-      isInitialLoad.current = true;
     }
   }, [note]);
 
-  // Check if a newer draft exists on AsyncStorage on mount/note fetch
+  // Check if a newer draft exists on AsyncStorage on initial screen mount ONLY
   useEffect(() => {
     async function checkDraft() {
-      if (!id) return;
+      if (!id || draftCheckedRef.current) return;
+      draftCheckedRef.current = true;
+
       try {
         const draftStr = await AsyncStorage.getItem(`note_draft_${id}`);
         if (!draftStr) return;
         const draft = JSON.parse(draftStr);
         if (draft && draft.timestamp) {
           const noteUpdatedAt = note?.updated_at ? new Date(note.updated_at).getTime() : 0;
-          if (draft.timestamp > noteUpdatedAt) {
+          // Prompt only if local draft is significantly newer (>5s) than the last saved version
+          if (draft.timestamp > noteUpdatedAt + 5000) {
             Alert.alert(
               'Recover Draft?',
               'An unsaved local draft was found for this note that is newer than the saved version. Would you like to recover it?',
@@ -173,6 +176,9 @@ export default function NoteEditorScreen(): React.JSX.Element {
                 },
               ]
             );
+          } else {
+            // Clean up stale draft silently
+            await AsyncStorage.removeItem(`note_draft_${id}`).catch(() => {});
           }
         }
       } catch (err) {
@@ -180,14 +186,12 @@ export default function NoteEditorScreen(): React.JSX.Element {
       }
     }
 
-    if (note && note.id !== 'new') {
-      checkDraft();
-    } else if (id === 'new') {
+    if (note || id === 'new') {
       checkDraft();
     }
   }, [note, id]);
 
-  // Handle auto-save trigger on input edits + Local Draft saving
+  // Handle auto-save trigger on input edits (Debounced) + Immediate Local Draft saving
   useEffect(() => {
     // Skip saving on initial query mount load
     if (isInitialLoad.current) {
@@ -195,7 +199,9 @@ export default function NoteEditorScreen(): React.JSX.Element {
       return;
     }
 
-    // Save draft locally immediately
+    setSaveStatus('SAVING...');
+
+    // Save draft locally immediately in case app closes before network save completes
     const draftData = {
       title,
       content,
@@ -206,77 +212,80 @@ export default function NoteEditorScreen(): React.JSX.Element {
     };
     AsyncStorage.setItem(`note_draft_${id}`, JSON.stringify(draftData)).catch(() => {});
 
-    // Auto-generate title if empty
-    let computedTitle = title.trim();
-    if (!computedTitle && content.trim()) {
-      const bodyClean = content
-        .replace(/[#*_\n\r\t]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      if (bodyClean.length <= 60) {
-        computedTitle = bodyClean;
-      } else {
-        const slice = bodyClean.slice(0, 60);
-        const lastSpace = slice.lastIndexOf(' ');
-        computedTitle = lastSpace > 0 ? slice.slice(0, lastSpace) + '...' : slice + '...';
+    // Debounce remote database save by 800ms to avoid flooding requests on every keystroke
+    const saveTimer = setTimeout(() => {
+      // Auto-generate title if empty
+      let computedTitle = title.trim();
+      if (!computedTitle && content.trim()) {
+        const bodyClean = content
+          .replace(/[#*_\n\r\t]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (bodyClean.length <= 60) {
+          computedTitle = bodyClean;
+        } else {
+          const slice = bodyClean.slice(0, 60);
+          const lastSpace = slice.lastIndexOf(' ');
+          computedTitle = lastSpace > 0 ? slice.slice(0, lastSpace) + '...' : slice + '...';
+        }
       }
-    }
-    if (!computedTitle) {
-      computedTitle = 'Untitled Note';
-    }
+      if (!computedTitle) {
+        computedTitle = 'Untitled Note';
+      }
 
-    if (id === 'new') {
-      if ((title.trim() || content.trim()) && !isCreating.current) {
-        isCreating.current = true;
-        setSaveStatus('SAVING...');
-        createNoteMutation.mutate(
+      if (id === 'new') {
+        if ((title.trim() || content.trim()) && !isCreating.current) {
+          isCreating.current = true;
+          createNoteMutation.mutate(
+            {
+              title: computedTitle,
+              content: content,
+              subject: subject,
+              chapter: chapter,
+              tags: tags,
+            },
+            {
+              onSuccess: async (newNote) => {
+                await AsyncStorage.removeItem('note_draft_new').catch(() => {});
+                router.setParams({ id: newNote.id });
+                setSaveStatus('SAVED');
+                isCreating.current = false;
+              },
+              onError: () => {
+                setSaveStatus('SAVED');
+                isCreating.current = false;
+                useUiStore.getState().showToast('Save failed', 'error');
+              },
+            }
+          );
+        }
+      } else {
+        updateNoteMutation.mutate(
           {
-            title: computedTitle,
-            content: content,
-            subject: subject,
-            chapter: chapter,
-            tags: tags,
+            id: id,
+            updates: {
+              title: computedTitle,
+              content: content,
+              subject: subject,
+              chapter: chapter,
+              tags: tags,
+            },
           },
           {
-            onSuccess: async (newNote) => {
-              await AsyncStorage.removeItem('note_draft_new').catch(() => {});
-              router.setParams({ id: newNote.id });
+            onSuccess: async () => {
+              await AsyncStorage.removeItem(`note_draft_${id}`).catch(() => {});
               setSaveStatus('SAVED');
-              isCreating.current = false;
             },
             onError: () => {
               setSaveStatus('SAVED');
-              isCreating.current = false;
               useUiStore.getState().showToast('Save failed', 'error');
             },
           }
         );
       }
-    } else {
-      setSaveStatus('SAVING...');
-      updateNoteMutation.mutate(
-        {
-          id: id,
-          updates: {
-            title: computedTitle,
-            content: content,
-            subject: subject,
-            chapter: chapter,
-            tags: tags,
-          },
-        },
-        {
-          onSuccess: async () => {
-            await AsyncStorage.removeItem(`note_draft_${id}`).catch(() => {});
-            setSaveStatus('SAVED');
-          },
-          onError: () => {
-            setSaveStatus('SAVED');
-            useUiStore.getState().showToast('Save failed', 'error');
-          },
-        }
-      );
-    }
+    }, 800);
+
+    return () => clearTimeout(saveTimer);
   }, [title, content, subject, chapter, tags]);
 
   // Extract subjects and chapters from syllabus topics
