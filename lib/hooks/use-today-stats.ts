@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import { getTodayLocal } from '@/lib/utils/date';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
+import { useAuthStore } from '@/lib/store/auth.store';
 import { Goal, Habit, ScheduleBlock, ScheduleSkipEntry, Task } from '@/types/app.types';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -75,9 +76,9 @@ export function useTodayStats(): TodayStats {
       });
       setError(null);
 
-      // Verify session exists
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      // Verify user ID exists
+      const userId = useAuthStore.getState().user?.id || (await supabase.auth.getSession()).data.session?.user?.id;
+      if (!userId) {
         setIsLoading(false);
         return;
       }

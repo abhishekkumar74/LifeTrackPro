@@ -35,8 +35,8 @@ const SUBJECT_OPTIONS = [
 ];
 
 const PRIORITY_OPTIONS = [
-  { label: 'Urgent 🔴', value: 'urgent' },
-  { label: 'Important 🟡', value: 'important' },
+  { label: 'Urgent', value: 'urgent' },
+  { label: 'Important', value: 'important' },
   { label: 'Normal', value: 'normal' },
 ];
 
@@ -253,8 +253,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   addButtonDisabled: {
-    backgroundColor: COLORS.border,
-    opacity: 0.5,
+    backgroundColor: COLORS.violet,
+    opacity: 0.4,
   },
   addButtonText: {
     fontFamily: TYPOGRAPHY.fonts.sans,

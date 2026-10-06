@@ -42,6 +42,7 @@ import { SoundPicker } from '@/components/focus/SoundPicker';
 import { BlockerToggle } from '@/components/focus/BlockerToggle';
 import { SessionSummary } from '@/components/focus/SessionSummary';
 import { SubjectPicker } from '@/components/shared/SubjectPicker';
+import { RatingModal, shouldPromptRating } from '@/components/shared/RatingModal';
 
 const TIMER_THEMES = [
   { id: 'default', label: 'Default', color: '#5B4FE8', isPremium: false },
@@ -57,6 +58,7 @@ export default function FocusScreen(): React.JSX.Element {
   const queryClient = useQueryClient();
   const { data: history = [], isLoading: isLoadingHistory, refetch: refetchHistory } = useFocusSessions();
   const [showSummary, setShowSummary] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [tempGoal, setTempGoal] = useState('');
   const [scrollEnabled, setScrollEnabled] = useState(true);
@@ -418,10 +420,14 @@ export default function FocusScreen(): React.JSX.Element {
 
       if (error) throw error;
 
-      // Award seeds if completed in strict mode
-      if (status === 'completed' && isStrictModeActive && seedsEarned && seedsEarned > 0) {
+      // Award seeds for any completed focus session
+      if (status === 'completed') {
+        const earned = seedsEarned && seedsEarned > 0
+          ? seedsEarned
+          : Math.max(5, 5 + Math.floor(dbDuration / 5) + (isStrictModeActive ? 5 : 0));
+
         const currentSeeds = profile?.focus_seeds || 0;
-        const newSeeds = currentSeeds + seedsEarned;
+        const newSeeds = currentSeeds + earned;
         const { error: seedError } = await supabase
           .from('profiles')
           .update({ focus_seeds: newSeeds })
@@ -429,6 +435,8 @@ export default function FocusScreen(): React.JSX.Element {
         
         if (!seedError && profile) {
           setProfile({ ...profile, focus_seeds: newSeeds });
+          queryClient.invalidateQueries({ queryKey: ['profile'] });
+          useUiStore.getState().showToast(`+${earned} Focus Seeds Earned! 🌱`, 'success');
         }
       }
 
@@ -545,6 +553,11 @@ export default function FocusScreen(): React.JSX.Element {
       }
 
       resetSession();
+      shouldPromptRating().then((prompt) => {
+        if (prompt) {
+          setTimeout(() => setShowRatingModal(true), 500);
+        }
+      });
     } catch (err: any) {
       const isNetworkError = 
         err.message?.toLowerCase().includes('network') || 
@@ -1041,9 +1054,23 @@ export default function FocusScreen(): React.JSX.Element {
                   </View>
                   
                   {unlocked ? (
-                    <View style={styles.shopUnlockedBadge}>
-                      <Text style={styles.shopUnlockedText}>Unlocked</Text>
-                    </View>
+                    selectedPlantId === plant.id ? (
+                      <View style={[styles.shopUnlockedBadge, { backgroundColor: '#5B4FE815', borderColor: '#5B4FE8' }]}>
+                        <Text style={[styles.shopUnlockedText, { color: '#5B4FE8' }]}>Equipped 🌱</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.shopUnlockBtn, { backgroundColor: '#5B4FE8' }]}
+                        onPress={() => {
+                          setSelectedPlant(plant.id);
+                          useUiStore.getState().showToast(`Equipped ${plant.name}! 🌱`, 'success');
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.shopUnlockBtnText}>Equip</Text>
+                      </TouchableOpacity>
+                    )
                   ) : (
                     <TouchableOpacity
                       style={[styles.shopUnlockBtn, !canAfford && styles.shopUnlockBtnDisabled]}
@@ -1201,6 +1228,12 @@ export default function FocusScreen(): React.JSX.Element {
           </BottomSheetView>
         </BottomSheet>
       )}
+
+      {/* Rating Reminder Modal */}
+      <RatingModal
+        isVisible={showRatingModal}
+        onClose={() => setShowRatingModal(false)}
+      />
     </View>
   );
 }

@@ -13,7 +13,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { Volume2, VolumeX, Volume1 } from 'lucide-react-native';
+import { Volume2, VolumeX, Volume1, CloudRain, Coffee, Waves, Music, Radio, Sparkles } from 'lucide-react-native';
 import { SoundKey } from '@/lib/store/focus.store';
 
 interface SoundPickerProps {
@@ -29,15 +29,16 @@ interface SoundPickerProps {
 interface ChipItem {
   key: SoundKey | null;
   label: string;
+  icon?: React.ComponentType<{ size?: number; color?: string }>;
 }
 
 const SOUNDS: ChipItem[] = [
   { key: null, label: 'None' },
-  { key: 'rain', label: '🌧 Rain' },
-  { key: 'cafe', label: '☕ Café' },
-  { key: 'ocean', label: '🌊 Ocean' },
-  { key: 'lofi', label: '🎵 Lo-fi' },
-  { key: 'brown_noise', label: '⬜ Noise' },
+  { key: 'rain', label: 'Rain', icon: CloudRain },
+  { key: 'cafe', label: 'Café', icon: Coffee },
+  { key: 'ocean', label: 'Ocean', icon: Waves },
+  { key: 'lofi', label: 'Lo-fi', icon: Music },
+  { key: 'brown_noise', label: 'Noise', icon: Radio },
 ];
 
 const PREMIUM_SOUNDS: (SoundKey | null)[] = ['cafe', 'lofi', 'brown_noise'];
@@ -154,7 +155,8 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
         {SOUNDS.map((sound) => {
           const active = activeSound === sound.key;
           const isLocked = !isPremium && PREMIUM_SOUNDS.includes(sound.key);
-          const displayLabel = isLocked ? `${sound.label} ✨` : sound.label;
+          const IconComp = sound.icon;
+          const iconColor = active ? '#A89EF8' : isLocked ? '#E8A020' : 'rgba(255, 255, 255, 0.5)';
 
           return (
             <TouchableOpacity
@@ -173,13 +175,17 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
               }}
               activeOpacity={0.7}
             >
-              <Text style={[
-                styles.chipText,
-                active && styles.chipTextActive,
-                isLocked && styles.chipTextLocked,
-              ]}>
-                {displayLabel}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {IconComp && <IconComp size={13} color={iconColor} />}
+                <Text style={[
+                  styles.chipText,
+                  active && styles.chipTextActive,
+                  isLocked && styles.chipTextLocked,
+                ]}>
+                  {sound.label}
+                </Text>
+                {isLocked && <Sparkles size={11} color="#E8A020" />}
+              </View>
             </TouchableOpacity>
           );
         })}

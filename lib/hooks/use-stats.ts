@@ -602,51 +602,95 @@ export function useSubjectBreakdown(period: 'day' | 'week' | 'month') {
 // 5. useMoodHistory Hook
 export function useMoodHistory() {
   const { user } = useAuthStore();
+  const cacheKey = `stats_mood_history_${user?.id}`;
+
   return useQuery<DailyCheckin[]>({
     queryKey: ['stats', user?.id, 'mood-history'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
 
-      const today = new Date();
-      const startDate = new Date(today);
-      startDate.setDate(today.getDate() - 29); // Last 30 days
-      const startDateStr = getLocalDateStr(startDate);
+        const today = new Date();
+        const startDate = new Date(today);
+        startDate.setDate(today.getDate() - 29); // Last 30 days
+        const startDateStr = getLocalDateStr(startDate);
 
-      const { data, error } = await supabase
-        .from('daily_checkins')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .gte('date', startDateStr)
-        .order('date', { ascending: false });
+        const { data, error } = await supabase
+          .from('daily_checkins')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .gte('date', startDateStr)
+          .order('date', { ascending: false });
 
-      if (error) throw error;
-      return data as DailyCheckin[];
+        if (error) throw error;
+        const result = (data || []) as DailyCheckin[];
+        AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+        return result;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            return JSON.parse(cached);
+          }
+          return [];
+        }
+        throw err;
+      }
     },
+    enabled: !!user?.id,
   });
 }
 
 // 6. useTodayCheckin Hook
 export function useTodayCheckin() {
   const { user } = useAuthStore();
+  const cacheKey = `stats_today_checkin_${user?.id}`;
+
   return useQuery<DailyCheckin | null>({
     queryKey: ['stats', user?.id, 'today-checkin'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
 
-      const todayStr = getLocalDateStr(new Date());
+        const todayStr = getLocalDateStr(new Date());
 
-      const { data, error } = await supabase
-        .from('daily_checkins')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .eq('date', todayStr)
-        .maybeSingle();
+        const { data, error } = await supabase
+          .from('daily_checkins')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .eq('date', todayStr)
+          .maybeSingle();
 
-      if (error) throw error;
-      return data as DailyCheckin | null;
+        if (error) throw error;
+        const result = (data || null) as DailyCheckin | null;
+        AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+        return result;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            return JSON.parse(cached);
+          }
+          return null;
+        }
+        throw err;
+      }
     },
+    enabled: !!user?.id,
   });
 }
 
@@ -764,721 +808,797 @@ export function useUpsertScheduleLog() {
 // 8. useAchievements Hook
 export function useAchievements() {
   const { user } = useAuthStore();
-  // Query all user focus sessions, goals and habit logs in parallel
+  const cacheKey = `stats_achievements_${user?.id}`;
+
   return useQuery<Achievement[]>({
     queryKey: ['stats', user?.id, 'achievements'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-      const userId = session.user.id;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
+        const userId = session.user.id;
 
-      const [focusRes, goalsRes, habitsRes] = await Promise.all([
-        supabase
-          .from('focus_sessions')
-          .select('started_at, duration_min, subject')
-          .eq('user_id', userId)
-          .order('started_at', { ascending: true }),
-        supabase
-          .from('goals')
-          .select('created_at')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('habit_logs')
-          .select('date')
-          .eq('user_id', userId)
-          .eq('done', true)
-          .order('date', { ascending: true }),
-      ]);
+        const [focusRes, goalsRes, habitsRes] = await Promise.all([
+          supabase
+            .from('focus_sessions')
+            .select('started_at, duration_min, subject')
+            .eq('user_id', userId)
+            .order('started_at', { ascending: true }),
+          supabase
+            .from('goals')
+            .select('created_at')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: true }),
+          supabase
+            .from('habit_logs')
+            .select('date')
+            .eq('user_id', userId)
+            .eq('done', true)
+            .order('date', { ascending: true }),
+        ]);
 
-      if (focusRes.error) throw focusRes.error;
-      if (goalsRes.error) throw goalsRes.error;
-      if (habitsRes.error) throw habitsRes.error;
+        if (focusRes.error) throw focusRes.error;
+        if (goalsRes.error) throw goalsRes.error;
+        if (habitsRes.error) throw habitsRes.error;
 
-      const sessions = focusRes.data || [];
-      const goals = goalsRes.data || [];
-      const habitLogs = habitsRes.data || [];
+        const sessions = focusRes.data || [];
+        const goals = goalsRes.data || [];
+        const habitLogs = habitsRes.data || [];
 
-      // Calculate parameters
-      const totalSessions = sessions.length;
-      const totalMinutes = sessions.reduce((sum, s) => sum + s.duration_min, 0);
+        // Calculate parameters
+        const totalSessions = sessions.length;
+        const totalMinutes = sessions.reduce((sum, s) => sum + s.duration_min, 0);
 
-      // 1. first_session
-      const firstSessionUnlocked = totalSessions >= 1;
-      const firstSessionDate = firstSessionUnlocked ? getLocalDateStr(new Date(sessions[0].started_at)) : undefined;
+        // 1. first_session
+        const firstSessionUnlocked = totalSessions >= 1;
+        const firstSessionDate = firstSessionUnlocked ? getLocalDateStr(new Date(sessions[0].started_at)) : undefined;
 
-      // 2. week_warrior (7 consecutive days with focus)
-      const focusDates = Array.from(new Set(sessions.map(s => getLocalDateStr(new Date(s.started_at))))).sort();
-      let consecutiveFocus = 0;
-      let maxConsecutiveFocus = 0;
-      let weekWarriorDate: string | undefined;
+        // 2. week_warrior (7 consecutive days with focus)
+        const focusDates = Array.from(new Set(sessions.map(s => getLocalDateStr(new Date(s.started_at))))).sort();
+        let consecutiveFocus = 0;
+        let maxConsecutiveFocus = 0;
+        let weekWarriorDate: string | undefined;
 
-      for (let i = 0; i < focusDates.length; i++) {
-        if (i === 0) {
-          consecutiveFocus = 1;
-        } else {
-          const prev = new Date(focusDates[i - 1]);
-          const curr = new Date(focusDates[i]);
-          const diff = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
-          if (diff === 1) {
-            consecutiveFocus++;
-          } else if (diff > 1) {
+        for (let i = 0; i < focusDates.length; i++) {
+          if (i === 0) {
             consecutiveFocus = 1;
+          } else {
+            const prev = new Date(focusDates[i - 1]);
+            const curr = new Date(focusDates[i]);
+            const diff = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+            if (diff === 1) {
+              consecutiveFocus++;
+            } else if (diff > 1) {
+              consecutiveFocus = 1;
+            }
+          }
+          if (consecutiveFocus >= 7 && !weekWarriorDate) {
+            weekWarriorDate = focusDates[i];
+          }
+          if (consecutiveFocus > maxConsecutiveFocus) {
+            maxConsecutiveFocus = consecutiveFocus;
           }
         }
-        if (consecutiveFocus >= 7 && !weekWarriorDate) {
-          weekWarriorDate = focusDates[i];
-        }
-        if (consecutiveFocus > maxConsecutiveFocus) {
-          maxConsecutiveFocus = consecutiveFocus;
-        }
-      }
-      const weekWarriorUnlocked = maxConsecutiveFocus >= 7;
+        const weekWarriorUnlocked = maxConsecutiveFocus >= 7;
 
-      // 3. century_club (total focus >= 6000 min / 100 hrs)
-      const centuryClubUnlocked = totalMinutes >= 6000;
-      let centuryClubDate: string | undefined;
-      if (centuryClubUnlocked) {
-        let runningMinutes = 0;
-        for (const s of sessions) {
-          runningMinutes += s.duration_min;
-          if (runningMinutes >= 6000) {
-            centuryClubDate = getLocalDateStr(new Date(s.started_at));
-            break;
+        // 3. century_club (total focus >= 6000 min / 100 hrs)
+        const centuryClubUnlocked = totalMinutes >= 6000;
+        let centuryClubDate: string | undefined;
+        if (centuryClubUnlocked) {
+          let runningMinutes = 0;
+          for (const s of sessions) {
+            runningMinutes += s.duration_min;
+            if (runningMinutes >= 6000) {
+              centuryClubDate = getLocalDateStr(new Date(s.started_at));
+              break;
+            }
           }
         }
-      }
 
-      // 4. streak_30 (habit streak >= 30 days)
-      const logDates = Array.from(new Set(habitLogs.map(l => l.date))).sort();
-      let consecutiveHabits = 0;
-      let maxConsecutiveHabits = 0;
-      let streak30Date: string | undefined;
+        // 4. streak_30 (habit streak >= 30 days)
+        const logDates = Array.from(new Set(habitLogs.map(l => l.date))).sort();
+        let consecutiveHabits = 0;
+        let maxConsecutiveHabits = 0;
+        let streak30Date: string | undefined;
 
-      for (let i = 0; i < logDates.length; i++) {
-        if (i === 0) {
-          consecutiveHabits = 1;
-        } else {
-          const prev = new Date(logDates[i - 1]);
-          const curr = new Date(logDates[i]);
-          const diff = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
-          if (diff === 1) {
-            consecutiveHabits++;
-          } else if (diff > 1) {
+        for (let i = 0; i < logDates.length; i++) {
+          if (i === 0) {
             consecutiveHabits = 1;
+          } else {
+            const prev = new Date(logDates[i - 1]);
+            const curr = new Date(logDates[i]);
+            const diff = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+            if (diff === 1) {
+              consecutiveHabits++;
+            } else if (diff > 1) {
+              consecutiveHabits = 1;
+            }
+          }
+          if (consecutiveHabits >= 30 && !streak30Date) {
+            streak30Date = logDates[i];
+          }
+          if (consecutiveHabits > maxConsecutiveHabits) {
+            maxConsecutiveHabits = consecutiveHabits;
           }
         }
-        if (consecutiveHabits >= 30 && !streak30Date) {
-          streak30Date = logDates[i];
-        }
-        if (consecutiveHabits > maxConsecutiveHabits) {
-          maxConsecutiveHabits = consecutiveHabits;
-        }
-      }
-      const streak30Unlocked = maxConsecutiveHabits >= 30;
+        const streak30Unlocked = maxConsecutiveHabits >= 30;
 
-      // 5. goal_setter
-      const goalSetterUnlocked = goals.length >= 1;
-      const goalSetterDate = goalSetterUnlocked ? getLocalDateStr(new Date(goals[0].created_at)) : undefined;
+        // 5. goal_setter
+        const goalSetterUnlocked = goals.length >= 1;
+        const goalSetterDate = goalSetterUnlocked ? getLocalDateStr(new Date(goals[0].created_at)) : undefined;
 
-      // 6. early_bird (any focus session started before 7 AM local)
-      const earlyBirdSessions = sessions.filter(s => new Date(s.started_at).getHours() < 7);
-      const earlyBirdUnlocked = earlyBirdSessions.length >= 1;
-      const earlyBirdDate = earlyBirdUnlocked ? getLocalDateStr(new Date(earlyBirdSessions[0].started_at)) : undefined;
+        // 6. early_bird (any focus session started before 7 AM local)
+        const earlyBirdSessions = sessions.filter(s => new Date(s.started_at).getHours() < 7);
+        const earlyBirdUnlocked = earlyBirdSessions.length >= 1;
+        const earlyBirdDate = earlyBirdUnlocked ? getLocalDateStr(new Date(earlyBirdSessions[0].started_at)) : undefined;
 
-      // 7. night_owl (any focus session started after 10 PM local)
-      const nightOwlSessions = sessions.filter(s => new Date(s.started_at).getHours() >= 22);
-      const nightOwlUnlocked = nightOwlSessions.length >= 1;
-      const nightOwlDate = nightOwlUnlocked ? getLocalDateStr(new Date(nightOwlSessions[0].started_at)) : undefined;
+        // 7. night_owl (any focus session started after 10 PM local)
+        const nightOwlSessions = sessions.filter(s => new Date(s.started_at).getHours() >= 22);
+        const nightOwlUnlocked = nightOwlSessions.length >= 1;
+        const nightOwlDate = nightOwlUnlocked ? getLocalDateStr(new Date(nightOwlSessions[0].started_at)) : undefined;
 
-      // 8. subject_master (any subject with > 1000 mins focus time)
-      const subMins: { [sub: string]: number } = {};
-      let masterSubject: string | null = null;
-      let subjectMasterDate: string | undefined;
+        // 8. subject_master (any subject with > 1000 mins focus time)
+        const subMins: { [sub: string]: number } = {};
+        let masterSubject: string | null = null;
+        let subjectMasterDate: string | undefined;
 
-      for (const s of sessions) {
-        if (s.subject) {
-          subMins[s.subject] = (subMins[s.subject] || 0) + s.duration_min;
-          if (subMins[s.subject] >= 1000 && !masterSubject) {
-            masterSubject = s.subject;
-            subjectMasterDate = getLocalDateStr(new Date(s.started_at));
+        for (const s of sessions) {
+          if (s.subject) {
+            subMins[s.subject] = (subMins[s.subject] || 0) + s.duration_min;
+            if (subMins[s.subject] >= 1000 && !masterSubject) {
+              masterSubject = s.subject;
+              subjectMasterDate = getLocalDateStr(new Date(s.started_at));
+            }
           }
         }
+        const subjectMasterUnlocked = masterSubject !== null;
+
+        const list: Achievement[] = [
+          {
+            id: 'first_session',
+            title: 'First Focus Session',
+            description: 'Completed your first focus session.',
+            emoji: '⏱️',
+            isUnlocked: firstSessionUnlocked,
+            unlockedAt: firstSessionDate,
+          },
+          {
+            id: 'week_warrior',
+            title: 'Week Warrior',
+            description: 'Focused on 7 consecutive days.',
+            emoji: '⚡',
+            isUnlocked: weekWarriorUnlocked,
+            unlockedAt: weekWarriorDate,
+          },
+          {
+            id: 'century_club',
+            title: 'Century Club',
+            description: 'Focused for 100+ hours (6,000 mins).',
+            emoji: '💯',
+            isUnlocked: centuryClubUnlocked,
+            unlockedAt: centuryClubDate,
+          },
+          {
+            id: 'streak_30',
+            title: '30-Day Streak',
+            description: 'Achieved a habit streak of 30 days.',
+            emoji: '🔥',
+            isUnlocked: streak30Unlocked,
+            unlockedAt: streak30Date,
+          },
+          {
+            id: 'goal_setter',
+            title: 'Goal Setter',
+            description: 'Set at least one target goal.',
+            emoji: '🎯',
+            isUnlocked: goalSetterUnlocked,
+            unlockedAt: goalSetterDate,
+          },
+          {
+            id: 'early_bird',
+            title: 'Early Bird',
+            description: 'Started a focus session before 7:00 AM.',
+            emoji: '🌅',
+            isUnlocked: earlyBirdUnlocked,
+            unlockedAt: earlyBirdDate,
+          },
+          {
+            id: 'night_owl',
+            title: 'Night Owl',
+            description: 'Started a focus session after 10:00 PM.',
+            emoji: '🦉',
+            isUnlocked: nightOwlUnlocked,
+            unlockedAt: nightOwlDate,
+          },
+          {
+            id: 'subject_master',
+            title: 'Subject Master',
+            description: 'Focused on a single subject for 1,000+ mins.',
+            emoji: '👑',
+            isUnlocked: subjectMasterUnlocked,
+            unlockedAt: subjectMasterDate,
+          },
+        ];
+
+        AsyncStorage.setItem(cacheKey, JSON.stringify(list)).catch(() => {});
+        return list;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            return JSON.parse(cached);
+          }
+          return [
+            { id: 'first_session', title: 'First Focus Session', description: 'Completed your first focus session.', emoji: '⏱️', isUnlocked: false },
+            { id: 'week_warrior', title: 'Week Warrior', description: 'Focused on 7 consecutive days.', emoji: '⚡', isUnlocked: false },
+            { id: 'century_club', title: 'Century Club', description: 'Focused for 100+ hours (6,000 mins).', emoji: '💯', isUnlocked: false },
+            { id: 'streak_30', title: '30-Day Streak', description: 'Achieved a habit streak of 30 days.', emoji: '🔥', isUnlocked: false },
+            { id: 'goal_setter', title: 'Goal Setter', description: 'Set at least one target goal.', emoji: '🎯', isUnlocked: false },
+            { id: 'early_bird', title: 'Early Bird', description: 'Started a focus session before 7:00 AM.', emoji: '🌅', isUnlocked: false },
+            { id: 'night_owl', title: 'Night Owl', description: 'Started a focus session after 10:00 PM.', emoji: '🦉', isUnlocked: false },
+            { id: 'subject_master', title: 'Subject Master', description: 'Focused on a single subject for 1,000+ mins.', emoji: '👑', isUnlocked: false },
+          ];
+        }
+        throw err;
       }
-      const subjectMasterUnlocked = masterSubject !== null;
-
-      const list: Achievement[] = [
-        {
-          id: 'first_session',
-          title: 'First Focus Session',
-          description: 'Completed your first focus session.',
-          emoji: '⏱️',
-          isUnlocked: firstSessionUnlocked,
-          unlockedAt: firstSessionDate,
-        },
-        {
-          id: 'week_warrior',
-          title: 'Week Warrior',
-          description: 'Focused on 7 consecutive days.',
-          emoji: '⚡',
-          isUnlocked: weekWarriorUnlocked,
-          unlockedAt: weekWarriorDate,
-        },
-        {
-          id: 'century_club',
-          title: 'Century Club',
-          description: 'Focused for 100+ hours (6,000 mins).',
-          emoji: '💯',
-          isUnlocked: centuryClubUnlocked,
-          unlockedAt: centuryClubDate,
-        },
-        {
-          id: 'streak_30',
-          title: '30-Day Streak',
-          description: 'Achieved a habit streak of 30 days.',
-          emoji: '🔥',
-          isUnlocked: streak30Unlocked,
-          unlockedAt: streak30Date,
-        },
-        {
-          id: 'goal_setter',
-          title: 'Goal Setter',
-          description: 'Set at least one target goal.',
-          emoji: '🎯',
-          isUnlocked: goalSetterUnlocked,
-          unlockedAt: goalSetterDate,
-        },
-        {
-          id: 'early_bird',
-          title: 'Early Bird',
-          description: 'Started a focus session before 7:00 AM.',
-          emoji: '🌅',
-          isUnlocked: earlyBirdUnlocked,
-          unlockedAt: earlyBirdDate,
-        },
-        {
-          id: 'night_owl',
-          title: 'Night Owl',
-          description: 'Started a focus session after 10:00 PM.',
-          emoji: '🦉',
-          isUnlocked: nightOwlUnlocked,
-          unlockedAt: nightOwlDate,
-        },
-        {
-          id: 'subject_master',
-          title: 'Subject Master',
-          description: 'Focused on a single subject for 1,000+ mins.',
-          emoji: '👑',
-          isUnlocked: subjectMasterUnlocked,
-          unlockedAt: subjectMasterDate,
-        },
-      ];
-
-      return list;
     },
+    enabled: !!user?.id,
   });
 }
 
 // 9. useEnhancedStats Hook
 export function useEnhancedStats() {
   const { user } = useAuthStore();
+  const cacheKey = `stats_enhanced_${user?.id}`;
+
   return useQuery({
     queryKey: ['stats', user?.id, 'enhanced'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-      const userId = session.user.id;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
+        const userId = session.user.id;
 
-      // 1. Fetch data in parallel
-      const [
-        sessionsRes,
-        habitLogsRes,
-        tasksRes,
-        checkinsRes,
-        activeHabitsRes,
-        scheduleBlocksRes,
-        scheduleLogsRes
-      ] = await Promise.all([
-        supabase.from('focus_sessions').select('*').eq('user_id', userId),
-        supabase.from('habit_logs').select('*').eq('user_id', userId),
-        supabase.from('tasks').select('*').eq('user_id', userId),
-        supabase.from('daily_checkins').select('*').eq('user_id', userId),
-        supabase.from('habits').select('*').eq('user_id', userId).eq('is_active', true),
-        supabase.from('schedule_blocks').select('*').eq('user_id', userId).eq('is_active', true),
-        supabase.from('schedule_logs').select('*').eq('user_id', userId)
-      ]);
+        // 1. Fetch data in parallel
+        const [
+          sessionsRes,
+          habitLogsRes,
+          tasksRes,
+          checkinsRes,
+          activeHabitsRes,
+          scheduleBlocksRes,
+          scheduleLogsRes
+        ] = await Promise.all([
+          supabase.from('focus_sessions').select('*').eq('user_id', userId),
+          supabase.from('habit_logs').select('*').eq('user_id', userId),
+          supabase.from('tasks').select('*').eq('user_id', userId),
+          supabase.from('daily_checkins').select('*').eq('user_id', userId),
+          supabase.from('habits').select('*').eq('user_id', userId).eq('is_active', true),
+          supabase.from('schedule_blocks').select('*').eq('user_id', userId).eq('is_active', true),
+          supabase.from('schedule_logs').select('*').eq('user_id', userId)
+        ]);
 
-      if (sessionsRes.error) throw sessionsRes.error;
-      if (habitLogsRes.error) throw habitLogsRes.error;
-      if (tasksRes.error) throw tasksRes.error;
-      if (checkinsRes.error) throw checkinsRes.error;
-      if (activeHabitsRes.error) throw activeHabitsRes.error;
-      if (scheduleBlocksRes.error) throw scheduleBlocksRes.error;
-      if (scheduleLogsRes.error) throw scheduleLogsRes.error;
+        if (sessionsRes.error) throw sessionsRes.error;
+        if (habitLogsRes.error) throw habitLogsRes.error;
+        if (tasksRes.error) throw tasksRes.error;
+        if (checkinsRes.error) throw checkinsRes.error;
+        if (activeHabitsRes.error) throw activeHabitsRes.error;
+        if (scheduleBlocksRes.error) throw scheduleBlocksRes.error;
+        if (scheduleLogsRes.error) throw scheduleLogsRes.error;
 
-      const sessions = sessionsRes.data || [];
-      const habitLogs = habitLogsRes.data || [];
-      const tasks = tasksRes.data || [];
-      const checkins = checkinsRes.data || [];
-      const activeHabits = activeHabitsRes.data || [];
-      const scheduleBlocks = (scheduleBlocksRes.data || []) as ScheduleBlock[];
-      const scheduleLogs = (scheduleLogsRes.data || []) as ScheduleLog[];
+        const sessions = sessionsRes.data || [];
+        const habitLogs = habitLogsRes.data || [];
+        const tasks = tasksRes.data || [];
+        const checkins = checkinsRes.data || [];
+        const activeHabits = activeHabitsRes.data || [];
+        const scheduleBlocks = (scheduleBlocksRes.data || []) as ScheduleBlock[];
+        const scheduleLogs = (scheduleLogsRes.data || []) as ScheduleLog[];
 
-      const todayStr = getLocalDateStr(new Date());
+        const todayStr = getLocalDateStr(new Date());
 
-      // ==========================================
-      // TODAY'S SUMMARY
-      // ==========================================
-      const todaySessions = sessions.filter(s => getLocalDateStr(new Date(s.started_at)) === todayStr);
-      const todayFocusMins = todaySessions
-        .filter(s => s.status !== 'interrupted')
-        .reduce((sum, s) => sum + s.duration_min, 0);
-      const focusMinsToday = todayFocusMins;
-      const hasBlockerToday = todaySessions.length > 0;
-      
-      // Habits completed today
-      const todayHabitLogs = habitLogs.filter(l => l.date === todayStr);
-      const habitsDoneCount = todayHabitLogs.filter(l => l.done).length;
-      const habitsTotalCount = activeHabits.length;
-
-      // Tasks completed today
-      const todayTasksDone = tasks.filter(t => t.completed_at && getLocalDateStr(new Date(t.completed_at)) === todayStr).length;
-
-      // ==========================================
-      // FOCUS STREAK & SESSIONS RATIO
-      // ==========================================
-      const completedFocusDates = new Set(
-        sessions
+        // TODAY'S SUMMARY
+        const todaySessions = sessions.filter(s => getLocalDateStr(new Date(s.started_at)) === todayStr);
+        const todayFocusMins = todaySessions
           .filter(s => s.status !== 'interrupted')
-          .map(s => getLocalDateStr(new Date(s.started_at)))
-      );
+          .reduce((sum, s) => sum + s.duration_min, 0);
+        const focusMinsToday = todayFocusMins;
+        const hasBlockerToday = todaySessions.length > 0;
+        
+        // Habits completed today
+        const todayHabitLogs = habitLogs.filter(l => l.date === todayStr);
+        const habitsDoneCount = todayHabitLogs.filter(l => l.done).length;
+        const habitsTotalCount = activeHabits.length;
 
-      let focusStreak = 0;
-      const yesterdayStr = getLocalDateStr(new Date(Date.now() - 24 * 60 * 60 * 1000));
+        // Tasks completed today
+        const todayTasksDone = tasks.filter(t => t.completed_at && getLocalDateStr(new Date(t.completed_at)) === todayStr).length;
 
-      if (completedFocusDates.has(todayStr)) {
-        focusStreak = 1;
-        const checkDate = new Date();
-        while (true) {
+        // FOCUS STREAK & SESSIONS RATIO
+        const completedFocusDates = new Set(
+          sessions
+            .filter(s => s.status !== 'interrupted')
+            .map(s => getLocalDateStr(new Date(s.started_at)))
+        );
+
+        let focusStreak = 0;
+        const yesterdayStr = getLocalDateStr(new Date(Date.now() - 24 * 60 * 60 * 1000));
+
+        if (completedFocusDates.has(todayStr)) {
+          focusStreak = 1;
+          const checkDate = new Date();
+          while (true) {
+            checkDate.setDate(checkDate.getDate() - 1);
+            const dateStr = getLocalDateStr(checkDate);
+            if (completedFocusDates.has(dateStr)) {
+              focusStreak++;
+            } else {
+              break;
+            }
+          }
+        } else if (completedFocusDates.has(yesterdayStr)) {
+          focusStreak = 1;
+          const checkDate = new Date();
           checkDate.setDate(checkDate.getDate() - 1);
-          const dateStr = getLocalDateStr(checkDate);
-          if (completedFocusDates.has(dateStr)) {
-            focusStreak++;
-          } else {
-            break;
+          while (true) {
+            checkDate.setDate(checkDate.getDate() - 1);
+            const dateStr = getLocalDateStr(checkDate);
+            if (completedFocusDates.has(dateStr)) {
+              focusStreak++;
+            } else {
+              break;
+            }
           }
         }
-      } else if (completedFocusDates.has(yesterdayStr)) {
-        focusStreak = 1;
-        const checkDate = new Date();
-        checkDate.setDate(checkDate.getDate() - 1);
-        while (true) {
-          checkDate.setDate(checkDate.getDate() - 1);
-          const dateStr = getLocalDateStr(checkDate);
-          if (completedFocusDates.has(dateStr)) {
-            focusStreak++;
-          } else {
-            break;
+
+        const allTimeCompletedCount = sessions.filter(s => s.status !== 'interrupted').length;
+        const allTimeInterruptedCount = sessions.filter(s => s.status === 'interrupted').length;
+        const allTimeFocusMinutes = sessions
+          .filter(s => s.status !== 'interrupted')
+          .reduce((sum, s) => sum + s.duration_min, 0);
+
+        // WEEKLY HABIT CONSISTENCY
+        const getWeekDatesStr = () => {
+          const today = new Date();
+          const day = today.getDay();
+          const distance = day === 0 ? 6 : day - 1; // monday is 1
+          const monday = new Date(today);
+          monday.setDate(today.getDate() - distance);
+          const dates = [];
+          for (let i = 0; i < 7; i++) {
+            const d = new Date(monday);
+            d.setDate(monday.getDate() + i);
+            dates.push(getLocalDateStr(d));
           }
-        }
-      }
+          return dates;
+        };
+        const weekDates = getWeekDatesStr();
 
-      const allTimeCompletedCount = sessions.filter(s => s.status !== 'interrupted').length;
-      const allTimeInterruptedCount = sessions.filter(s => s.status === 'interrupted').length;
-      const allTimeFocusMinutes = sessions
-        .filter(s => s.status !== 'interrupted')
-        .reduce((sum, s) => sum + s.duration_min, 0);
+        const habitGrid = activeHabits.map(habit => {
+          const habitLogsThisWeek = habitLogs.filter(l => l.habit_id === habit.id);
+          const statuses = weekDates.map(date => {
+            const log = habitLogsThisWeek.find(l => l.date === date);
+            const isFuture = date > todayStr;
+            return {
+              date,
+              isFuture,
+              done: log ? log.done : false,
+              hasRecord: !!log
+            };
+          });
 
-      // ==========================================
-      // WEEKLY HABIT CONSISTENCY
-      // ==========================================
-      // Get current week dates (Monday to Sunday)
-      const getWeekDatesStr = () => {
-        const today = new Date();
-        const day = today.getDay();
-        const distance = day === 0 ? 6 : day - 1; // monday is 1
-        const monday = new Date(today);
-        monday.setDate(today.getDate() - distance);
-        const dates = [];
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(monday);
-          d.setDate(monday.getDate() + i);
-          dates.push(getLocalDateStr(d));
-        }
-        return dates;
-      };
-      const weekDates = getWeekDatesStr();
+          const completedCount = statuses.filter(s => s.done).length;
 
-      const habitGrid = activeHabits.map(habit => {
-        const habitLogsThisWeek = habitLogs.filter(l => l.habit_id === habit.id);
-        const statuses = weekDates.map(date => {
-          const log = habitLogsThisWeek.find(l => l.date === date);
-          const isFuture = date > todayStr;
           return {
-            date,
-            isFuture,
-            done: log ? log.done : false,
-            hasRecord: !!log
+            id: habit.id,
+            title: habit.title,
+            emoji: habit.emoji,
+            statuses,
+            completedCount
           };
         });
 
-        const completedCount = statuses.filter(s => s.done).length;
+        // Best and Needs work
+        let bestHabitName = 'None';
+        let bestHabitCount = -1;
+        let worstHabitName = 'None';
+        let worstHabitCount = 999;
 
-        return {
-          id: habit.id,
-          title: habit.title,
-          emoji: habit.emoji,
-          statuses,
-          completedCount
-        };
-      });
-
-      // Best and Needs work
-      let bestHabitName = 'None';
-      let bestHabitCount = -1;
-      let worstHabitName = 'None';
-      let worstHabitCount = 999;
-
-      habitGrid.forEach(hg => {
-        if (hg.completedCount > bestHabitCount) {
-          bestHabitCount = hg.completedCount;
-          bestHabitName = hg.title;
-        }
-        if (hg.completedCount < worstHabitCount) {
-          worstHabitCount = hg.completedCount;
-          worstHabitName = hg.title;
-        }
-      });
-
-      // ==========================================
-      // WEEKLY SCHEDULE COMPLIANCE
-      // ==========================================
-      const scheduleGrid = scheduleBlocks.map(block => {
-        const blockLogs = scheduleLogs.filter(l => l.block_id === block.id);
-        const statuses = weekDates.map(date => {
-          const log = blockLogs.find(l => l.date === date);
-          
-          let isScheduled = false;
-          if (block.specific_date) {
-            isScheduled = block.specific_date === date;
-          } else if (block.days) {
-            const dateObj = new Date(date);
-            const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, etc.
-            isScheduled = block.days.includes(dayOfWeek);
+        habitGrid.forEach(hg => {
+          if (hg.completedCount > bestHabitCount) {
+            bestHabitCount = hg.completedCount;
+            bestHabitName = hg.title;
           }
+          if (hg.completedCount < worstHabitCount) {
+            worstHabitCount = hg.completedCount;
+            worstHabitName = hg.title;
+          }
+        });
 
-          let status: 'completed' | 'skipped' | 'missed' | 'pending' | 'none' = 'none';
-          
-          if (isScheduled) {
-            if (log) {
-              status = log.status as 'completed' | 'skipped' | 'missed';
-            } else if (date > todayStr) {
-              status = 'pending';
-            } else if (date < todayStr) {
-              status = 'missed';
-            } else {
-              // It is today! Check if end_time has passed
-              const now = new Date();
-              const currentMinutes = now.getHours() * 60 + now.getMinutes();
-              const eParts = block.end_time.split(':');
-              const endMinutes = eParts.length >= 2 ? parseInt(eParts[0], 10) * 60 + parseInt(eParts[1], 10) : 0;
-              
-              if (currentMinutes > endMinutes) {
+        // WEEKLY SCHEDULE COMPLIANCE
+        const scheduleGrid = scheduleBlocks.map(block => {
+          const blockLogs = scheduleLogs.filter(l => l.block_id === block.id);
+          const statuses = weekDates.map(date => {
+            const log = blockLogs.find(l => l.date === date);
+            
+            let isScheduled = false;
+            if (block.specific_date) {
+              isScheduled = block.specific_date === date;
+            } else if (block.days) {
+              const dateObj = new Date(date);
+              const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, etc.
+              isScheduled = block.days.includes(dayOfWeek);
+            }
+
+            let status: 'completed' | 'skipped' | 'missed' | 'pending' | 'none' = 'none';
+            
+            if (isScheduled) {
+              if (log) {
+                status = log.status as 'completed' | 'skipped' | 'missed';
+              } else if (date > todayStr) {
+                status = 'pending';
+              } else if (date < todayStr) {
                 status = 'missed';
               } else {
-                status = 'pending';
+                const now = new Date();
+                const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                const eParts = block.end_time.split(':');
+                const endMinutes = eParts.length >= 2 ? parseInt(eParts[0], 10) * 60 + parseInt(eParts[1], 10) : 0;
+                
+                if (currentMinutes > endMinutes) {
+                  status = 'missed';
+                } else {
+                  status = 'pending';
+                }
               }
             }
-          }
+
+            return {
+              date,
+              isScheduled,
+              status,
+              skipReason: log?.skip_reason || null,
+            };
+          });
+
+          const activeDaysCount = statuses.filter(s => s.isScheduled).length;
+          const completedCount = statuses.filter(s => s.status === 'completed').length;
+          const skippedCount = statuses.filter(s => s.status === 'skipped').length;
+          const missedCount = statuses.filter(s => s.status === 'missed').length;
 
           return {
+            id: block.id,
+            title: block.title,
+            subject: block.subject,
+            color: block.color,
+            statuses,
+            activeDaysCount,
+            completedCount,
+            skippedCount,
+            missedCount
+          };
+        }).filter(gridItem => gridItem.activeDaysCount > 0);
+
+        let totalScheduledSlots = 0;
+        let totalCompletedSlots = 0;
+        scheduleGrid.forEach(item => {
+          totalScheduledSlots += item.statuses.filter(s => s.isScheduled && s.status !== 'pending').length;
+          totalCompletedSlots += item.statuses.filter(s => s.status === 'completed').length;
+        });
+
+        const scheduleCompletionRate = totalScheduledSlots > 0
+          ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100)
+          : 100;
+
+        // DAILY MOOD TREND
+        const moodByDate: Record<string, number> = {};
+        checkins.forEach(c => {
+          moodByDate[c.date] = c.mood;
+        });
+
+        const moodData = weekDates.map((date, idx) => {
+          const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+          return {
+            dayLabel: dayLabels[idx],
             date,
-            isScheduled,
-            status,
-            skipReason: log?.skip_reason || null,
+            mood: moodByDate[date] || null,
           };
         });
 
-        const activeDaysCount = statuses.filter(s => s.isScheduled).length;
-        const completedCount = statuses.filter(s => s.status === 'completed').length;
-        const skippedCount = statuses.filter(s => s.status === 'skipped').length;
-        const missedCount = statuses.filter(s => s.status === 'missed').length;
+        const currentWeekCheckins = checkins.filter(c => weekDates.includes(c.date));
+        const avgMoodThisWeek = currentWeekCheckins.length > 0
+          ? Math.round(currentWeekCheckins.reduce((sum, c) => sum + c.mood, 0) / currentWeekCheckins.length)
+          : null;
 
-        return {
-          id: block.id,
-          title: block.title,
-          subject: block.subject,
-          color: block.color,
-          statuses,
-          activeDaysCount,
-          completedCount,
-          skippedCount,
-          missedCount
-        };
-      }).filter(gridItem => gridItem.activeDaysCount > 0);
+        const lastWeekDates = weekDates.map(dStr => {
+          const d = new Date(dStr);
+          d.setDate(d.getDate() - 7);
+          return getLocalDateStr(d);
+        });
+        const lastWeekCheckins = checkins.filter(c => lastWeekDates.includes(c.date));
+        const avgMoodLastWeek = lastWeekCheckins.length > 0
+          ? lastWeekCheckins.reduce((sum, c) => sum + c.mood, 0) / lastWeekCheckins.length
+          : null;
 
-      // Calculate weekly schedule completion rate
-      let totalScheduledSlots = 0;
-      let totalCompletedSlots = 0;
-      scheduleGrid.forEach(item => {
-        totalScheduledSlots += item.statuses.filter(s => s.isScheduled && s.status !== 'pending').length;
-        totalCompletedSlots += item.statuses.filter(s => s.status === 'completed').length;
-      });
-
-      const scheduleCompletionRate = totalScheduledSlots > 0
-        ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100)
-        : 100;
-
-      // ==========================================
-      // DAILY MOOD TREND
-      // ==========================================
-      const moodByDate: Record<string, number> = {};
-      checkins.forEach(c => {
-        moodByDate[c.date] = c.mood;
-      });
-
-      const moodData = weekDates.map((date, idx) => {
-        const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-        return {
-          dayLabel: dayLabels[idx],
-          date,
-          mood: moodByDate[date] || null, // null if no record
-        };
-      });
-
-      // Calc average mood this week
-      const currentWeekCheckins = checkins.filter(c => weekDates.includes(c.date));
-      const avgMoodThisWeek = currentWeekCheckins.length > 0
-        ? Math.round(currentWeekCheckins.reduce((sum, c) => sum + c.mood, 0) / currentWeekCheckins.length)
-        : null;
-
-      // Calc average mood last week
-      const lastWeekDates = weekDates.map(dStr => {
-        const d = new Date(dStr);
-        d.setDate(d.getDate() - 7);
-        return getLocalDateStr(d);
-      });
-      const lastWeekCheckins = checkins.filter(c => lastWeekDates.includes(c.date));
-      const avgMoodLastWeek = lastWeekCheckins.length > 0
-        ? lastWeekCheckins.reduce((sum, c) => sum + c.mood, 0) / lastWeekCheckins.length
-        : null;
-
-      let moodTrendText = 'No trend data yet';
-      if (avgMoodThisWeek && avgMoodLastWeek) {
-        if (avgMoodThisWeek > avgMoodLastWeek) {
-          moodTrendText = 'Better than last week ↑';
-        } else if (avgMoodThisWeek < avgMoodLastWeek) {
-          moodTrendText = 'Lower than last week ↓';
-        } else {
-          moodTrendText = 'Same as last week';
-        }
-      }
-
-      // ==========================================
-      // PERSONAL RECORDS
-      // ==========================================
-      // 1. Longest habit streak (any habit)
-      const logsByHabit: Record<string, string[]> = {};
-      habitLogs.forEach(log => {
-        if (log.done) {
-          if (!logsByHabit[log.habit_id]) {
-            logsByHabit[log.habit_id] = [];
-          }
-          logsByHabit[log.habit_id].push(log.date);
-        }
-      });
-      
-      let longestStreak = 0;
-      Object.keys(logsByHabit).forEach(habitId => {
-        const dates = Array.from(new Set(logsByHabit[habitId])).sort();
-        if (dates.length === 0) return;
-        
-        let currentLongest = 0;
-        let currentRun = 0;
-        let prevDate: Date | null = null;
-        
-        for (const dateStr of dates) {
-          const curDate = new Date(dateStr);
-          if (prevDate === null) {
-            currentRun = 1;
+        let moodTrendText = 'No trend data yet';
+        if (avgMoodThisWeek && avgMoodLastWeek) {
+          if (avgMoodThisWeek > avgMoodLastWeek) {
+            moodTrendText = 'Better than last week ↑';
+          } else if (avgMoodThisWeek < avgMoodLastWeek) {
+            moodTrendText = 'Lower than last week ↓';
           } else {
-            const diff = curDate.getTime() - prevDate.getTime();
-            const diffDays = Math.round(diff / (1000 * 60 * 60 * 24));
-            if (diffDays === 1) {
-              currentRun++;
-            } else if (diffDays > 1) {
-              if (currentRun > currentLongest) {
-                currentLongest = currentRun;
-              }
-              currentRun = 1;
-            }
+            moodTrendText = 'Same as last week';
           }
-          prevDate = curDate;
         }
-        if (currentRun > currentLongest) {
-          currentLongest = currentRun;
-        }
-        if (currentLongest > longestStreak) {
-          longestStreak = currentLongest;
-        }
-      });
 
-      // 2. Longest focus session (completed only)
-      const longestSession = sessions
-        .filter(s => s.status !== 'interrupted')
-        .reduce((max, s) => s.duration_min > max ? s.duration_min : max, 0);
+        // PERSONAL RECORDS
+        const logsByHabit: Record<string, string[]> = {};
+        habitLogs.forEach(log => {
+          if (log.done) {
+            if (!logsByHabit[log.habit_id]) {
+              logsByHabit[log.habit_id] = [];
+            }
+            logsByHabit[log.habit_id].push(log.date);
+          }
+        });
+        
+        let longestStreak = 0;
+        Object.keys(logsByHabit).forEach(habitId => {
+          const dates = Array.from(new Set(logsByHabit[habitId])).sort();
+          if (dates.length === 0) return;
+          
+          let currentLongest = 0;
+          let currentRun = 0;
+          let prevDate: Date | null = null;
+          
+          for (const dateStr of dates) {
+            const curDate = new Date(dateStr);
+            if (prevDate === null) {
+              currentRun = 1;
+            } else {
+              const diff = curDate.getTime() - prevDate.getTime();
+              const diffDays = Math.round(diff / (1000 * 60 * 60 * 24));
+              if (diffDays === 1) {
+                currentRun++;
+              } else if (diffDays > 1) {
+                if (currentRun > currentLongest) {
+                  currentLongest = currentRun;
+                }
+                currentRun = 1;
+              }
+            }
+            prevDate = curDate;
+          }
+          if (currentRun > currentLongest) {
+            currentLongest = currentRun;
+          }
+          if (currentLongest > longestStreak) {
+            longestStreak = currentLongest;
+          }
+        });
 
-      // 3. Best focus day (completed only)
-      const dayFocus: Record<string, number> = {};
-      sessions
-        .filter(s => s.status !== 'interrupted')
-        .forEach(s => {
+        const longestSession = sessions
+          .filter(s => s.status !== 'interrupted')
+          .reduce((max, s) => s.duration_min > max ? s.duration_min : max, 0);
+
+        const dayFocus: Record<string, number> = {};
+        sessions
+          .filter(s => s.status !== 'interrupted')
+          .forEach(s => {
+            const dStr = getLocalDateStr(new Date(s.started_at));
+            dayFocus[dStr] = (dayFocus[dStr] || 0) + s.duration_min;
+          });
+        let bestFocusDayDate = '';
+        let bestFocusDayMins = 0;
+        Object.keys(dayFocus).forEach(dStr => {
+          if (dayFocus[dStr] > bestFocusDayMins) {
+            bestFocusDayMins = dayFocus[dStr];
+            bestFocusDayDate = dStr;
+          }
+        });
+
+        const completedTasks = tasks.filter(t => t.completed_at !== null);
+        const dayTasks: Record<string, number> = {};
+        completedTasks.forEach(t => {
+          const dStr = getLocalDateStr(new Date(t.completed_at!));
+          dayTasks[dStr] = (dayTasks[dStr] || 0) + 1;
+        });
+        let bestTaskDate = '';
+        let bestTaskCount = 0;
+        Object.keys(dayTasks).forEach(dStr => {
+          if (dayTasks[dStr] > bestTaskCount) {
+            bestTaskCount = dayTasks[dStr];
+            bestTaskDate = dStr;
+          }
+        });
+
+        const getMondayOfDate = (dateStr: string) => {
+          const d = new Date(dateStr);
+          const day = d.getDay();
+          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+          const mon = new Date(d.setDate(diff));
+          return getLocalDateStr(mon);
+        };
+        const weekFocus: Record<string, number> = {};
+        sessions
+          .filter(s => s.status !== 'interrupted')
+          .forEach(s => {
+            const monStr = getMondayOfDate(getLocalDateStr(new Date(s.started_at)));
+            weekFocus[monStr] = (weekFocus[monStr] || 0) + s.duration_min;
+          });
+        let bestWeekMins = 0;
+        Object.keys(weekFocus).forEach(wStr => {
+          if (weekFocus[wStr] > bestWeekMins) {
+            bestWeekMins = weekFocus[wStr];
+          }
+        });
+
+        // WEEKLY REPORT CARD
+        const thisWeekSessions = sessions.filter(s => s.status !== 'interrupted' && weekDates.includes(getLocalDateStr(new Date(s.started_at))));
+        const thisWeekMins = thisWeekSessions.reduce((sum, s) => sum + s.duration_min, 0);
+        const thisWeekHours = thisWeekMins / 60;
+
+        const lastWeekSessions = sessions.filter(s => s.status !== 'interrupted' && lastWeekDates.includes(getLocalDateStr(new Date(s.started_at))));
+        const lastWeekMins = lastWeekSessions.reduce((sum, s) => sum + s.duration_min, 0);
+        const lastWeekHours = lastWeekMins / 60;
+
+        const focusDiffHours = thisWeekHours - lastWeekHours;
+
+        const thisWeekDayFocus: Record<string, number> = {};
+        thisWeekSessions.forEach(s => {
           const dStr = getLocalDateStr(new Date(s.started_at));
-          dayFocus[dStr] = (dayFocus[dStr] || 0) + s.duration_min;
+          thisWeekDayFocus[dStr] = (thisWeekDayFocus[dStr] || 0) + s.duration_min;
         });
-      let bestFocusDayDate = '';
-      let bestFocusDayMins = 0;
-      Object.keys(dayFocus).forEach(dStr => {
-        if (dayFocus[dStr] > bestFocusDayMins) {
-          bestFocusDayMins = dayFocus[dStr];
-          bestFocusDayDate = dStr;
-        }
-      });
-
-      // 4. Most tasks in a day
-      const completedTasks = tasks.filter(t => t.completed_at !== null);
-      const dayTasks: Record<string, number> = {};
-      completedTasks.forEach(t => {
-        const dStr = getLocalDateStr(new Date(t.completed_at!));
-        dayTasks[dStr] = (dayTasks[dStr] || 0) + 1;
-      });
-      let bestTaskDate = '';
-      let bestTaskCount = 0;
-      Object.keys(dayTasks).forEach(dStr => {
-        if (dayTasks[dStr] > bestTaskCount) {
-          bestTaskCount = dayTasks[dStr];
-          bestTaskDate = dStr;
-        }
-      });
-
-      // 5. Best week
-      const getMondayOfDate = (dateStr: string) => {
-        const d = new Date(dateStr);
-        const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-        const mon = new Date(d.setDate(diff));
-        return getLocalDateStr(mon);
-      };
-      const weekFocus: Record<string, number> = {};
-      sessions
-        .filter(s => s.status !== 'interrupted')
-        .forEach(s => {
-          const monStr = getMondayOfDate(getLocalDateStr(new Date(s.started_at)));
-          weekFocus[monStr] = (weekFocus[monStr] || 0) + s.duration_min;
+        let thisWeekBestDayName = 'None';
+        let thisWeekBestDayMins = 0;
+        const WEEK_DAYS_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        Object.keys(thisWeekDayFocus).forEach(dStr => {
+          if (thisWeekDayFocus[dStr] > thisWeekBestDayMins) {
+            thisWeekBestDayMins = thisWeekDayFocus[dStr];
+            thisWeekBestDayName = WEEK_DAYS_NAMES[new Date(dStr).getDay()];
+          }
         });
-      let bestWeekMins = 0;
-      Object.keys(weekFocus).forEach(wStr => {
-        if (weekFocus[wStr] > bestWeekMins) {
-          bestWeekMins = weekFocus[wStr];
+
+        const totalExpectedLogsThisWeek = activeHabits.length * 7;
+        const totalActualLogsThisWeek = habitLogs.filter(l => l.done && weekDates.includes(l.date)).length;
+        const habitConsistencyRate = totalExpectedLogsThisWeek > 0
+          ? Math.round((totalActualLogsThisWeek / totalExpectedLogsThisWeek) * 100)
+          : 0;
+
+        const goalsCompletedThisWeek = completedTasks.filter(t => weekDates.includes(getLocalDateStr(new Date(t.completed_at!)))).length;
+
+        const result = {
+          todaySummary: {
+            focusMinsToday,
+            hasBlockerToday,
+            habitsDoneCount,
+            habitsTotalCount,
+            todayTasksDone
+          },
+          habitConsistency: {
+            grid: habitGrid,
+            bestHabitName,
+            bestHabitCount,
+            worstHabitName,
+            worstHabitCount
+          },
+          scheduleCompliance: {
+            grid: scheduleGrid,
+            completionRate: scheduleCompletionRate
+          },
+          moodTrend: {
+            moodData,
+            avgMoodThisWeek,
+            avgMoodLastWeek,
+            moodTrendText
+          },
+          personalRecords: {
+            longestStreak,
+            longestSession,
+            bestFocusDayDate,
+            bestFocusDayMins,
+            bestTaskDate,
+            bestTaskCount,
+            bestWeekMins
+          },
+          reportCard: {
+            monDate: weekDates[0],
+            thisWeekHours,
+            focusDiffHours,
+            bestDayName: thisWeekBestDayName,
+            bestDayHours: thisWeekBestDayMins / 60,
+            habitConsistencyRate,
+            goalsCompletedThisWeek
+          },
+          focusStats: {
+            focusStreak,
+            completedCount: allTimeCompletedCount,
+            interruptedCount: allTimeInterruptedCount,
+            totalFocusMins: allTimeFocusMinutes,
+            ratioCompleted: allTimeCompletedCount + allTimeInterruptedCount > 0 
+              ? Math.round((allTimeCompletedCount / (allTimeCompletedCount + allTimeInterruptedCount)) * 100) 
+              : 100,
+            ratioInterrupted: allTimeCompletedCount + allTimeInterruptedCount > 0 
+              ? Math.round((allTimeInterruptedCount / (allTimeCompletedCount + allTimeInterruptedCount)) * 100) 
+              : 0,
+          }
+        };
+
+        AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+        return result;
+      } catch (err: any) {
+        const isNetError = 
+          err.message?.toLowerCase().includes('network') || 
+          err.message?.toLowerCase().includes('fetch') || 
+          err.message?.toLowerCase().includes('timeout') ||
+          err.status === 0;
+
+        if (isNetError) {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            return JSON.parse(cached);
+          }
+          return {
+            todaySummary: {
+              focusMinsToday: 0,
+              hasBlockerToday: false,
+              habitsDoneCount: 0,
+              habitsTotalCount: 0,
+              todayTasksDone: 0,
+            },
+            habitConsistency: {
+              grid: [],
+              bestHabitName: 'None',
+              bestHabitCount: 0,
+              worstHabitName: 'None',
+              worstHabitCount: 0,
+            },
+            scheduleCompliance: {
+              grid: [],
+              completionRate: 100,
+            },
+            moodTrend: {
+              moodData: [],
+              avgMoodThisWeek: null,
+              avgMoodLastWeek: null,
+              moodTrendText: 'No trend data yet',
+            },
+            personalRecords: {
+              longestStreak: 0,
+              longestSession: 0,
+              bestFocusDayDate: '',
+              bestFocusDayMins: 0,
+              bestTaskDate: '',
+              bestTaskCount: 0,
+              bestWeekMins: 0,
+            },
+            reportCard: {
+              monDate: getLocalDateStr(new Date()),
+              thisWeekHours: 0,
+              focusDiffHours: 0,
+              bestDayName: 'None',
+              bestDayHours: 0,
+              habitConsistencyRate: 0,
+              goalsCompletedThisWeek: 0,
+            },
+            focusStats: {
+              focusStreak: 0,
+              completedCount: 0,
+              interruptedCount: 0,
+              totalFocusMins: 0,
+              ratioCompleted: 100,
+              ratioInterrupted: 0,
+            },
+          };
         }
-      });
-
-      // ==========================================
-      // WEEKLY REPORT CARD
-      // ==========================================
-      const thisWeekSessions = sessions.filter(s => s.status !== 'interrupted' && weekDates.includes(getLocalDateStr(new Date(s.started_at))));
-      const thisWeekMins = thisWeekSessions.reduce((sum, s) => sum + s.duration_min, 0);
-      const thisWeekHours = thisWeekMins / 60;
-
-      const lastWeekSessions = sessions.filter(s => s.status !== 'interrupted' && lastWeekDates.includes(getLocalDateStr(new Date(s.started_at))));
-      const lastWeekMins = lastWeekSessions.reduce((sum, s) => sum + s.duration_min, 0);
-      const lastWeekHours = lastWeekMins / 60;
-
-      const focusDiffHours = thisWeekHours - lastWeekHours;
-
-      // Find best day this week
-      const thisWeekDayFocus: Record<string, number> = {};
-      thisWeekSessions.forEach(s => {
-        const dStr = getLocalDateStr(new Date(s.started_at));
-        thisWeekDayFocus[dStr] = (thisWeekDayFocus[dStr] || 0) + s.duration_min;
-      });
-      let thisWeekBestDayName = 'None';
-      let thisWeekBestDayMins = 0;
-      const WEEK_DAYS_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      Object.keys(thisWeekDayFocus).forEach(dStr => {
-        if (thisWeekDayFocus[dStr] > thisWeekBestDayMins) {
-          thisWeekBestDayMins = thisWeekDayFocus[dStr];
-          thisWeekBestDayName = WEEK_DAYS_NAMES[new Date(dStr).getDay()];
-        }
-      });
-
-      // Habits consistency this week
-      const totalExpectedLogsThisWeek = activeHabits.length * 7;
-      const totalActualLogsThisWeek = habitLogs.filter(l => l.done && weekDates.includes(l.date)).length;
-      const habitConsistencyRate = totalExpectedLogsThisWeek > 0
-        ? Math.round((totalActualLogsThisWeek / totalExpectedLogsThisWeek) * 100)
-        : 0;
-
-      // Goals completed this week
-      const goalsCompletedThisWeek = completedTasks.filter(t => weekDates.includes(getLocalDateStr(new Date(t.completed_at!)))).length;
-
-      return {
-        todaySummary: {
-          focusMinsToday,
-          hasBlockerToday,
-          habitsDoneCount,
-          habitsTotalCount,
-          todayTasksDone
-        },
-        habitConsistency: {
-          grid: habitGrid,
-          bestHabitName,
-          bestHabitCount,
-          worstHabitName,
-          worstHabitCount
-        },
-        scheduleCompliance: {
-          grid: scheduleGrid,
-          completionRate: scheduleCompletionRate
-        },
-        moodTrend: {
-          moodData,
-          avgMoodThisWeek,
-          avgMoodLastWeek,
-          moodTrendText
-        },
-        personalRecords: {
-          longestStreak,
-          longestSession,
-          bestFocusDayDate,
-          bestFocusDayMins,
-          bestTaskDate,
-          bestTaskCount,
-          bestWeekMins
-        },
-        reportCard: {
-          monDate: weekDates[0],
-          thisWeekHours,
-          focusDiffHours,
-          bestDayName: thisWeekBestDayName,
-          bestDayHours: thisWeekBestDayMins / 60,
-          habitConsistencyRate,
-          goalsCompletedThisWeek
-        },
-        focusStats: {
-          focusStreak,
-          completedCount: allTimeCompletedCount,
-          interruptedCount: allTimeInterruptedCount,
-          totalFocusMins: allTimeFocusMinutes,
-          ratioCompleted: allTimeCompletedCount + allTimeInterruptedCount > 0 
-            ? Math.round((allTimeCompletedCount / (allTimeCompletedCount + allTimeInterruptedCount)) * 100) 
-            : 100,
-          ratioInterrupted: allTimeCompletedCount + allTimeInterruptedCount > 0 
-            ? Math.round((allTimeInterruptedCount / (allTimeCompletedCount + allTimeInterruptedCount)) * 100) 
-            : 0,
-        }
-      };
-    }
+        throw err;
+      }
+    },
+    enabled: !!user?.id,
   });
 }
 

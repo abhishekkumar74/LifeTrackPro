@@ -21,6 +21,7 @@ import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 import { COLORS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
 import { getTodayLocal } from '@/lib/utils/date';
+import { ArrowLeft, Flame } from 'lucide-react-native';
 import {
   useHabits,
   useArchivedHabits,
@@ -177,8 +178,11 @@ export default function HabitsManagementScreen() {
             >
               {habit.title}
             </Text>
-            {/* Placeholder Streak count */}
-            <Text style={styles.streakBadge}>🔥 Daily</Text>
+            {/* Streak count */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+              <Flame size={11} color="#E8A020" fill="#E8A020" style={{ marginRight: 3 }} />
+              <Text style={styles.streakBadge}>Daily</Text>
+            </View>
           </View>
 
           {/* Checkbox toggle (only when not in edit mode) */}
@@ -214,7 +218,7 @@ export default function HabitsManagementScreen() {
           onPress={() => router.back()}
           activeOpacity={0.6}
         >
-          <Text style={styles.backIcon}>←</Text>
+          <ArrowLeft size={20} color="#17172A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Habits</Text>
         <View style={styles.headerActions}>

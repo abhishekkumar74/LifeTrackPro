@@ -7,6 +7,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import { Coffee, Sprout, Leaf, Sparkles, AlertTriangle, Flame } from 'lucide-react-native';
 import { useFocusStore } from '@/lib/store/focus.store';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -29,14 +30,6 @@ const THEME_COLORS = {
   obsidian: '#E2E8F0',
 } as const;
 
-const PLANT_STAGES: Record<string, [string, string, string]> = {
-  sprout: ['🌱', '🌿', '🌸'],
-  sunflower: ['🌱', '🪴', '🌻'],
-  rose: ['🌱', '🌿', '🌹'],
-  cactus: ['🌱', '🪴', '🌵'],
-  tree: ['🌱', '🌿', '🌳'],
-};
-
 export const TimerCircle: React.FC<TimerCircleProps> = ({
   size = 220,
   secondsLeft,
@@ -48,7 +41,6 @@ export const TimerCircle: React.FC<TimerCircleProps> = ({
     activeTheme = 'default',
     isStrictModeActive,
     isPlantWilted,
-    selectedPlantId = 'sprout',
   } = useFocusStore();
   const themeColor = THEME_COLORS[activeTheme as keyof typeof THEME_COLORS] || '#5B4FE8';
 
@@ -60,12 +52,20 @@ export const TimerCircle: React.FC<TimerCircleProps> = ({
   // Calculate current progress (value from 0 to 1)
   const progress = totalSeconds > 0 ? 1 - secondsLeft / totalSeconds : 0;
 
-  const getPlantEmoji = () => {
-    if (isPlantWilted) return '🥀';
-    const stages = PLANT_STAGES[selectedPlantId] || ['🌱', '🌿', '🌸'];
-    if (progress < 0.33) return stages[0];
-    if (progress < 0.66) return stages[1];
-    return stages[2];
+  const renderBadgeIcon = () => {
+    if (currentMode !== 'focus') return <Coffee size={13} color="#A78BFA" />;
+    if (isPlantWilted && isStrictModeActive) return <AlertTriangle size={13} color="#EF4444" />;
+    if (progress < 0.33) return <Sprout size={13} color="#10B981" />;
+    if (progress < 0.66) return <Leaf size={13} color="#10B981" />;
+    return <Sparkles size={13} color="#E8A020" />;
+  };
+
+  const getPlantStageLabel = () => {
+    if (currentMode !== 'focus') return 'Rest Time';
+    if (isPlantWilted && isStrictModeActive) return 'Wilted';
+    if (progress < 0.33) return 'Seedling';
+    if (progress < 0.66) return 'Sprouting';
+    return 'Bloomed!';
   };
 
   // Reanimated shared value for smooth animation transitions
@@ -97,9 +97,9 @@ export const TimerCircle: React.FC<TimerCircleProps> = ({
       case 'focus':
         return 'Deep Focus';
       case 'short_break':
-        return 'Short Break 🌿';
+        return 'Short Break';
       case 'long_break':
-        return 'Long Break ☕';
+        return 'Long Break';
       default:
         return 'Deep Focus';
     }
@@ -151,9 +151,15 @@ export const TimerCircle: React.FC<TimerCircleProps> = ({
       {/* Centered overlays */}
       <View style={StyleSheet.absoluteFill}>
         <View style={styles.innerContent}>
+          {/* Seed Growth Badge */}
+          <View style={styles.seedBadge}>
+            {renderBadgeIcon()}
+            <Text style={styles.seedStageText}>{getPlantStageLabel()}</Text>
+          </View>
+
           {/* Time Display */}
           <Text
-            style={[styles.timeText, { fontSize: timeStr.length > 5 ? 36 : 46 }]}
+            style={[styles.timeText, { fontSize: timeStr.length > 5 ? 32 : 40 }]}
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.7}
@@ -163,11 +169,6 @@ export const TimerCircle: React.FC<TimerCircleProps> = ({
 
           {/* Mode Label */}
           <Text style={styles.modeText}>{getModeLabel()}</Text>
-
-          {/* Strict Mode Sprout Growth Visuals */}
-          {isStrictModeActive && (
-            <Text style={styles.plantText}>{getPlantEmoji()}</Text>
-          )}
 
           {/* Pomodoro Dot Indicators */}
           <View style={styles.dotsRow}>
@@ -197,7 +198,26 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 10,
+    paddingTop: 4,
+  },
+  seedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  seedEmoji: {
+    fontSize: 14,
+  },
+  seedStageText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#A78BFA',
+    fontWeight: '600',
   },
   timeText: {
     fontFamily: 'DMMono',
@@ -211,18 +231,14 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans',
     fontSize: 12,
     color: '#9B9BAF',
-    marginTop: 4,
+    marginTop: 2,
     letterSpacing: 0.5,
-  },
-  plantText: {
-    fontSize: 24,
-    marginTop: 6,
   },
   dotsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: 8,
     gap: 6,
   },
   dot: {

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { RoomMember } from '@/lib/hooks/use-study-rooms';
 
 interface AvatarStackProps {
@@ -7,15 +8,22 @@ interface AvatarStackProps {
   maxShown?: number;
 }
 
-const COLORS = ['#5B4FE8', '#00B894', '#E8A020', '#E85858', '#8B6FE8', '#0EA5E9'];
+const GRADIENT_PAIRS = [
+  { start: '#6C5CE7', end: '#A29BFE' },
+  { start: '#FF7675', end: '#FD79A8' },
+  { start: '#00B894', end: '#55EFC4' },
+  { start: '#E17055', end: '#FDCB6E' },
+  { start: '#0984E3', end: '#74B9FF' },
+  { start: '#8B6FE8', end: '#E84393' },
+];
 
-function getColorForUser(userId: string): string {
+function getGradForUser(userId: string) {
   let hash = 0;
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const index = Math.abs(hash) % COLORS.length;
-  return COLORS[index];
+  const index = Math.abs(hash) % GRADIENT_PAIRS.length;
+  return GRADIENT_PAIRS[index];
 }
 
 export const AvatarStack = React.memo<AvatarStackProps>(({ members, maxShown = 4 }) => {
@@ -25,20 +33,34 @@ export const AvatarStack = React.memo<AvatarStackProps>(({ members, maxShown = 4
   return (
     <View style={styles.container}>
       {shownMembers.map((m, index) => {
-        const bg = getColorForUser(m.userId);
+        const grad = getGradForUser(m.userId);
         return (
           <View
             key={m.userId}
             style={[
               styles.avatar,
               {
-                backgroundColor: bg,
                 marginLeft: index === 0 ? 0 : -8,
                 zIndex: maxShown - index,
               },
             ]}
           >
-            <Text style={styles.initials}>{m.initials}</Text>
+            {m.avatarUrl ? (
+              <Image source={{ uri: m.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <>
+                <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
+                  <Defs>
+                    <LinearGradient id={`stack-grad-${m.userId}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                      <Stop offset="0%" stopColor={grad.start} />
+                      <Stop offset="100%" stopColor={grad.end} />
+                    </LinearGradient>
+                  </Defs>
+                  <Rect width="100%" height="100%" fill={`url(#stack-grad-${m.userId})`} rx={14} ry={14} />
+                </Svg>
+                <Text style={styles.initials}>{m.initials}</Text>
+              </>
+            )}
           </View>
         );
       })}
@@ -65,6 +87,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   initials: {
     fontFamily: 'DMSans-Bold',

@@ -51,7 +51,6 @@ export default function Step4Hours({ state, onChange }: StepProps): React.JSX.El
       <Text style={styles.heading}>How much time daily?</Text>
       <Text style={styles.subtext}>Be realistic — consistency beats intensity.</Text>
 
-      {/* Hours selector block */}
       <View style={styles.selectorRow}>
         <Pressable
           style={[styles.circleBtn, hours <= 1 && styles.circleBtnDisabled]}
@@ -81,7 +80,6 @@ export default function Step4Hours({ state, onChange }: StepProps): React.JSX.El
 
       <Text style={styles.sectionLabel}>When are you most productive?</Text>
 
-      {/* Peak time cards stack */}
       <View style={styles.cardsStack}>
         {PEAK_TIME_OPTIONS.map((option) => {
           const isSelected = peakTime === option.key;
@@ -105,7 +103,6 @@ export default function Step4Hours({ state, onChange }: StepProps): React.JSX.El
                 </View>
               </View>
 
-              {/* Radio Indicator */}
               <View style={[styles.radio, isSelected && styles.radioSelected]}>
                 {isSelected && <View style={styles.radioInner} />}
               </View>

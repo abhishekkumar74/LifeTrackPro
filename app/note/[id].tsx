@@ -13,6 +13,7 @@ import {
   Platform,
   ActivityIndicator,
   Dimensions,
+  StatusBar,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -506,6 +507,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}

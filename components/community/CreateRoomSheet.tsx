@@ -18,15 +18,17 @@ import * as Haptics from 'expo-haptics';
 import { useCreateRoom } from '@/lib/hooks/use-study-rooms';
 import { useSubjects } from '@/lib/hooks/use-subjects';
 
+import { VolumeX, Music, MessageSquare } from 'lucide-react-native';
+
 interface CreateRoomSheetProps {
   isVisible: boolean;
   onClose: () => void;
   onCreated: (roomId: string) => void;
 }
 const ROOM_TYPES = [
-  { value: 'silent', icon: '🔇', label: 'Silent', description: 'No chat, pure focus' },
-  { value: 'music', icon: '🎵', label: 'Music', description: 'Shared ambient sound' },
-  { value: 'discussion', icon: '💬', label: 'Discussion', description: 'Chat during breaks' },
+  { value: 'silent', icon: VolumeX, label: 'Silent', description: 'No chat, pure focus' },
+  { value: 'music', icon: Music, label: 'Music', description: 'Shared ambient sound' },
+  { value: 'discussion', icon: MessageSquare, label: 'Discussion', description: 'Chat during breaks' },
 ];
 const TIMERS: (25 | 50 | 90)[] = [25, 50, 90];
 
@@ -111,10 +113,12 @@ export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
     []
   );
 
+  if (!isVisible) return null;
+
   return (
     <BottomSheet
       ref={sheetRef}
-      index={-1}
+      index={0}
       snapPoints={['75%']}
       enablePanDownToClose={true}
       backdropComponent={renderBackdrop}
@@ -161,6 +165,7 @@ export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
         <View style={styles.roomTypeContainer}>
           {ROOM_TYPES.map((rt) => {
             const isSelected = roomType === rt.value;
+            const IconComp = rt.icon;
             return (
               <TouchableOpacity
                 key={rt.value}
@@ -168,7 +173,7 @@ export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
                 onPress={() => setRoomType(rt.value as 'silent' | 'music' | 'discussion')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.roomTypeIcon}>{rt.icon}</Text>
+                <IconComp size={18} color={isSelected ? '#5B4FE8' : '#5C5C70'} style={{ marginRight: 12 }} />
                 <View style={styles.roomTypeTextContainer}>
                   <Text style={styles.roomTypeLabel}>{rt.label}</Text>
                   <Text style={styles.roomTypeDesc}>{rt.description}</Text>

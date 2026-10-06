@@ -6,9 +6,9 @@ import { formatDeadline } from '@/lib/utils/date';
 import { getSubjectColor, getSubjectBgColor } from '@/lib/utils/subject-colors';
 
 // Constants
-const ACTION_DONE = "✓ Done";
-const ACTION_RESCHEDULE = "📅 Reschedule";
-const ACTION_DELETE = "🗑 Delete";
+const ACTION_DONE = "Done";
+const ACTION_RESCHEDULE = "Reschedule";
+const ACTION_DELETE = "Delete";
 const BORDER_COLOR = '#E8E7E3';
 
 interface TaskItemProps {

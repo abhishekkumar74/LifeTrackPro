@@ -1,7 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
-import { Audio } from 'expo-av';
 import { SoundKey } from '@/lib/store/focus.store';
 import { captureError } from '@/lib/sentry';
+
+let AudioModule: any = null;
+let isAudioAvailable: boolean | null = null;
+
+function getAudioModule() {
+  if (isAudioAvailable === false) return null;
+  if (AudioModule) return AudioModule;
+
+  try {
+    const { NativeModules } = require('react-native');
+    const { NativeModulesProxy } = require('expo-modules-core') || {};
+
+    const hasExpoAudioNative = !!(
+      NativeModules?.ExpoAudio ||
+      (NativeModulesProxy && NativeModulesProxy.ExpoAudio)
+    );
+
+    if (!hasExpoAudioNative) {
+      isAudioAvailable = false;
+      return null;
+    }
+
+    AudioModule = require('expo-audio');
+    isAudioAvailable = !!AudioModule;
+  } catch (e) {
+    isAudioAvailable = false;
+    AudioModule = null;
+  }
+  return AudioModule;
+}
 
 const SOUND_FILES = {
   rain: require('../../assets/sounds/rain.mp3'),
@@ -22,45 +51,42 @@ export interface AmbientSoundHook {
 export function useAmbientSound(): AmbientSoundHook {
   const [activeSound, setActiveSound] = useState<SoundKey | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const playerRef = useRef<any>(null);
 
   const play = async (key: SoundKey, volume: number) => {
     setIsLoading(true);
     try {
-      // 1. Unload any existing sound
-      if (soundRef.current) {
+      // 1. Release existing player
+      if (playerRef.current) {
         try {
-          await soundRef.current.stopAsync();
-          await soundRef.current.unloadAsync();
-        } catch (e) {
-          // Ignore issues with unloading current track
-        }
-        soundRef.current = null;
+          playerRef.current.pause();
+          playerRef.current.release?.();
+        } catch (e) {}
+        playerRef.current = null;
       }
 
-      // 2. Configure audio session to run in the background
-      await Audio.setAudioModeAsync({
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
+      const audioMod = getAudioModule();
+      if (!audioMod || !audioMod.createAudioPlayer) {
+        setIsLoading(false);
+        setActiveSound(null);
+        return;
+      }
 
-      // 3. Load and play the new sound asset
-      const source = SOUND_FILES[key];
-      const { sound } = await Audio.Sound.createAsync(
-        source,
-        {
-          shouldPlay: true,
-          isLooping: true,
-          volume: volume,
-        }
-      );
+      // 2. Load and play sound asset via expo-audio
+      try {
+        const source = SOUND_FILES[key];
+        const player = audioMod.createAudioPlayer(source);
+        player.loop = true;
+        player.volume = volume;
+        player.play();
 
-      soundRef.current = sound;
-      setActiveSound(key);
+        playerRef.current = player;
+        setActiveSound(key);
+      } catch (e) {
+        console.warn('[Audio] Failed to play ambient sound:', e);
+        setActiveSound(null);
+      }
     } catch (err) {
-      captureError(err, { context: 'ambient_play', soundKey: key });
       setActiveSound(null);
     } finally {
       setIsLoading(false);
@@ -69,10 +95,10 @@ export function useAmbientSound(): AmbientSoundHook {
 
   const stop = async () => {
     try {
-      if (soundRef.current) {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
+      if (playerRef.current) {
+        playerRef.current.pause();
+        playerRef.current.release?.();
+        playerRef.current = null;
       }
     } catch (err) {
       captureError(err, { context: 'ambient_stop' });
@@ -83,8 +109,8 @@ export function useAmbientSound(): AmbientSoundHook {
 
   const setVolume = async (vol: number) => {
     try {
-      if (soundRef.current) {
-        await soundRef.current.setVolumeAsync(vol);
+      if (playerRef.current) {
+        playerRef.current.volume = vol;
       }
     } catch (err) {
       captureError(err, { context: 'ambient_volume' });
@@ -94,13 +120,11 @@ export function useAmbientSound(): AmbientSoundHook {
   // Perform automatic resource cleanup on unmount
   useEffect(() => {
     return () => {
-      if (soundRef.current) {
-        soundRef.current.stopAsync().catch((err: unknown) => {
-          captureError(err, { context: 'ambient_cleanup_stop' });
-        });
-        soundRef.current.unloadAsync().catch((err: unknown) => {
-          captureError(err, { context: 'ambient_cleanup_unload' });
-        });
+      if (playerRef.current) {
+        try {
+          playerRef.current.pause();
+          playerRef.current.release?.();
+        } catch (e) {}
       }
     };
   }, []);

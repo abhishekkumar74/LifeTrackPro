@@ -32,6 +32,8 @@ export function initSentry() {
       'Load failed',
       'AbortError',
       'cancelled',
+      'ExponentAV',
+      'Cannot find native module',
     ],
   });
 }
@@ -58,7 +60,9 @@ export function captureError(
     'Load failed',
     'AbortError',
     'aborted',
-    'cancelled'
+    'cancelled',
+    'ExponentAV',
+    'Cannot find native module',
   ].some(ignored => errStr.toLowerCase().includes(ignored.toLowerCase()));
 
   if (isIgnored) {

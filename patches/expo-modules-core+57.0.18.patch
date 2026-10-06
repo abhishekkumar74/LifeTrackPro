@@ -1,0 +1,45 @@
+diff --git a/node_modules/expo-modules-core/ios/EXEventEmitter.h b/node_modules/expo-modules-core/ios/EXEventEmitter.h
+new file mode 100644
+index 0000000..763ef8b
+--- /dev/null
++++ b/node_modules/expo-modules-core/ios/EXEventEmitter.h
+@@ -0,0 +1,12 @@
++// Copyright 2015-present 650 Industries. All rights reserved.
++
++#import <Foundation/Foundation.h>
++
++@protocol EXEventEmitter <NSObject>
++
++- (NSArray<NSString *> *)supportedEvents;
++- (void)startObserving;
++- (void)stopObserving;
++- (void)sendEventWithName:(NSString *)eventName body:(id)body;
++
++@end
+diff --git a/node_modules/expo-modules-core/ios/EXEventEmitterService.h b/node_modules/expo-modules-core/ios/EXEventEmitterService.h
+new file mode 100644
+index 0000000..1935a76
+--- /dev/null
++++ b/node_modules/expo-modules-core/ios/EXEventEmitterService.h
+@@ -0,0 +1,9 @@
++// Copyright 2015-present 650 Industries. All rights reserved.
++
++#import <Foundation/Foundation.h>
++
++@protocol EXEventEmitterService <NSObject>
++
++- (void)sendEventWithName:(NSString *)eventName body:(id)body;
++
++@end
+diff --git a/node_modules/expo-modules-core/ios/EXLegacyExpoViewProtocol.h b/node_modules/expo-modules-core/ios/EXLegacyExpoViewProtocol.h
+new file mode 100644
+index 0000000..ea522ee
+--- /dev/null
++++ b/node_modules/expo-modules-core/ios/EXLegacyExpoViewProtocol.h
+@@ -0,0 +1,6 @@
++// Copyright 2015-present 650 Industries. All rights reserved.
++
++#import <Foundation/Foundation.h>
++
++@protocol EXLegacyExpoViewProtocol <NSObject>
++@end

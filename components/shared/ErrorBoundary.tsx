@@ -1,6 +1,7 @@
 import React, { ErrorInfo, ReactNode } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, DevSettings } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AlertCircle } from 'lucide-react-native';
 
 interface Props {
   children: ReactNode;
@@ -40,7 +41,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
       return (
         <SafeAreaView style={styles.container}>
           <View style={styles.card}>
-            <Text style={styles.title}>Something went wrong 😕</Text>
+            <View style={{ marginBottom: 12 }}>
+              <AlertCircle size={40} color="#E85858" />
+            </View>
+            <Text style={styles.title}>Something went wrong</Text>
             <Text style={styles.subtitle}>Please restart the app to continue.</Text>
 
             {__DEV__ && this.state.error && (

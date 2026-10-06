@@ -1,11 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase/client';
-import { StudyRoom } from '@/types/app.types';
 import { useAuthStore } from '@/lib/store/auth.store';
-import { RealtimeChannel } from '@supabase/supabase-js';
-import { useUiStore } from '@/lib/store/ui.store';
+import { supabase } from '@/lib/supabase/client';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
+import { StudyRoom } from '@/types/app.types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 
 export interface RoomWithHost extends StudyRoom {
   host_name: string;
@@ -15,6 +13,7 @@ export interface RoomWithHost extends StudyRoom {
 export interface RoomMember {
   userId: string;
   name: string;
+  avatarUrl?: string | null;
   initials: string;
   joinedAt: string;
   currentSubject: string | null;
@@ -97,16 +96,25 @@ export function useRoomPresence(roomId: string) {
 
     const handleSync = () => {
       const state = channel.presenceState();
-      const presenceMembers: RoomMember[] = Object.values(state)
-        .flat()
-        .map((p: any) => ({
-          userId: (p as RoomMember).userId,
-          name: (p as RoomMember).name,
-          initials: (p as RoomMember).initials,
-          joinedAt: (p as RoomMember).joinedAt,
-          currentSubject: (p as RoomMember).currentSubject,
-        }));
-      setMembers(presenceMembers);
+      const rawList = Object.values(state).flat();
+
+      // Map to deduplicate members by userId (ensures unique active users)
+      const memberMap = new Map<string, RoomMember>();
+      for (const p of rawList) {
+        const item = p as any;
+        if (item?.userId && !memberMap.has(item.userId)) {
+          memberMap.set(item.userId, {
+            userId: item.userId,
+            name: item.name || 'Member',
+            avatarUrl: item.avatarUrl || null,
+            initials: item.initials || (item.name ? item.name[0].toUpperCase() : 'M'),
+            joinedAt: item.joinedAt || new Date().toISOString(),
+            currentSubject: item.currentSubject || null,
+          });
+        }
+      }
+
+      setMembers(Array.from(memberMap.values()));
     };
 
     channel
@@ -116,6 +124,7 @@ export function useRoomPresence(roomId: string) {
           await channel.track({
             userId: profile.id,
             name: profile.name,
+            avatarUrl: profile.avatar_url || null,
             initials: profile.name[0] ? profile.name[0].toUpperCase() : 'U',
             joinedAt: new Date().toISOString(),
             currentSubject: null,
@@ -139,6 +148,23 @@ export function useRoomPresence(roomId: string) {
   };
 }
 
+// Helper to resolve user ID reliably on both iOS & Android
+async function getAuthenticatedUserId(): Promise<string | null> {
+  const storeUser = useAuthStore.getState().user?.id || useAuthStore.getState().profile?.id;
+  if (storeUser) return storeUser;
+
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData?.session?.user?.id) return sessionData.session.user.id;
+
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData?.user?.id) return userData.user.id;
+  } catch (e) {
+    if (__DEV__) console.warn('Error resolving authenticated user ID:', e);
+  }
+  return null;
+}
+
 // 3. useCreateRoom
 export function useCreateRoom() {
   const queryClient = useQueryClient();
@@ -151,15 +177,15 @@ export function useCreateRoom() {
       timer_minutes: number;
       is_public: boolean;
     }) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const userId = await getAuthenticatedUserId();
+      if (!userId) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
         .from('study_rooms')
         .insert({
           name: roomData.name,
           subject: roomData.subject,
-          host_id: session.user.id,
+          host_id: userId,
           room_type: roomData.room_type,
           timer_minutes: roomData.timer_minutes,
           is_active: true,
@@ -188,16 +214,15 @@ export function useEndRoom() {
 
   return useMutation({
     mutationFn: async (roomId: string) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      if (!roomId) throw new Error('Room ID is required');
+
+      const userId = await getAuthenticatedUserId();
+      if (!userId) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
         .from('study_rooms')
         .update({ is_active: false })
-        .eq('id', roomId)
-        .eq('host_id', session.user.id)
-        .select()
-        .single();
+        .eq('id', roomId);
 
       if (error) throw error;
       return data;
@@ -205,6 +230,7 @@ export function useEndRoom() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['activeRooms'] });
       queryClient.invalidateQueries({ queryKey: ['myRooms'] });
+      queryClient.invalidateQueries({ queryKey: ['room'] });
     },
     onError: (err) => {
       handleSupabaseError(err, 'end_room');
@@ -217,8 +243,8 @@ export function useMyRooms() {
   return useQuery<RoomWithHost[]>({
     queryKey: ['myRooms'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const userId = await getAuthenticatedUserId();
+      if (!userId) return [];
 
       const { data, error } = await supabase
         .from('study_rooms')
@@ -229,7 +255,7 @@ export function useMyRooms() {
             avatar_url
           )
         `)
-        .eq('host_id', session.user.id)
+        .eq('host_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

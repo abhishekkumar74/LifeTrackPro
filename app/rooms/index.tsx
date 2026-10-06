@@ -11,7 +11,8 @@ import {
   ScrollView,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar, Platform } from 'react-native';
 import { router, Href } from 'expo-router';
 import { useActiveRooms, useMyRooms, useEndRoom, RoomWithHost } from '@/lib/hooks/use-study-rooms';
 import { LiveBadge } from '@/components/community/LiveBadge';
@@ -99,18 +100,15 @@ export default function RoomsScreen(): React.JSX.Element {
     </View>
   );
   const renderRoomRow = useCallback(({ item }: { item: RoomWithHost }) => {
-    const isInactiveInMyTab = activeTab === 'my' && !item.is_active;
     return (
-      <View style={isInactiveInMyTab && styles.inactiveRoomWrapper}>
-        <RoomCard
-          room={item}
-          currentUserId={currentUserId}
-          onJoin={handleJoinRoom}
-          onEnd={handleEndRoom}
-        />
-      </View>
+      <RoomCard
+        room={item}
+        currentUserId={currentUserId}
+        onJoin={handleJoinRoom}
+        onEnd={handleEndRoom}
+      />
     );
-  }, [activeTab, currentUserId, handleJoinRoom, handleEndRoom]);
+  }, [currentUserId, handleJoinRoom, handleEndRoom]);
   const isLoading = activeTab === 'live' ? isActiveLoading : isMyLoading;
   const error = activeTab === 'live' ? activeError : myError;
 
@@ -135,10 +133,22 @@ export default function RoomsScreen(): React.JSX.Element {
     }) || [];
   }, [activeRooms, searchQuery, selectedCategory]);
 
-  const listData = activeTab === 'live' ? filteredActiveRooms : myRooms;
+  const sortedMyRooms = React.useMemo(() => {
+    if (!myRooms) return [];
+    return [...myRooms].sort((a, b) => {
+      if (a.is_active && !b.is_active) return -1;
+      if (!a.is_active && b.is_active) return 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [myRooms]);
+
+  const listData = activeTab === 'live' ? filteredActiveRooms : sortedMyRooms;
+
+  const insets = useSafeAreaInsets();
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -259,7 +269,10 @@ export default function RoomsScreen(): React.JSX.Element {
           data={listData}
           keyExtractor={(item) => item.id}
           renderItem={renderRoomRow}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: Platform.OS === 'android' ? Math.max(insets.bottom + 30, 40) : 40 },
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}

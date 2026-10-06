@@ -269,7 +269,7 @@ export default function LoginScreen(): React.JSX.Element {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
@@ -279,7 +279,7 @@ export default function LoginScreen(): React.JSX.Element {
         bounces={true}
       >
         {/* SECTION 1: Top Branding Area */}
-        <View style={[styles.brandingSection, isKeyboardOpen && { height: screenHeight * 0.18, justifyContent: 'center', paddingVertical: 10, marginTop: 10 }]}>
+        <View style={[styles.brandingSection, isKeyboardOpen && { height: screenHeight * 0.14, justifyContent: 'center', paddingVertical: 6 }]}>
           <View style={[styles.logoContainer, isKeyboardOpen && { width: 44, height: 44, borderRadius: RADIUS.md }]}>
             <Svg width={isKeyboardOpen ? "24" : "36"} height={isKeyboardOpen ? "24" : "36"} viewBox="0 0 24 24" fill="none">
               <Circle cx="12" cy="12" r="10" stroke="white" strokeWidth="2" />

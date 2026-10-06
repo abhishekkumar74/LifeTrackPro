@@ -537,6 +537,26 @@ Stay focused, track your goals! 🚀`;
     );
   };
 
+  const isErrorState = (enhancedStatsQuery.isError && !enhancedStats) && (periodStatsQuery.isError && !periodStatsQuery.data);
+
+  if (isErrorState) {
+    const errorMsg =
+      (enhancedStatsQuery.error as Error)?.message ||
+      (periodStatsQuery.error as Error)?.message ||
+      'Network connection error. Please check your internet connection and try again.';
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" />
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Progress</Text>
+          </View>
+          <ErrorState message={errorMsg} onRetry={handleRefresh} />
+        </SafeAreaView>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -629,7 +649,9 @@ Stay focused, track your goals! 🚀`;
           </View>
           {isNewUser && (
             <View style={styles.newUserBanner}>
-              <Text style={styles.newUserEmoji}>📊</Text>
+              <View style={{ marginBottom: 8 }}>
+                <Activity size={32} color="#5B4FE8" />
+              </View>
               <Text style={styles.newUserTitle}>Start focusing to see your stats</Text>
               <Text style={styles.newUserSubtitle}>
                 Complete a study session in Focus Mode to unlock visual history, graphs, check-in insights, and achievements.
@@ -639,7 +661,10 @@ Stay focused, track your goals! 🚀`;
                 onPress={() => router.push('/focus')}
                 activeOpacity={0.8}
               >
-                <Text style={styles.newUserCTAText}>⏱️ Start Focus Session</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Clock size={15} color="#FFFFFF" />
+                  <Text style={styles.newUserCTAText}>Start Focus Session</Text>
+                </View>
               </TouchableOpacity>
             </View>
           )}
@@ -758,9 +783,12 @@ Stay focused, track your goals! 🚀`;
                 {/* Streak */}
                 <View style={styles.focusSummaryCard}>
                   <Text style={styles.focusCardLabel}>Streak</Text>
-                  <Text style={styles.focusCardValue}>
-                    🔥 {enhancedStats?.focusStats?.focusStreak || 0}d
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Flame size={14} color="#E8A020" fill="#E8A020" />
+                    <Text style={styles.focusCardValue}>
+                      {enhancedStats?.focusStats?.focusStreak || 0}d
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Completed */}
@@ -917,7 +945,7 @@ Stay focused, track your goals! 🚀`;
               <View style={styles.streakCol}>
                 <Text style={styles.streakLabel}>STREAK</Text>
                 <View style={styles.streakCircle}>
-                  <Text style={styles.streakEmoji}>🔥</Text>
+                  <Flame size={20} color="#E8A020" fill="#E8A020" />
                   <Text style={styles.streakNumber}>
                     {todayStats.isLoading ? '-' : todayStats.habitStreak}
                   </Text>

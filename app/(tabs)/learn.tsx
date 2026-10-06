@@ -41,6 +41,10 @@ import {
   RotateCcw,
   Smile,
   ChevronRight,
+  FileText,
+  Pin,
+  Calendar,
+  Search,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
@@ -638,7 +642,7 @@ export default function LearnScreen(): React.JSX.Element {
       const progressPercent = addingTotal > 0 ? Math.round((addingProgress / addingTotal) * 100) : 0;
       return (
         <View style={styles.cseProgressOverlay}>
-          <Text style={styles.cseProgressTitle}>Loading CSE Roadmap 📚</Text>
+          <Text style={styles.cseProgressTitle}>Loading CSE Roadmap</Text>
           <Text style={styles.cseProgressSubtitle}>
             Loading {addingTotal} topics for {addingGoal}...
           </Text>
@@ -750,7 +754,7 @@ export default function LearnScreen(): React.JSX.Element {
 
     return (
       <>
-        <Text style={styles.setupWelcomeTitle}>Set up your CS roadmap 📚</Text>
+        <Text style={styles.setupWelcomeTitle}>Set up your CS roadmap</Text>
         <Text style={styles.setupWelcomeSubtitle}>Choose your goal:</Text>
 
         <View style={styles.cseRoadmapGrid}>
@@ -878,8 +882,8 @@ export default function LearnScreen(): React.JSX.Element {
   const filterChips = useMemo(() => {
     const baseChips = [
       { key: 'All', label: 'All' },
-      { key: 'Pinned', label: '📌 Pinned' },
-      { key: 'Due', label: '📅 Due for Review' },
+      { key: 'Pinned', label: 'Pinned' },
+      { key: 'Due', label: 'Due for Review' },
     ];
     const subjectChips = availableSubjects.map((sub) => ({
       key: sub,
@@ -1082,7 +1086,7 @@ export default function LearnScreen(): React.JSX.Element {
                   ref={syllabusListRef}
                   sections={sections}
                   keyExtractor={(item, index) => item + index}
-                  stickySectionHeadersEnabled={true}
+                  stickySectionHeadersEnabled={false}
                   keyboardDismissMode="on-drag"
                   removeClippedSubviews={Platform.OS === 'android'}
                   maxToRenderPerBatch={10}
@@ -1218,7 +1222,7 @@ export default function LearnScreen(): React.JSX.Element {
                   }}
                   ListEmptyComponent={
                     <View style={styles.emptyContainer}>
-                      <Text style={styles.emptyTitle}>No matching topics found 🔍</Text>
+                      <Text style={styles.emptyTitle}>No matching topics found</Text>
                       <Text style={styles.emptySubtitle}>
                         Try modifying your search filter keywords.
                       </Text>
@@ -1232,7 +1236,7 @@ export default function LearnScreen(): React.JSX.Element {
                     renderCseSetupScreen()
                   ) : userCategory === 'student' ? (
                     <>
-                      <Text style={styles.setupWelcomeTitle}>Set up your syllabus 📚</Text>
+                      <Text style={styles.setupWelcomeTitle}>Set up your syllabus</Text>
                       <Text style={styles.setupWelcomeSubtitle}>
                         Choose your exam to load recommended template or add manually
                       </Text>
@@ -1354,7 +1358,7 @@ export default function LearnScreen(): React.JSX.Element {
                     </>
                   ) : userCategory === 'employee' ? (
                     <>
-                      <Text style={styles.setupWelcomeTitle}>Set up your skill subjects 💼</Text>
+                      <Text style={styles.setupWelcomeTitle}>Set up your skill subjects</Text>
                       <Text style={styles.setupWelcomeSubtitle}>
                         Load the work skills template or build your professional development topics manually
                       </Text>
@@ -1397,7 +1401,7 @@ export default function LearnScreen(): React.JSX.Element {
                     </>
                   ) : (
                     <>
-                      <Text style={styles.setupWelcomeTitle}>Add your subjects manually 📚</Text>
+                      <Text style={styles.setupWelcomeTitle}>Add your subjects manually</Text>
                       <Text style={styles.setupWelcomeSubtitle}>
                         Type in your custom subjects, chapters, and topics to start tracking your learning
                       </Text>
@@ -1516,7 +1520,7 @@ export default function LearnScreen(): React.JSX.Element {
               {activeFilter === 'Due' && filteredNotes.length > 0 && (
                 <View style={styles.dueNoticeContainer}>
                   <Text style={styles.dueNoticeText}>
-                    {`📅 ${filteredNotes.length} note${
+                    {`${filteredNotes.length} note${
                       filteredNotes.length === 1 ? '' : 's'
                     } due for revision today`}
                   </Text>
@@ -1553,7 +1557,9 @@ export default function LearnScreen(): React.JSX.Element {
                   renderItem={renderNoteItem}
                   ListEmptyComponent={
                     <View style={styles.emptyContainer}>
-                      <Text style={{ fontSize: 40, marginBottom: 12 }}>📝</Text>
+                      <View style={{ marginBottom: 12 }}>
+                        <FileText size={40} color="#5B4FE8" />
+                      </View>
                       <Text style={styles.emptyTitle}>No notes yet</Text>
                       <Text style={styles.emptySubtitle}>
                         Capture ideas, formulas, and concepts from your studies
@@ -1636,7 +1642,7 @@ export default function LearnScreen(): React.JSX.Element {
                       ) : (
                         /* Empty deck state */
                         <View style={styles.emptyContainer}>
-                          <Text style={styles.emptyTitle}>All caught up! 🎉</Text>
+                          <Text style={styles.emptyTitle}>All caught up!</Text>
                           <Text style={styles.emptySubtitle}>
                             {reviewAllFlashcards
                               ? 'No notes exist in your library. Create notes to generate flashcards.'
@@ -2618,7 +2624,7 @@ const styles = StyleSheet.create({
   },
   // Setup Overlay
   setupOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(23, 23, 42, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',

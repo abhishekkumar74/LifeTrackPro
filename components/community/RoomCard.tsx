@@ -34,9 +34,9 @@ export const RoomCard = ({
       const pad = (n: number) => String(n).padStart(2, '0');
 
       if (hrs > 0) {
-        setTimerText(`⏱ ${hrs}:${pad(mins)}:${pad(secs)}`);
+        setTimerText(`${hrs}:${pad(mins)}:${pad(secs)}`);
       } else {
-        setTimerText(`⏱ ${pad(mins)}:${pad(secs)}`);
+        setTimerText(`${pad(mins)}:${pad(secs)}`);
       }
     };
 
@@ -75,13 +75,13 @@ export const RoomCard = ({
   const getRoomTypeLabel = () => {
     switch (room.room_type) {
       case 'silent':
-        return '🔇 Silent';
+        return 'Silent';
       case 'music':
-        return '🎵 Music';
+        return 'Music';
       case 'discussion':
-        return '💬 Discussion';
+        return 'Discussion';
       default:
-        return '🔇 Focus';
+        return 'Focus';
     }
   };
 
@@ -162,14 +162,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#E8E7E3',
+    borderColor: '#E6E4DF',
     padding: 16,
-    marginBottom: 10,
+    marginBottom: 12,
     shadowColor: '#17172A',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
   },
   topRow: {
     flexDirection: 'row',
@@ -181,22 +181,26 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   roomName: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 15,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
     color: '#17172A',
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   subjectChip: {
     alignSelf: 'flex-start',
-    marginTop: 4,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    marginTop: 6,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(91, 79, 232, 0.2)',
+    backgroundColor: 'rgba(91, 79, 232, 0.08)',
   },
   subjectText: {
-    fontFamily: 'DMSans-Medium',
+    fontFamily: 'DMSans-Bold',
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: 'bold',
+    color: '#5B4FE8',
   },
   rightColumn: {
     justifyContent: 'center',
@@ -205,70 +209,79 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E85858',
     borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(232, 88, 88, 0.06)',
   },
   endButtonText: {
     color: '#E85858',
-    fontFamily: 'DMSans-Medium',
-    fontSize: 13,
-    fontWeight: '600',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   joinButton: {
     backgroundColor: '#5B4FE8',
     borderRadius: 12,
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 18,
     shadowColor: '#5B4FE8',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
-    elevation: 2,
+    elevation: 3,
   },
   joinButtonText: {
     color: '#FFFFFF',
-    fontFamily: 'DMSans-Medium',
+    fontFamily: 'DMSans-Bold',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   middleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 14,
   },
   studyingCountText: {
-    fontFamily: 'DMSans',
+    fontFamily: 'DMSans-Medium',
     fontSize: 12,
-    color: '#9B9BAF',
-    marginLeft: 8,
+    color: '#4A4A68',
+    fontWeight: '600',
+    marginLeft: 10,
   },
   bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F4F3F0',
   },
   roomTypeIndicator: {
-    fontFamily: 'DMSans',
-    fontSize: 11,
-    color: '#9B9BAF',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11.5,
+    color: '#6C6C80',
+    fontWeight: '500',
   },
   timerText: {
     fontFamily: 'DMMono',
     fontSize: 12,
+    fontWeight: 'bold',
     color: '#5B4FE8',
   },
   endedBadge: {
-    backgroundColor: '#E8E7E3',
+    backgroundColor: '#F1F0EC',
+    borderWidth: 1,
+    borderColor: '#E2E0D8',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     alignSelf: 'flex-start',
   },
   endedBadgeText: {
-    color: '#5C5C70',
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    fontWeight: '600',
+    color: '#6C6C80',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11.5,
+    fontWeight: 'bold',
   },
 });

@@ -189,10 +189,12 @@ export const CreateHabitSheet: React.FC<CreateHabitSheetProps> = ({
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
+  if (!isVisible) return null;
+
   return (
     <BottomSheet
       ref={sheetRef}
-      index={-1}
+      index={0}
       snapPoints={['70%']}
       enablePanDownToClose={true}
       backdropComponent={renderBackdrop}
@@ -504,8 +506,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   saveButtonDisabled: {
-    backgroundColor: COLORS.border,
-    opacity: 0.5,
+    backgroundColor: COLORS.violet,
+    opacity: 0.4,
   },
   saveButtonText: {
     fontFamily: TYPOGRAPHY.fonts.sans,

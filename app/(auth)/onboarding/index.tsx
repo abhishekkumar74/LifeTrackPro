@@ -25,13 +25,14 @@ import SafeScreen from '@/components/shared/SafeScreen';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '@/constants/theme';
 import { UserCategory, UserProfile } from '@/types/app.types';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { requestNotificationPermission } from '@/lib/notifications';
 
 // Step components
-import Step1Profile from './steps/step-1-profile';
-import Step2Subcategory from './steps/step-2-subcategory';
-import Step3Goal from './steps/step-3-goal';
-import Step4Hours from './steps/step-4-hours';
-import Step5Confirm from './steps/step-5-confirm';
+import Step1Profile from '@/components/onboarding/steps/step-1-profile';
+import Step2Subcategory from '@/components/onboarding/steps/step-2-subcategory';
+import Step3Goal from '@/components/onboarding/steps/step-3-goal';
+import Step4Hours from '@/components/onboarding/steps/step-4-hours';
+import Step5Confirm from '@/components/onboarding/steps/step-5-confirm';
 
 export interface OnboardingState {
   name: string;
@@ -279,7 +280,12 @@ export default function OnboardingScreen(): React.JSX.Element {
         }
       }
 
-      // On onboarding complete success
+      // On onboarding complete success request notifications & route to tabs
+      try {
+        await requestNotificationPermission();
+      } catch (permErr) {
+        if (__DEV__) console.warn('Onboarding notification request warning:', permErr);
+      }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/(tabs)');
 

@@ -497,14 +497,15 @@ export type Database = {
     };
   };
 }
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL ||
+  'https://zvfeafmixnevqbelxnqp.supabase.co';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase environment variables. Check your .env file.'
-  );
-}
+const supabaseAnonKey =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2ZmVhZm1peG5ldnFiZWx4bnFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzODM0MzMsImV4cCI6MjA5NTk1OTQzM30.fuo3NIPNqx69uApbDMqaWEl2qs8-DyCHHZOYoKUqFIo';
 
 export const supabase = createClient<any>(
   supabaseUrl,
@@ -525,7 +526,7 @@ export const supabase = createClient<any>(
         const controller = new AbortController();
         const timeoutId = setTimeout(
           () => controller.abort('Request timed out'),
-          30000 // 30 second timeout
+          15000 // 15 second network timeout for reliable responses
         );
 
         if (options.signal) {
@@ -554,8 +555,24 @@ export const supabase = createClient<any>(
           ) {
             throw new Error('Network request timed out or was cancelled. Please try again.');
           }
-          if (err?.message === 'Network request failed' || err?.message?.includes('Network request failed')) {
-            throw new Error('Network connection error. Please check your internet connection and try again.');
+          if (
+            err?.message === 'Network request failed' ||
+            err?.message?.includes('Network request failed') ||
+            err?.message?.includes('hostname could not be found') ||
+            err?.message?.includes('UnexpectedException') ||
+            err?.message?.includes('fetch failed')
+          ) {
+            return new Response(
+              JSON.stringify({
+                error: 'network_error',
+                message: 'Network connection error or server host not found.',
+              }),
+              {
+                status: 503,
+                statusText: 'Service Unavailable',
+                headers: { 'Content-Type': 'application/json' },
+              }
+            );
           }
           throw err;
         } finally {

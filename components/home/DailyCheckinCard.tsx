@@ -9,15 +9,16 @@ import Animated, {
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 
+import { Frown, Meh, Smile, SmilePlus, Zap } from 'lucide-react-native';
 import { COLORS, TYPOGRAPHY } from '@/constants/theme';
 import { useTodayCheckin, useLogCheckin } from '@/lib/hooks/use-stats';
 
 const MOODS = [
-  { emoji: '😫', val: 1 },
-  { emoji: '😕', val: 2 },
-  { emoji: '😐', val: 3 },
-  { emoji: '🙂', val: 4 },
-  { emoji: '🔥', val: 5 },
+  { val: 1, Icon: Frown, color: '#E53E3E' },
+  { val: 2, Icon: Meh, color: '#DD6B20' },
+  { val: 3, Icon: Smile, color: '#D69E2E' },
+  { val: 4, Icon: SmilePlus, color: '#38A169' },
+  { val: 5, Icon: Zap, color: '#5B4FE8' },
 ];
 
 export const DailyCheckinCard: React.FC = () => {
@@ -87,6 +88,7 @@ export const DailyCheckinCard: React.FC = () => {
           <View style={styles.moodRow}>
             {MOODS.map((item) => {
               const isChosen = selectedMood === item.val;
+              const MoodIcon = item.Icon;
               return (
                 <TouchableOpacity
                   key={item.val}
@@ -97,9 +99,10 @@ export const DailyCheckinCard: React.FC = () => {
                   onPress={() => handleSelectMood(item.val)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.emojiText, isChosen && styles.emojiTextSelected]}>
-                    {item.emoji}
-                  </Text>
+                  <MoodIcon
+                    size={22}
+                    color={isChosen ? '#E8A020' : '#5C5C70'}
+                  />
                 </TouchableOpacity>
               );
             })}

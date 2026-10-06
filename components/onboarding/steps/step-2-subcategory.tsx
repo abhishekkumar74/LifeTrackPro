@@ -14,7 +14,6 @@ interface StepProps {
 
 const SUBCATEGORY_OPTIONS = {
   student: [
-    // Competitive Exams
     'NEET',
     'JEE Main',
     'JEE Advanced',
@@ -54,20 +53,16 @@ const SUBCATEGORY_OPTIONS = {
     'Coding / DSA',
     'Other',
   ],
-
   cse_student: [
-    // Career Goals
     'Amazon SDE',
     'Google SWE', 
     'Microsoft SWE',
     'Meta/Facebook',
     'Startup (Product)',
     'FAANG (General)',
-    // Academic
     'GATE Exam',
     'Campus Placement',
     'Higher Studies (MS/MBA)',
-    // Domain
     'Backend Development',
     'Full Stack Development',
     'DevOps / Cloud',
@@ -76,7 +71,6 @@ const SUBCATEGORY_OPTIONS = {
     'Open Source',
     'Other',
   ],
-
   employee: [
     'Corporate / MNC',
     'Government Job',
@@ -94,7 +88,6 @@ const SUBCATEGORY_OPTIONS = {
     'Self Employed',
     'Other',
   ],
-
   creator: [
     'YouTuber / Video Creator',
     'Instagram / Reels Creator',
@@ -109,7 +102,6 @@ const SUBCATEGORY_OPTIONS = {
     'Digital Marketer',
     'Other',
   ],
-
   entrepreneur: [
     'Early Stage Startup',
     'Growing Business',
@@ -125,7 +117,6 @@ const SUBCATEGORY_OPTIONS = {
     'Side Business / Hustle',
     'Other',
   ],
-
   educator: [
     'School Teacher',
     'College Professor',
@@ -135,7 +126,6 @@ const SUBCATEGORY_OPTIONS = {
     'Skill Trainer',
     'Other',
   ],
-
   aspirant: [
     'Career Change',
     'Skill Building',
@@ -228,7 +218,6 @@ export default function Step2Subcategory({ state, onChange }: StepProps): React.
         Select {isMultiSelect ? 'all that apply' : 'your primary focus'}.
       </Text>
 
-      {/* Search Input for student long list */}
       {(category === 'student' || category === 'cse_student') && (
         <View style={styles.searchContainer}>
           <TextInput
@@ -271,7 +260,6 @@ export default function Step2Subcategory({ state, onChange }: StepProps): React.
         })}
       </View>
 
-      {/* Custom Input for Other */}
       {showCustomInput && (
         <View style={styles.customInputContainer}>
           <Text style={styles.customLabel}>Tell us your focus area:</Text>
@@ -335,7 +323,7 @@ const styles = StyleSheet.create({
   pill: {
     paddingVertical: 10,
     paddingHorizontal: 18,
-    borderRadius: RADIUS.lg + 4, // ~20px
+    borderRadius: RADIUS.lg + 4,
   },
   pillUnselected: {
     backgroundColor: COLORS.surface,

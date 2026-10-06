@@ -1,7 +1,9 @@
+import { RatingModal } from '@/components/shared/RatingModal';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import { useNotificationPermission } from '@/lib/hooks/use-permissions';
 import {
   cancelAllNotifications,
+  cancelScheduledNotification,
   scheduleMorningBrief,
   scheduleStreakAlert,
 } from '@/lib/notifications';
@@ -19,7 +21,6 @@ import BottomSheet, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
-import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import {
   ArrowLeft,
@@ -32,6 +33,7 @@ import {
   Minus,
   Plus,
   Shield,
+  Star,
   Upload,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -42,6 +44,7 @@ import {
   Platform,
   ScrollView,
   Share,
+  StatusBar,
   StyleSheet,
   Switch,
   Text,
@@ -296,9 +299,11 @@ export default function ProfileScreen(): React.JSX.Element {
   const [category, setCategory] = useState<UserCategory>(profile?.category || 'student');
   const [peakTime, setPeakTime] = useState(profile?.peak_time || 'morning');
   const [defaultDuration, setDefaultDuration] = useState(25);
+  const [showRatingModal, setShowRatingModal] = useState(false);
 
   // Subcategory and bottom sheet states
   const subCategorySheetRef = useRef<BottomSheet>(null);
+  const [isSubCategoryPickerOpen, setIsSubCategoryPickerOpen] = useState(false);
   const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>(profile?.sub_category || []);
   const [customSubcategoryText, setCustomSubcategoryText] = useState('');
   const [subCategorySearchQuery, setSubCategorySearchQuery] = useState('');
@@ -396,7 +401,7 @@ export default function ProfileScreen(): React.JSX.Element {
     const custom = (profile?.sub_category || []).find((s) => !predefined.includes(s));
     setCustomSubcategoryText(custom || '');
     setSubCategorySearchQuery('');
-    subCategorySheetRef.current?.expand();
+    setIsSubCategoryPickerOpen(true);
   };
 
   const handleCategorySelect = (cat: UserCategory) => {
@@ -458,7 +463,7 @@ export default function ProfileScreen(): React.JSX.Element {
       {
         onSuccess: () => {
           showToast('Updated ✓', 'success');
-          subCategorySheetRef.current?.close();
+          setIsSubCategoryPickerOpen(false);
           queryClient.invalidateQueries({ queryKey: ['subjects'] });
         },
         onError: () => {
@@ -505,7 +510,7 @@ export default function ProfileScreen(): React.JSX.Element {
       const topTitle = tasks && tasks[0] ? tasks[0].title : 'Complete your daily habits';
       await scheduleMorningBrief(topTitle);
     } else {
-      await Notifications.cancelScheduledNotificationAsync('morning_brief').catch(() => { });
+      await cancelScheduledNotification('morning_brief');
     }
   };
 
@@ -522,7 +527,7 @@ export default function ProfileScreen(): React.JSX.Element {
     if (value) {
       await scheduleStreakAlert();
     } else {
-      await Notifications.cancelScheduledNotificationAsync('streak_alert').catch(() => { });
+      await cancelScheduledNotification('streak_alert');
     }
   };
 
@@ -609,19 +614,27 @@ export default function ProfileScreen(): React.JSX.Element {
   const initials = profile?.name ? profile.name.trim().charAt(0).toUpperCase() : 'U';
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent}>
-        {/* HEADER */}
-        <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top : 20 }]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-          >
-            <ArrowLeft size={20} color="#FFFFFF" />
-          </TouchableOpacity>
+    <View style={styles.rootContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#17172A" translucent={false} />
+      
+      {/* FIXED TOP NAV BAR (Ensures status bar area is always dark navy with white icons) */}
+      <View style={[styles.fixedTopNav, { paddingTop: Math.max(insets.top + 4, 16) }]}>
+        <TouchableOpacity
+          style={styles.fixedBackButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <ArrowLeft size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.fixedTopTitle}>Profile & Settings</Text>
+        <View style={{ width: 36 }} />
+      </View>
 
-          <View style={styles.headerAvatarContainer}>
+      <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} bounces={false}>
+          {/* HEADER AVATAR BANNER */}
+          <View style={styles.header}>
+            <View style={styles.headerAvatarContainer}>
             {profile?.avatar_url ? (
               <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
             ) : (
@@ -707,9 +720,9 @@ export default function ProfileScreen(): React.JSX.Element {
 
           {/* Inline Edit Name Row */}
           {isEditingName ? (
-            <View style={styles.row}>
-              <View style={styles.rowLabelCol}>
-                <Text style={styles.rowTitle}>Name</Text>
+            <View style={styles.rowEditing}>
+              <Text style={styles.rowTitle}>Name</Text>
+              <View style={styles.inputWithButtonRow}>
                 <TextInput
                   style={styles.nameRowInput}
                   value={name}
@@ -721,10 +734,10 @@ export default function ProfileScreen(): React.JSX.Element {
                     }, 200);
                   }}
                 />
+                <TouchableOpacity style={styles.inlineSaveButton} onPress={handleSaveName}>
+                  <Check size={16} color="#FFFFFF" />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity style={styles.inlineSaveButton} onPress={handleSaveName}>
-                <Check size={16} color="#FFFFFF" />
-              </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity
@@ -981,6 +994,18 @@ export default function ProfileScreen(): React.JSX.Element {
 
           <TouchableOpacity
             style={styles.row}
+            onPress={() => setShowRatingModal(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.rowLabelCol}>
+              <Text style={styles.rowTitle}>Rate LifeTrack Pro</Text>
+              <Text style={styles.rowSubtitle}>Enjoying the app? Leave us a rating</Text>
+            </View>
+            <Star size={18} color="#E8A020" fill="#E8A020" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.row}
             onPress={() => router.push('/terms')}
             activeOpacity={0.7}
           >
@@ -999,100 +1024,143 @@ export default function ProfileScreen(): React.JSX.Element {
       </ScrollView>
 
       {/* Subcategory Picker Bottom Sheet */}
-      <BottomSheet
-        ref={subCategorySheetRef}
-        index={-1}
-        snapPoints={['75%']}
-        enablePanDownToClose
-        backdropComponent={renderBackdrop}
-        keyboardBehavior="interactive"
-      >
-        <BottomSheetView style={styles.sheetContent}>
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>
-              {(category === 'student' || category === 'cse_student') ? 'Select Preparations / Exams' : 'Select Sub-category'}
-            </Text>
-            <TouchableOpacity
-              style={styles.sheetSaveButton}
-              onPress={handleSaveSubcategories}
-              disabled={updateProfileMutation.isPending}
-            >
-              {updateProfileMutation.isPending ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.sheetSaveButtonText}>Save</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Search bar for student */}
-          {(category === 'student' || category === 'cse_student') && (
-            <View style={styles.sheetSearchContainer}>
-              <TextInput
-                style={styles.sheetSearchInput}
-                placeholder="Search exams/subjects..."
-                placeholderTextColor="#9B9BAF"
-                value={subCategorySearchQuery}
-                onChangeText={setSubCategorySearchQuery}
-                autoCorrect={false}
-              />
-            </View>
-          )}
-
-          <ScrollView
-            style={styles.sheetScrollView}
-            contentContainerStyle={styles.sheetScrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.sheetPillsContainer}>
-              {filteredSubCategories.map((sub) => {
-                const isSelected = selectedSubcategories.includes(sub);
-                return (
-                  <TouchableOpacity
-                    key={sub}
-                    style={[
-                      styles.sheetPill,
-                      isSelected ? styles.sheetPillSelected : styles.sheetPillUnselected,
-                    ]}
-                    onPress={() => handleToggleSubcategory(sub)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.sheetPillText,
-                        isSelected ? styles.sheetPillTextSelected : styles.sheetPillTextUnselected,
-                      ]}
-                    >
-                      {sub}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+      {isSubCategoryPickerOpen && (
+        <BottomSheet
+          ref={subCategorySheetRef}
+          index={0}
+          snapPoints={['75%']}
+          enablePanDownToClose
+          backdropComponent={renderBackdrop}
+          keyboardBehavior="interactive"
+          onChange={(index) => {
+            if (index === -1) {
+              setIsSubCategoryPickerOpen(false);
+            }
+          }}
+        >
+          <BottomSheetView style={styles.sheetContent}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>
+                {(category === 'student' || category === 'cse_student') ? 'Select Preparations / Exams' : 'Select Sub-category'}
+              </Text>
+              <TouchableOpacity
+                style={styles.sheetSaveButton}
+                onPress={handleSaveSubcategories}
+                disabled={updateProfileMutation.isPending}
+              >
+                {updateProfileMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.sheetSaveButtonText}>Save</Text>
+                )}
+              </TouchableOpacity>
             </View>
 
-            {/* Custom Input for Other */}
-            {selectedSubcategories.includes('Other') && (
-              <View style={styles.sheetCustomInputContainer}>
-                <Text style={styles.sheetCustomLabel}>Enter your custom focus area:</Text>
-                <BottomSheetTextInput
-                  style={styles.sheetCustomInput}
-                  placeholder="e.g. CA Foundation, IELTS, Coding..."
+            {/* Search bar for student */}
+            {(category === 'student' || category === 'cse_student') && (
+              <View style={styles.sheetSearchContainer}>
+                <TextInput
+                  style={styles.sheetSearchInput}
+                  placeholder="Search exams/subjects..."
                   placeholderTextColor="#9B9BAF"
-                  value={customSubcategoryText}
-                  onChangeText={setCustomSubcategoryText}
-                  maxLength={50}
+                  value={subCategorySearchQuery}
+                  onChangeText={setSubCategorySearchQuery}
                   autoCorrect={false}
                 />
               </View>
             )}
-          </ScrollView>
-        </BottomSheetView>
-      </BottomSheet>
+
+            <ScrollView
+              style={styles.sheetScrollView}
+              contentContainerStyle={styles.sheetScrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.sheetPillsContainer}>
+                {filteredSubCategories.map((sub) => {
+                  const isSelected = selectedSubcategories.includes(sub);
+                  return (
+                    <TouchableOpacity
+                      key={sub}
+                      style={[
+                        styles.sheetPill,
+                        isSelected ? styles.sheetPillSelected : styles.sheetPillUnselected,
+                      ]}
+                      onPress={() => handleToggleSubcategory(sub)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.sheetPillText,
+                          isSelected ? styles.sheetPillTextSelected : styles.sheetPillTextUnselected,
+                        ]}
+                      >
+                        {sub}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Custom Input for Other */}
+              {selectedSubcategories.includes('Other') && (
+                <View style={styles.sheetCustomInputContainer}>
+                  <Text style={styles.sheetCustomLabel}>Enter your custom focus area:</Text>
+                  <BottomSheetTextInput
+                    style={styles.sheetCustomInput}
+                    placeholder="e.g. CA Foundation, IELTS, Coding..."
+                    placeholderTextColor="#9B9BAF"
+                    value={customSubcategoryText}
+                    onChangeText={setCustomSubcategoryText}
+                    maxLength={50}
+                    autoCorrect={false}
+                  />
+                </View>
+              )}
+            </ScrollView>
+          </BottomSheetView>
+        </BottomSheet>
+      )}
+
+      {/* Rating Reminder Modal */}
+      <RatingModal
+        isVisible={showRatingModal}
+        onClose={() => setShowRatingModal(false)}
+      />
     </SafeAreaView>
+  </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+    backgroundColor: '#17172A',
+  },
+  fixedTopNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: '#17172A',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    zIndex: 100,
+  },
+  fixedBackButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fixedTopTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F7F6F3',
@@ -1102,8 +1170,8 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#17172A',
-    paddingTop: 20,
-    paddingBottom: 32,
+    paddingTop: 16,
+    paddingBottom: 28,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
@@ -1260,24 +1328,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#5C5C70',
   },
+  rowEditing: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: '#F4F3F0',
+  },
+  inputWithButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
   nameRowInput: {
+    flex: 1,
     backgroundColor: '#F7F6F3',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E8E7E3',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    height: 40,
     color: '#17172A',
     fontFamily: 'DMSans',
     fontSize: 14,
-    marginTop: 6,
-    width: '100%',
   },
   inlineSaveButton: {
     backgroundColor: '#5B4FE8',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },

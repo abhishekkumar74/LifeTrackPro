@@ -19,6 +19,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { Frown, Meh, Smile, SmilePlus, Zap, LucideIcon } from 'lucide-react-native';
+
 interface SessionSummaryProps {
   isVisible: boolean;
   duration: number; // in minutes
@@ -31,20 +33,20 @@ interface SessionSummaryProps {
   selectedPlantId?: string;
 }
 
-const MOODS = [
-  { emoji: '😫', val: 1 },
-  { emoji: '😕', val: 2 },
-  { emoji: '😐', val: 3 },
-  { emoji: '🙂', val: 4 },
-  { emoji: '🔥', val: 5 },
+const MOOD_ICONS: { Icon: LucideIcon; val: number }[] = [
+  { Icon: Frown, val: 1 },
+  { Icon: Meh, val: 2 },
+  { Icon: Smile, val: 3 },
+  { Icon: SmilePlus, val: 4 },
+  { Icon: Zap, val: 5 },
 ];
 
-// Sub-component for an animated emoji selector
+// Sub-component for an animated mood selector
 const MoodEmoji: React.FC<{
-  emoji: string;
+  Icon: LucideIcon;
   active: boolean;
   onPress: () => void;
-}> = ({ emoji, active, onPress }) => {
+}> = ({ Icon, active, onPress }) => {
   const scale = useSharedValue(1);
 
   useEffect(() => {
@@ -59,9 +61,9 @@ const MoodEmoji: React.FC<{
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={styles.moodWrapper}>
-      <Animated.Text style={[styles.moodEmoji, animatedStyle]}>
-        {emoji}
-      </Animated.Text>
+      <Animated.View style={animatedStyle}>
+        <Icon size={24} color={active ? '#5B4FE8' : '#9B9BAF'} />
+      </Animated.View>
       {active && <View style={styles.activeDot} />}
     </TouchableOpacity>
   );
@@ -87,9 +89,9 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
   // Open or close bottom sheet when isVisible changes
   useEffect(() => {
     if (isVisible) {
-      // Reset form variables
-      setSelectedMood(null);
-      setSelectedAccuracy(null);
+      // Default to mood 4 (focused) and fully_focused accuracy so Save Session button is active
+      setSelectedMood(4);
+      setSelectedAccuracy('fully_focused');
       setNote('');
       setIsSaving(false);
       sheetRef.current?.expand();
@@ -98,18 +100,26 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
     }
   }, [isVisible]);
 
+  // Award Seeds: Base 5 seeds + 1 seed per 5 min + strict mode bonus
+  const durationBonus = Math.floor(duration / 5);
+  const strictBonus = isStrictMode ? (isPlantWilted ? 2 : 5) : 0;
+  const calculatedSeeds = 5 + durationBonus + strictBonus;
+
   const handleSave = async () => {
     if (isSaving) return;
-    if (!isStrictMode && selectedMood === null) return;
-    if (isStrictMode && selectedAccuracy === null) return;
     Keyboard.dismiss();
 
-    const moodVal = isStrictMode ? (selectedAccuracy === 'fully_focused' ? 5 : selectedAccuracy === 'partially_distracted' ? 3 : 1) : (selectedMood || 3);
-    const seedsEarned = isStrictMode ? (isPlantWilted ? 1 : 5) : 0;
+    const moodVal = isStrictMode
+      ? selectedAccuracy === 'fully_focused'
+        ? 5
+        : selectedAccuracy === 'partially_distracted'
+        ? 3
+        : 1
+      : selectedMood || 4;
 
     setIsSaving(true);
     try {
-      await onSave(moodVal, note, isStrictMode ? selectedAccuracy : null, seedsEarned);
+      await onSave(moodVal, note, isStrictMode ? selectedAccuracy : null, calculatedSeeds);
     } catch (e) {
       setIsSaving(false);
     }
@@ -144,7 +154,7 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
     >
       <BottomSheetView style={styles.contentContainer}>
         {/* Header */}
-        <Text style={styles.headerTitle}>Session Complete! 🎉</Text>
+        <Text style={styles.headerTitle}>Session Complete!</Text>
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
@@ -162,23 +172,12 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
             <Text style={styles.statLabel}>SUBJECT</Text>
           </View>
 
-          {isStrictMode ? (
-            <View style={styles.statCard}>
-              <Text style={styles.statValue} numberOfLines={1}>
-                {isPlantWilted ? '🥀 Wilted' : '🌻 Bloomed'}
-              </Text>
-              <Text style={[styles.statLabel, { color: '#E8A020' }]}>
-                +{isPlantWilted ? 1 : 5} SEEDS
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.statCard}>
-              <Text style={styles.statValue} numberOfLines={1}>
-                {`${pomodoroCount} 🍅`}
-              </Text>
-              <Text style={styles.statLabel}>INTERVALS</Text>
-            </View>
-          )}
+          <View style={styles.statCard}>
+            <Text style={[styles.statValue, { color: '#E8A020' }]} numberOfLines={1}>
+              {`+${calculatedSeeds}`}
+            </Text>
+            <Text style={[styles.statLabel, { color: '#E8A020' }]}>SEEDS EARNED</Text>
+          </View>
         </View>
 
         {/* Mood Label */}
@@ -189,9 +188,9 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
         {isStrictMode ? (
           <View style={styles.reflectionRow}>
             {[
-              { id: 'fully_focused', label: 'Fully Focused 🎯', color: '#00B894' },
-              { id: 'partially_distracted', label: 'Distracted 📱', color: '#E8A020' },
-              { id: 'off_track', label: 'Off Track ❌', color: '#E85858' },
+              { id: 'fully_focused', label: 'Fully Focused', color: '#00B894' },
+              { id: 'partially_distracted', label: 'Distracted', color: '#E8A020' },
+              { id: 'off_track', label: 'Off Track', color: '#E85858' },
             ].map((refObj) => {
               const active = selectedAccuracy === refObj.id;
               return (
@@ -212,12 +211,12 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
             })}
           </View>
         ) : (
-          /* Mood Emoji Selectors */
+          /* Mood Icon Selectors */
           <View style={styles.moodRow}>
-            {MOODS.map((m) => (
+            {MOOD_ICONS.map((m) => (
               <MoodEmoji
                 key={m.val}
-                emoji={m.emoji}
+                Icon={m.Icon}
                 active={selectedMood === m.val}
                 onPress={() => setSelectedMood(m.val)}
               />

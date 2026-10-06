@@ -1,8 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
-import { supabase } from '@/lib/supabase/client';
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '@/constants/theme';
 import { UserCategory } from '@/types/app.types';
 
@@ -23,16 +20,6 @@ interface StepProps {
   errorMessage: string | null;
 }
 
-// Map timeline display text to database enum values
-const TIMELINE_MAP: Record<string, '3M' | '6M' | '1Y' | '2Y' | '5Y'> = {
-  '3 Months': '3M',
-  '6 Months': '6M',
-  '1 Year': '1Y',
-  '2 Years': '2Y',
-  '5 Years': '5Y',
-};
-
-// Calculate timeline days
 const TIMELINE_DAYS: Record<string, number> = {
   '3 Months': 90,
   '6 Months': 180,
@@ -44,14 +31,12 @@ const TIMELINE_DAYS: Record<string, number> = {
 export default function Step5Confirm({ state, errorMessage }: StepProps): React.JSX.Element {
   const { name, category, subcategories, goalText, timeline, hours, peakTime } = state;
 
-  // Calculate deadline date representation for summary card
   const getDeadlineDisplay = (): string => {
     if (!timeline) return '';
     const daysToAdd = TIMELINE_DAYS[timeline] || 180;
     const targetDate = new Date();
     targetDate.setDate(targetDate.getDate() + daysToAdd);
     
-    // Format: "by June 2027"
     const months = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
@@ -63,7 +48,6 @@ export default function Step5Confirm({ state, errorMessage }: StepProps): React.
     if (subcategories && subcategories.length > 0) {
       return subcategories.join(', ');
     }
-    // Fallback if step 2 was skipped
     if (category) {
       return category.charAt(0).toUpperCase() + category.slice(1);
     }
@@ -82,33 +66,28 @@ export default function Step5Confirm({ state, errorMessage }: StepProps): React.
       <Text style={styles.heading}>You're all set, {name.split(' ')[0]}! 🎉</Text>
       <Text style={styles.subtext}>Here's what we'll build together.</Text>
 
-      {/* Summary visual card */}
       <View style={styles.card}>
         <View style={styles.accentBar} />
         
         <View style={styles.cardContent}>
-          {/* Row 1: Goal */}
           <View style={styles.row}>
             <Text style={styles.rowLabel}>GOAL</Text>
             <Text style={styles.rowValue} numberOfLines={2}>{goalText}</Text>
           </View>
           <View style={styles.divider} />
 
-          {/* Row 2: Timeline */}
           <View style={styles.row}>
             <Text style={styles.rowLabel}>TIMELINE</Text>
             <Text style={styles.rowValue}>{getDeadlineDisplay()}</Text>
           </View>
           <View style={styles.divider} />
 
-          {/* Row 3: Daily Time */}
           <View style={styles.row}>
             <Text style={styles.rowLabel}>DAILY TIME</Text>
             <Text style={styles.rowValue}>{hours} hours · {getPeakTimeDisplay()}</Text>
           </View>
           <View style={styles.divider} />
 
-          {/* Row 4: Focus */}
           <View style={styles.row}>
             <Text style={styles.rowLabel}>FOCUS ON</Text>
             <Text style={styles.rowValue} numberOfLines={1}>{getFocusDisplay()}</Text>
@@ -149,7 +128,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     overflow: 'hidden',
     minHeight: 240,
-    // Soft shadow
     shadowColor: COLORS.navy,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
@@ -175,7 +153,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: COLORS.t3,
-    letterSpacing: 0.88, // 0.08em equivalent
+    letterSpacing: 0.88,
   },
   rowValue: {
     fontFamily: TYPOGRAPHY.fonts.sans,

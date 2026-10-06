@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
 import BottomSheet from '@gorhom/bottom-sheet';
-import { Plus } from 'lucide-react-native';
+import { Plus, Mountain, Target, Trophy, CheckCircle2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
@@ -45,7 +45,7 @@ import { ErrorState } from '@/components/shared/ErrorState';
 // Constants
 const HEADER_TITLE = "Goal Vault";
 const SECTION_TASKS = "Tasks";
-const EMPTY_ACHIEVED = "No achieved goals yet 🎯";
+const EMPTY_ACHIEVED = "No achieved goals yet";
 const EMPTY_ACHIEVED_SUB = "Complete your first goal to see it here";
 const ERR_LOAD = "Could not load goals";
 const BTN_RETRY = "Retry";
@@ -371,7 +371,9 @@ export default function GoalsScreen(): React.JSX.Element {
     if (activeGoals.length === 0 && standaloneTasks.length === 0) {
       return (
         <View style={styles.emptyContainer}>
-          <Text style={{ fontSize: 40, marginBottom: 12 }}>🏔</Text>
+          <View style={{ marginBottom: 12 }}>
+            <Mountain size={40} color="#5B4FE8" />
+          </View>
           <Text style={styles.emptyText}>Your goal vault is empty</Text>
           <Text style={styles.emptySubText}>Set your first big goal and break it into daily steps</Text>
           <TouchableOpacity
@@ -484,7 +486,9 @@ export default function GoalsScreen(): React.JSX.Element {
     if (achievedGoals.length === 0) {
       return (
         <View style={styles.emptyContainer}>
-          <Text style={{ fontSize: 40, marginBottom: 12 }}>🎯</Text>
+          <View style={{ marginBottom: 12 }}>
+            <Trophy size={40} color="#E8A020" />
+          </View>
           <Text style={styles.emptyText}>No achieved goals yet</Text>
           <Text style={styles.emptySubText}>Complete your first goal to see it here</Text>
           <TouchableOpacity
@@ -597,7 +601,7 @@ export default function GoalsScreen(): React.JSX.Element {
               activeOpacity={0.8}
             >
               <View style={styles.fabOptionLabelPill}>
-                <Text style={styles.fabOptionLabelText}>✅ New Task</Text>
+                <Text style={styles.fabOptionLabelText}>New Task</Text>
               </View>
               <View style={[styles.fabOptionCircle, { backgroundColor: '#00B894' }]}>
                 <Plus size={16} color="#FFFFFF" strokeWidth={3} />
@@ -614,7 +618,7 @@ export default function GoalsScreen(): React.JSX.Element {
               activeOpacity={0.8}
             >
               <View style={styles.fabOptionLabelPill}>
-                <Text style={styles.fabOptionLabelText}>🎯 New Goal</Text>
+                <Text style={styles.fabOptionLabelText}>New Goal</Text>
               </View>
               <View style={[styles.fabOptionCircle, { backgroundColor: '#E8A020' }]}>
                 <Plus size={16} color="#FFFFFF" strokeWidth={3} />
@@ -789,7 +793,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   backdropOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(23, 23, 42, 0.4)',
     zIndex: 99,
   },

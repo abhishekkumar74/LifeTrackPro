@@ -44,6 +44,10 @@ LogBox.ignoreLogs([
   'Not authenticated',
   'Font registration was unsuccessful',
   'Expo AV has been deprecated',
+  'UnexpectedException',
+  'hostname could not be found',
+  'fetch failed',
+  'AuthRetryableFetchError',
 ]);
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -172,6 +176,23 @@ function RootLayout() {
           'DMSans-Medium': require('../assets/fonts/DMSans-Medium.ttf'),
           'DMSans-Bold': require('../assets/fonts/DMSans-Bold.ttf'),
           DMMono: require('../assets/fonts/DMMono-Regular.ttf'),
+          Caveat: 'https://fonts.gstatic.com/s/caveat/v18/WncdHAc5bAfYB2Q7ae54EA.ttf',
+          Fraunces: 'https://fonts.gstatic.com/s/fraunces/v31/6nuHBaBJf4MeaxHcU3j318b84YpS58A73zp_C852D5oU55k_3q751Z1F.ttf',
+          Newsreader: 'https://fonts.gstatic.com/s/newsreader/v25/6nU54q6y8_j9Z0y8eY3W3zNn4bS13p2z.ttf',
+          Kalam: 'https://fonts.gstatic.com/s/kalam/v16/KrumBXdLD2N7y8N07t7k.ttf',
+          PatrickHand: 'https://fonts.gstatic.com/s/patrickhand/v21/L0x5DF4xlVMF-BfR8bXMIhJPq48.ttf',
+          ArchitectsDaughter: 'https://fonts.gstatic.com/s/architectsdaughter/v18/KtkM350A33-of6jX6vG9I83WdSA2yL4.ttf',
+          IndieFlower: 'https://fonts.gstatic.com/s/indieflower/v17/1410350A33-of6jX6vG9I83WdSA2.ttf',
+          DancingScript: 'https://fonts.gstatic.com/s/dancingscript/v25/If2cXTr6YS-zF4S-Fv67xpxZ2g.ttf',
+          Pacifico: 'https://fonts.gstatic.com/s/pacifico/v22/FwZYrNK-Fv67xpxZ2g.ttf',
+          AmaticSC: 'https://fonts.gstatic.com/s/amaticsc/v26/Tavq20NPG20_W-D8fT-I-G3i.ttf',
+          CaveatBrush: 'https://fonts.gstatic.com/s/caveatbrush/v16/0FlmB2FpzvjA9KZ3wW3qXn8.ttf',
+          NanumPenScript: 'https://fonts.gstatic.com/s/nanumpenscript/v23/m8JVjfNBPaxyHbhX2kF0-W4X2Q.ttf',
+          Handlee: 'https://fonts.gstatic.com/s/handlee/v18/5aU19_atWWA67l57MhM.ttf',
+          Gaegu: 'https://fonts.gstatic.com/s/gaegu/v17/k3kVo80058Nua3U6xQ.ttf',
+          MarckScript: 'https://fonts.gstatic.com/s/marckscript/v17/nF1Y2Z92eS6P-e1jYx-G.ttf',
+          NothingYouCouldDo: 'https://fonts.gstatic.com/s/nothingyoucoulddo/v19/o-0bIp19-BD1Sro82IZm9L-13A23pL4.ttf',
+          Neucha: 'https://fonts.gstatic.com/s/neucha/v17/q4bMV2DGKK0197v2.ttf',
         });
       } catch (error) {
         if (__DEV__) {
@@ -314,6 +335,11 @@ function RootLayout() {
         setProfile(null);
         setLoading(false);
       }
+      setAuthInitialized(true);
+    }).catch(() => {
+      setSession(null);
+      setProfile(null);
+      setLoading(false);
       setAuthInitialized(true);
     });
 

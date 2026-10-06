@@ -8,12 +8,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { WifiOff, Wifi } from 'lucide-react-native';
+
 export const OfflineBanner: React.FC = () => {
   const insets = useSafeAreaInsets();
   const [bannerState, setBannerState] = useState<{
     type: 'offline' | 'online';
     text: string;
-  }>({ type: 'offline', text: '📶 Offline Mode | Using cached data' });
+  }>({ type: 'offline', text: 'Offline Mode | Using cached data' });
 
   const translateY = useSharedValue(150); // Start hidden off-screen below
   const timeoutRef = React.useRef<any>(null);
@@ -25,8 +27,8 @@ export const OfflineBanner: React.FC = () => {
       }
 
       const text = type === 'offline'
-        ? '📶 Offline Mode | Using cached data'
-        : '🟢 Back Online | Connected';
+        ? 'Offline Mode | Using cached data'
+        : 'Back Online | Connected';
 
       setBannerState({ type, text });
       translateY.value = withTiming(0, { duration: 400 });
@@ -88,6 +90,11 @@ export const OfflineBanner: React.FC = () => {
         { backgroundColor: containerBgColor },
       ]}
     >
+      {bannerState.type === 'offline' ? (
+        <WifiOff size={14} color={textColor} style={{ marginRight: 6 }} />
+      ) : (
+        <Wifi size={14} color={textColor} style={{ marginRight: 6 }} />
+      )}
       <Text style={[styles.text, { color: textColor }]}>{bannerState.text}</Text>
     </Animated.View>
   );

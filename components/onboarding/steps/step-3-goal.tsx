@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     height: 100,
     paddingTop: 14,
-    paddingBottom: 24, // leaves room for character counter
+    paddingBottom: 24,
     paddingHorizontal: 14,
   },
   textInputFocused: {
@@ -171,12 +171,12 @@ const styles = StyleSheet.create({
   },
   timelineScroll: {
     gap: 8,
-    paddingRight: SPACING.xxl, // spacing at the end of scroll
+    paddingRight: SPACING.xxl,
   },
   chip: {
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: RADIUS.lg + 4, // ~20px
+    borderRadius: RADIUS.lg + 4,
   },
   chipUnselected: {
     backgroundColor: COLORS.surface,

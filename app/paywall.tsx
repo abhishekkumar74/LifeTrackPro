@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
+  StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -105,6 +106,7 @@ export default function PaywallScreen(): React.JSX.Element {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#12121e" animated />
       {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>LifeTrack Gold</Text>

@@ -7,6 +7,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { Frown, Meh, Smile, SmilePlus, Zap, LucideIcon } from 'lucide-react-native';
 import { DailyCheckin } from '@/types/app.types';
 
 interface MoodPickerProps {
@@ -15,17 +16,18 @@ interface MoodPickerProps {
   isLoading: boolean;
 }
 
-const EMOJIS = ['😫', '😕', '😐', '🙂', '🔥'];
+const MOOD_ICONS: LucideIcon[] = [Frown, Meh, Smile, SmilePlus, Zap];
+const EMOJIS = ['😡', '😔', '😐', '😊', '🥳'];
 
-// Custom Single Emoji Button Component with Reanimated spring scaling
+// Custom Single Mood Icon Button Component with Reanimated spring scaling
 interface EmojiBtnProps {
-  emoji: string;
+  Icon: LucideIcon;
   index: number;
   isSelected: boolean;
   onPress: () => void;
 }
 
-const EmojiButton: React.FC<EmojiBtnProps> = ({ emoji, isSelected, onPress }) => {
+const EmojiButton: React.FC<EmojiBtnProps> = ({ Icon, isSelected, onPress }) => {
   const scale = useSharedValue(1);
   const dotOpacity = useSharedValue(0);
 
@@ -44,9 +46,9 @@ const EmojiButton: React.FC<EmojiBtnProps> = ({ emoji, isSelected, onPress }) =>
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={styles.emojiContainer}>
-      <Animated.Text style={[styles.emojiText, animatedStyle]}>
-        {emoji}
-      </Animated.Text>
+      <Animated.View style={[animatedStyle, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Icon size={24} color={isSelected ? '#5B4FE8' : '#5C5C70'} />
+      </Animated.View>
       <Animated.View style={[styles.activeDot, dotAnimatedStyle]} />
     </TouchableOpacity>
   );
@@ -140,12 +142,13 @@ export const MoodPicker: React.FC<MoodPickerProps> = ({
 
   // Render state if already logged (and not currently clicking Update)
   if (todayCheckin && !isUpdating) {
+    const LoggedMoodIcon = MOOD_ICONS[Math.max(0, Math.min(4, todayCheckin.mood - 1))];
     return (
       <View style={styles.loggedContainer}>
         <View style={styles.loggedLeft}>
           <Text style={styles.loggedHeader}>DAILY CHECK-IN</Text>
           <View style={styles.loggedStats}>
-            <Text style={styles.loggedEmoji}>{getMoodEmoji(todayCheckin.mood)}</Text>
+            <LoggedMoodIcon size={20} color="#5B4FE8" />
             <View style={styles.dividerDot} />
             <Text style={styles.loggedText}>Energy</Text>
             {renderEnergyPillBar(todayCheckin.energy)}
@@ -167,12 +170,12 @@ export const MoodPicker: React.FC<MoodPickerProps> = ({
 
       {/* Mood Selector Row */}
       <View style={styles.emojisRow}>
-        {EMOJIS.map((emoji, idx) => {
+        {MOOD_ICONS.map((IconComponent, idx) => {
           const moodValue = idx + 1;
           return (
             <EmojiButton
               key={idx}
-              emoji={emoji}
+              Icon={IconComponent}
               index={idx}
               isSelected={selectedMood === moodValue}
               onPress={() => handleMoodSelect(moodValue)}

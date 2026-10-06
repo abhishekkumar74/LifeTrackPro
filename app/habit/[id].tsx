@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import { Skeleton } from '@/components/shared/Skeleton';
 
+import { ArrowLeft, Flame, Star } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase/client';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
 import { getTodayLocal } from '@/lib/utils/date';
@@ -370,7 +371,7 @@ export default function HabitDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <StatusBar style="dark" backgroundColor="#F7F6F3" translucent={false} />
+      <StatusBar style="dark" />
 
       {/* Header */}
       <View style={styles.header}>
@@ -379,10 +380,9 @@ export default function HabitDetailScreen() {
           onPress={() => router.back()}
           activeOpacity={0.6}
         >
-          <Text style={styles.backIcon}>←</Text>
+          <ArrowLeft size={20} color="#17172A" />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerEmoji}>{habit.emoji}</Text>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {habit.title}
           </Text>
@@ -403,17 +403,17 @@ export default function HabitDetailScreen() {
         {/* Streak Stats Cards */}
         <View style={styles.statsRow}>
           <View style={[styles.statCard, SHADOWS.card.ios]}>
-            <Text style={styles.statVal}>
-              {streak.currentStreak}
-              <Text style={styles.statUnit}>🔥</Text>
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={styles.statVal}>{streak.currentStreak}</Text>
+              <Flame size={18} color="#E8A020" fill="#E8A020" style={{ marginLeft: 3 }} />
+            </View>
             <Text style={styles.statLabel}>Current streak</Text>
           </View>
           <View style={[styles.statCard, SHADOWS.card.ios]}>
-            <Text style={styles.statVal}>
-              {streak.longestStreak}
-              <Text style={styles.statUnit}>⭐</Text>
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={styles.statVal}>{streak.longestStreak}</Text>
+              <Star size={18} color="#E8A020" fill="#E8A020" style={{ marginLeft: 3 }} />
+            </View>
             <Text style={styles.statLabel}>Best streak</Text>
           </View>
           <View style={[styles.statCard, SHADOWS.card.ios]}>
@@ -506,9 +506,9 @@ export default function HabitDetailScreen() {
           <View style={styles.timeRow}>
             {(
               [
-                { label: 'Morning 🌅', value: 'morning' },
-                { label: 'Afternoon ☀️', value: 'afternoon' },
-                { label: 'Evening 🌙', value: 'evening' },
+                { label: 'Morning', value: 'morning' },
+                { label: 'Afternoon', value: 'afternoon' },
+                { label: 'Evening', value: 'evening' },
               ] as const
             ).map((opt) => {
               const isSelected = habit.best_time === opt.value;

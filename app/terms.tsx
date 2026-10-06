@@ -16,11 +16,11 @@ export default function TermsScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top : 20 }]}>
+      <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}

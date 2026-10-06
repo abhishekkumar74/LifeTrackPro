@@ -1,44 +1,72 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  FlatList,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  Dimensions,
-  StatusBar,
-  Alert,
-  Share,
-  Image,
-  ScrollView,
-  Keyboard,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router, Href } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase/client';
-import { StudyRoom } from '@/types/app.types';
-import { useRoomPresence, useRoomChat, useEndRoom, RoomMember, ChatMessage } from '@/lib/hooks/use-study-rooms';
+import { Skeleton } from '@/components/shared/Skeleton';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
+import { ChatMessage, RoomMember, useEndRoom, useRoomChat, useRoomPresence } from '@/lib/hooks/use-study-rooms';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useUiStore } from '@/lib/store/ui.store';
-import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import { supabase } from '@/lib/supabase/client';
+import { StudyRoom } from '@/types/app.types';
+import { useQuery } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
+
+let AudioModule: any = null;
+let isAudioAvailable: boolean | null = null;
+
+function getAudioModule() {
+  if (isAudioAvailable === false) return null;
+  if (AudioModule) return AudioModule;
+
+  try {
+    const { NativeModules } = require('react-native');
+    const { NativeModulesProxy } = require('expo-modules-core') || {};
+
+    const hasExpoAudioNative = !!(
+      NativeModules?.ExpoAudio ||
+      (NativeModulesProxy && NativeModulesProxy.ExpoAudio)
+    );
+
+    if (!hasExpoAudioNative) {
+      isAudioAvailable = false;
+      return null;
+    }
+
+    AudioModule = require('expo-audio');
+    isAudioAvailable = !!AudioModule;
+  } catch (e) {
+    isAudioAvailable = false;
+    AudioModule = null;
+  }
+  return AudioModule;
+}
+import { Href, router, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft, Music, Pause, Play, Send, Share2, Smile, Volume2, VolumeX } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Share,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import Animated, {
-  useSharedValue,
+  runOnJS,
   useAnimatedStyle,
+  useSharedValue,
   withRepeat,
   withSequence,
   withTiming,
-  runOnJS,
 } from 'react-native-reanimated';
-import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { Share2, ArrowLeft, Headphones, Play, Pause, Volume2, VolumeX, Send, Music, Smile, Maximize2, Minimize2 } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
-import { Audio } from 'expo-av';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 interface MusicStation {
   id: string;
@@ -117,6 +145,7 @@ const FloatingEmoji = React.memo<{ emoji: string; randomX: number; onComplete: (
 
 export default function ActiveRoomScreen(): React.JSX.Element {
   useAndroidBackHandler();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuthStore();
   const currentUserId = profile?.id || '';
@@ -160,7 +189,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   // Music State
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
   const [currentStation, setCurrentStation] = useState<MusicStation>(STATIONS[0]);
-  const soundInstanceRef = useRef<Audio.Sound | null>(null);
+  const soundInstanceRef = useRef<any>(null);
   const loadingSoundIdRef = useRef<string | null>(null);
   const [musicVolume, setMusicVolume] = useState(0.5);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -175,51 +204,43 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   }, []);
 
   const playStation = useCallback(async (station: MusicStation, volume: number) => {
+    const audioMod = getAudioModule();
+    if (!audioMod || !audioMod.createAudioPlayer) return;
     const loadId = Math.random().toString();
     loadingSoundIdRef.current = loadId;
 
     try {
-      // 1. Unload any existing fully loaded sound
+      // 1. Release any existing player
       if (soundInstanceRef.current) {
         try {
-          await soundInstanceRef.current.stopAsync();
-          await soundInstanceRef.current.unloadAsync();
-        } catch (e) {}
+          soundInstanceRef.current.pause();
+          soundInstanceRef.current.release?.();
+        } catch (e) { }
         soundInstanceRef.current = null;
       }
 
-      await Audio.setAudioModeAsync({
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
+      // 2. Create and play sound asset
+      try {
+        const player = audioMod.createAudioPlayer(station.asset);
+        player.loop = true;
+        player.volume = volume;
+        player.play();
 
-      // 2. Load the sound asset asynchronously
-      const { sound } = await Audio.Sound.createAsync(
-        station.asset,
-        {
-          shouldPlay: true,
-          isLooping: true,
-          volume: volume,
+        if (loadingSoundIdRef.current !== loadId) {
+          try {
+            player.pause();
+            player.release?.();
+          } catch (e) { }
+          return;
         }
-      );
 
-      // 3. Check if a newer play request has been initiated while we were loading
-      if (loadingSoundIdRef.current !== loadId) {
-        // Newer sound is loading, discard this one to prevent parallel playback leaks!
-        try {
-          await sound.stopAsync();
-          await sound.unloadAsync();
-        } catch (e) {}
-        return;
+        soundInstanceRef.current = player;
+        setIsPlayingMusic(true);
+      } catch (e) {
+        setIsPlayingMusic(false);
       }
-
-      soundInstanceRef.current = sound;
-      setIsPlayingMusic(true);
     } catch (err) {
       if (__DEV__) console.warn('Failed to play station stream:', err);
-      // Only reset state if this is still the active request
       if (loadingSoundIdRef.current === loadId) {
         setIsPlayingMusic(false);
       }
@@ -227,14 +248,14 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   }, []);
 
   const stopMusic = useCallback(async () => {
-    loadingSoundIdRef.current = null; // cancel any pending loads
+    loadingSoundIdRef.current = null;
     try {
       if (soundInstanceRef.current) {
-        await soundInstanceRef.current.stopAsync();
-        await soundInstanceRef.current.unloadAsync();
+        soundInstanceRef.current.pause();
+        soundInstanceRef.current.release?.();
         soundInstanceRef.current = null;
       }
-    } catch (e) {}
+    } catch (e) { }
     setIsPlayingMusic(false);
   }, []);
 
@@ -242,9 +263,9 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     setMusicVolume(vol);
     try {
       if (soundInstanceRef.current) {
-        await soundInstanceRef.current.setVolumeAsync(vol);
+        soundInstanceRef.current.volume = vol;
       }
-    } catch (e) {}
+    } catch (e) { }
   }, []);
 
   const handleHostSelectStation = useCallback((station: MusicStation) => {
@@ -296,8 +317,8 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     return () => {
       loadingSoundIdRef.current = null;
       if (soundInstanceRef.current) {
-        soundInstanceRef.current.stopAsync().catch(() => {});
-        soundInstanceRef.current.unloadAsync().catch(() => {});
+        soundInstanceRef.current.stopAsync().catch(() => { });
+        soundInstanceRef.current.unloadAsync().catch(() => { });
       }
     };
   }, []);
@@ -356,8 +377,8 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         if (payload.targetUserId === currentUserId) {
           try {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          } catch (e) {}
-          
+          } catch (e) { }
+
           useUiStore.getState().showToast(
             `✨ ${payload.senderName} sent you a ${payload.type === 'cheer' ? 'Cheer' : 'Nudge'}!`,
             'success'
@@ -396,8 +417,8 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     if (reactionChannelRef.current) {
       try {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      } catch (e) {}
-      
+      } catch (e) { }
+
       reactionChannelRef.current.send({
         type: 'broadcast',
         event: 'cheer',
@@ -407,7 +428,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           type,
         },
       });
-      
+
       useUiStore.getState().showToast(
         `Sent ${type === 'cheer' ? 'Cheer' : 'Nudge'}! ✨`,
         'success'
@@ -419,7 +440,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     if (reactionChannelRef.current) {
       try {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      } catch (e) {}
+      } catch (e) { }
       reactionChannelRef.current.send({
         type: 'broadcast',
         event: 'reaction',
@@ -433,7 +454,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     try {
       try {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      } catch (e) {}
+      } catch (e) { }
       const roomUrl = `lifetrackpro://rooms/${id}`;
       await Share.share({
         message: `Join my live study session "${room.name}" on LifeTrack Pro! Click here to join: ${roomUrl}`,
@@ -452,7 +473,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       if (isHost) {
         await endRoomMutation.mutateAsync(id || '');
       }
-    } catch (e) {}
+    } catch (e) { }
 
     Alert.alert(
       'Session Finished ⏱',
@@ -473,7 +494,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     const updateTimer = () => {
       const now = Date.now();
       const remainingSecs = Math.max(0, Math.floor((expiresAt - now) / 1000));
-      
+
       const hrs = Math.floor(remainingSecs / 3600);
       const mins = Math.floor((remainingSecs % 3600) / 60);
       const secs = remainingSecs % 60;
@@ -503,8 +524,8 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
   const handleFocusComplete = async (durationSecs: number, startedAt: string) => {
     try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
+
       const endedAt = new Date().toISOString();
       const durationMin = Math.max(1, Math.round(durationSecs / 60));
 
@@ -667,7 +688,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
             text: 'Stop',
             style: 'destructive',
             onPress: () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
               setFocusActive(false);
             },
           },
@@ -682,7 +703,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           {
             text: '25 Minutes',
             onPress: () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
               setFocusTimeLeft(25 * 60);
               setFocusDuration(25 * 60);
               setFocusStartedAt(new Date().toISOString());
@@ -692,7 +713,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           {
             text: '50 Minutes',
             onPress: () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
               setFocusTimeLeft(50 * 60);
               setFocusDuration(50 * 60);
               setFocusStartedAt(new Date().toISOString());
@@ -781,19 +802,12 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   };
 
   const getChatPlaceholder = () => {
-    switch (room?.room_type) {
-      case 'silent':
-        return 'Leave a quiet cheer or study update...';
-      case 'music':
-        return 'Share music vibes or cheer updates...';
-      default:
-        return 'Message...';
-    }
+    return 'Type a message...';
   };
 
   const handleMemberPress = (member: RoomMember) => {
     if (member.userId === currentUserId) return;
-    
+
     Alert.alert(
       `Support ${member.name} 👋`,
       'Send a quick silent reaction to boost their focus:',
@@ -815,8 +829,8 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" backgroundColor="#17172A" translucent={false} />
+    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
+      <StatusBar barStyle="light-content" backgroundColor="#14142B" translucent={false} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -824,28 +838,42 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         {/* TOP BAR */}
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.backIconButton} onPress={handleLeave} activeOpacity={0.7}>
-            <ArrowLeft size={20} color="#9B9BAF" />
+            <ArrowLeft size={18} color="#FFFFFF" />
           </TouchableOpacity>
 
-          <View style={styles.titleContainer}>
-            <Text style={styles.roomTitle} numberOfLines={1}>
-              {room.name}
-            </Text>
-            <View style={styles.subjectBadge}>
-              <Text style={styles.subjectBadgeText}>
-                {room.subject || 'General Focus'}
+          <View style={styles.headerGroupInfo}>
+            <View style={styles.headerGroupAvatar}>
+              <Text style={styles.headerGroupEmoji}>
+                {room.room_type === 'music' ? '🎧' : room.room_type === 'silent' ? '🤫' : '💬'}
               </Text>
+            </View>
+
+            <View style={styles.headerTextCol}>
+              <Text style={styles.roomTitle} numberOfLines={1}>
+                {room.name}
+              </Text>
+              <View style={styles.headerSubRow}>
+                <Text style={styles.headerSubText}>
+                  {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                </Text>
+                <Text style={styles.headerSubDot}>·</Text>
+                <View style={styles.subjectInlineBadge}>
+                  <Text style={styles.subjectInlineBadgeText} numberOfLines={1}>
+                    {room.subject || 'General'}
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={styles.headerRightActions}>
             <TouchableOpacity style={styles.shareTopButton} onPress={handleShare} activeOpacity={0.7}>
-              <Share2 size={16} color="#FFFFFF" />
+              <Share2 size={15} color="#FFFFFF" />
             </TouchableOpacity>
 
             <View style={styles.memberBadge}>
               <View style={styles.liveDot} />
-              <Text style={styles.memberBadgeText}>{memberCount} online</Text>
+              <Text style={styles.memberBadgeText}>{memberCount} live</Text>
             </View>
           </View>
         </View>
@@ -1051,7 +1079,13 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
         {/* START FOCUS BUTTON (Only in normal view) */}
         {!isChatExpanded && (
-          <View style={[styles.bottomContainer, !showChat && styles.bottomContainerNoChat]}>
+          <View style={[
+            styles.bottomContainer,
+            !showChat && styles.bottomContainerNoChat,
+            {
+              paddingBottom: Platform.OS === 'android' ? Math.max(insets.bottom + 12, 16) : Math.max(insets.bottom, 12),
+            },
+          ]}>
             <TouchableOpacity
               style={[styles.focusButton, focusActive && styles.stopFocusButton]}
               onPress={handleStartFocus}
@@ -1125,7 +1159,16 @@ const MemberBubble = React.memo<{
     opacity: borderOpacity.value,
   }));
 
-  const avatarColor = getColorForUser(member.userId);
+  const GRADIENT_PAIRS = [
+    { start: '#6C5CE7', end: '#A29BFE' },
+    { start: '#FF7675', end: '#FD79A8' },
+    { start: '#00B894', end: '#55EFC4' },
+    { start: '#E17055', end: '#FDCB6E' },
+    { start: '#0984E3', end: '#74B9FF' },
+    { start: '#6C5CE7', end: '#E84393' },
+  ];
+  const charCodeSum = (member.userId || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const gradPair = GRADIENT_PAIRS[charCodeSum % GRADIENT_PAIRS.length];
 
   return (
     <View style={styles.memberBubbleContainer}>
@@ -1134,16 +1177,20 @@ const MemberBubble = React.memo<{
         activeOpacity={0.8}
       >
         <Animated.View style={[styles.avatarCircle, pulseStyle]}>
-          <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
-            <Defs>
-              <LinearGradient id={`grad-${member.userId}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                <Stop offset="0%" stopColor={avatarColor} />
-                <Stop offset="100%" stopColor={`${avatarColor}CC`} />
-              </LinearGradient>
-            </Defs>
-            <Rect width="100%" height="100%" fill={`url(#grad-${member.userId})`} rx={26} ry={26} />
-          </Svg>
-          <Text style={styles.avatarInitials}>{member.initials}</Text>
+          {member.avatarUrl ? (
+            <Image source={{ uri: member.avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
+              <Defs>
+                <LinearGradient id={`grad-${member.userId}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                  <Stop offset="0%" stopColor={gradPair.start} />
+                  <Stop offset="100%" stopColor={gradPair.end} />
+                </LinearGradient>
+              </Defs>
+              <Rect width="100%" height="100%" fill={`url(#grad-${member.userId})`} rx={26} ry={26} />
+            </Svg>
+          )}
+          {!member.avatarUrl && <Text style={styles.avatarInitials}>{member.initials}</Text>}
         </Animated.View>
       </TouchableOpacity>
 
@@ -1202,16 +1249,16 @@ const MessageRow = React.memo<{ message: ChatMessage }>(({ message }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#17172A',
+    backgroundColor: '#0C0C1A',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#17172A',
+    backgroundColor: '#0C0C1A',
     justifyContent: 'center',
     alignItems: 'center',
   },
   errorText: {
-    color: '#E85858',
+    color: '#FF6B6B',
     fontFamily: 'DMSans-Medium',
     fontSize: 15,
     marginBottom: 20,
@@ -1231,140 +1278,207 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: '#14142B',
   },
   backIconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  titleContainer: {
+  headerGroupInfo: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 12,
+    marginHorizontal: 10,
+    gap: 10,
+  },
+  headerGroupAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(108, 92, 231, 0.25)',
+    borderWidth: 1.5,
+    borderColor: '#7D6BFB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#6C5CE7',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  headerGroupEmoji: {
+    fontSize: 19,
+  },
+  headerTextCol: {
+    flex: 1,
   },
   roomTitle: {
     fontFamily: 'DMSans-Bold',
     fontSize: 16,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    textAlign: 'center',
+    letterSpacing: -0.2,
   },
-  subjectBadge: {
-    backgroundColor: 'rgba(91, 79, 232, 0.1)',
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginTop: 3,
+  headerSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
   },
-  subjectBadgeText: {
+  headerSubText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 9,
-    color: '#8B6FE8',
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  headerSubDot: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.35)',
+  },
+  subjectInlineBadge: {
+    backgroundColor: 'rgba(108, 92, 231, 0.2)',
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(125, 107, 251, 0.4)',
+    maxWidth: 100,
+  },
+  subjectInlineBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9.5,
+    color: '#B8ADFF',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
+    fontWeight: 'bold',
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   shareTopButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   memberBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 184, 148, 0.12)',
-    borderRadius: 12,
-    paddingHorizontal: 8,
+    backgroundColor: 'rgba(46, 213, 115, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(46, 213, 115, 0.35)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    gap: 4,
+    gap: 6,
   },
   liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#00B894',
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#2ED573',
+    shadowColor: '#2ED573',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 4,
+    elevation: 2,
   },
   memberBadgeText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 'bold',
-    color: '#00B894',
+    color: '#2ED573',
   },
   timerCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    borderRadius: 20,
-    marginHorizontal: 20,
-    marginVertical: 10,
-    paddingVertical: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 24,
+    marginHorizontal: 16,
+    marginVertical: 12,
+    paddingVertical: 18,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.03)',
-    shadowColor: '#5B4FE8',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 2,
+    borderColor: 'rgba(255, 255, 255, 0.09)',
+    shadowColor: '#6C5CE7',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 3,
   },
   timerDisplay: {
     fontFamily: 'DMMono',
-    fontSize: 42,
-    color: '#FFFFFF',
+    fontSize: 46,
+    color: '#F0E6FF',
     fontWeight: '700',
     letterSpacing: -1,
   },
   timerLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
     marginTop: 4,
+    backgroundColor: 'rgba(108, 92, 231, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(108, 92, 231, 0.25)',
   },
   pulseActiveIndicator: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#5B4FE8',
+    backgroundColor: '#A29BFE',
   },
   timerSub: {
-    fontFamily: 'DMSans',
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10.5,
+    color: '#D6CEFF',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   membersSection: {
-    paddingHorizontal: 20,
-    marginBottom: 10,
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
   membersHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
+    paddingHorizontal: 4,
   },
   sectionLabel: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 'bold',
-    color: 'rgba(255, 255, 255, 0.4)',
-    letterSpacing: 0.8,
+    color: 'rgba(255, 255, 255, 0.5)',
+    letterSpacing: 1,
   },
   interactionSubtitle: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 10,
-    color: '#E8A020',
+    fontSize: 11,
+    color: '#FFD166',
+    backgroundColor: 'rgba(255, 209, 102, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   membersGridContent: {
     paddingBottom: 4,
@@ -1372,55 +1486,66 @@ const styles = StyleSheet.create({
   membersGridRow: {
     gap: 8,
     justifyContent: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   memberBubbleContainer: {
     width: COLUMN_WIDTH,
     alignItems: 'center',
   },
   avatarCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  avatarImage: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
   },
   avatarInitials: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: 'bold',
     color: '#FFFFFF',
     zIndex: 1,
   },
   memberName: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 10,
-    color: '#EDEDEF',
+    fontSize: 11,
+    color: '#F5F5FA',
     marginTop: 6,
     textAlign: 'center',
     width: '100%',
   },
   memberJoinedTime: {
     fontFamily: 'DMSans',
-    fontSize: 9,
-    color: 'rgba(255,255,255,0.4)',
+    fontSize: 9.5,
+    color: 'rgba(255, 255, 255, 0.45)',
     marginTop: 2,
     textAlign: 'center',
   },
   chatSection: {
     flex: 1,
     borderTopWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     paddingTop: 10,
   },
   chatSectionExpanded: {
     flex: 1,
     paddingTop: 4,
-    backgroundColor: '#17172A',
+    backgroundColor: '#0C0C1A',
   },
   chatHeader: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    marginBottom: 6,
   },
   chatHeaderRow: {
     flexDirection: 'row',
@@ -1431,26 +1556,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(91,79,232,0.15)',
+    backgroundColor: 'rgba(108,92,231,0.18)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(91,79,232,0.3)',
+    borderColor: 'rgba(108,92,231,0.35)',
   },
   expandChatButtonText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 11,
-    color: '#8B6FE8',
+    color: '#A29BFE',
     fontWeight: '700',
   },
   expandedChatHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#1E1E36',
+    backgroundColor: '#14142B',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
@@ -1467,14 +1592,14 @@ const styles = StyleSheet.create({
   expandedRoomSub: {
     fontFamily: 'DMSans',
     fontSize: 11,
-    color: '#9B9BAF',
+    color: '#A0A0B8',
     marginTop: 2,
   },
   minimizeChatButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#5B4FE8',
+    backgroundColor: '#6C5CE7',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
@@ -1487,12 +1612,12 @@ const styles = StyleSheet.create({
   },
   chatDivider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    marginBottom: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    marginBottom: 8,
   },
   chatListContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     gap: 12,
   },
   messageRow: {
@@ -1500,28 +1625,28 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 8,
     alignSelf: 'flex-start',
-    maxWidth: '80%',
+    maxWidth: '84%',
   },
   messageRowOwn: {
     alignSelf: 'flex-end',
     justifyContent: 'flex-end',
   },
   msgAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
   },
   msgAvatarImage: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
   },
   msgAvatarText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
@@ -1532,131 +1657,142 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   messageSenderName: {
-    fontFamily: 'DMSans',
-    fontSize: 10,
-    color: '#9B9BAF',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.55)',
+    marginLeft: 4,
   },
   messageBubble: {
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    minWidth: 60,
+    minWidth: 70,
   },
   messageBubbleOwn: {
-    backgroundColor: '#5B4FE8',
-    borderTopRightRadius: 4,
+    backgroundColor: '#6C5CE7',
+    borderBottomRightRadius: 4,
+    shadowColor: '#6C5CE7',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
   },
   messageBubbleOther: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    borderTopLeftRadius: 4,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderBottomLeftRadius: 4,
   },
   messageText: {
     fontFamily: 'DMSans',
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 20,
     color: '#FFFFFF',
   },
   messageTimeText: {
-    fontSize: 9,
-    fontFamily: 'DMSans',
+    fontSize: 9.5,
+    fontFamily: 'DMMono',
     marginTop: 4,
     alignSelf: 'flex-end',
   },
   messageTimeTextOwn: {
-    color: 'rgba(255, 255, 255, 0.6)',
+    color: 'rgba(255, 255, 255, 0.75)',
   },
   messageTimeTextOther: {
-    color: 'rgba(255, 255, 255, 0.4)',
+    color: 'rgba(255, 255, 255, 0.5)',
   },
   inputRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    paddingBottom: Platform.OS === 'ios' ? 14 : 10,
+    backgroundColor: '#14142B',
     borderTopWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     gap: 10,
     alignItems: 'center',
   },
   chatInput: {
     flex: 1,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.14)',
     paddingHorizontal: 16,
+    paddingTop: 0,
+    paddingBottom: 0,
     color: '#FFFFFF',
     fontFamily: 'DMSans',
-    fontSize: 13,
+    fontSize: 14,
+    textAlignVertical: 'center',
   },
   sendButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#5B4FE8',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#6C5CE7',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#5B4FE8',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowColor: '#6C5CE7',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
   },
   bottomContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#17172A',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#0C0C1A',
     borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
   bottomContainerNoChat: {
     marginTop: 'auto',
   },
   focusButton: {
-    height: 48,
-    borderRadius: 14,
+    height: 50,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    shadowColor: '#5B4FE8',
+    shadowColor: '#6C5CE7',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
   stopFocusButton: {
-    shadowColor: '#E85858',
+    shadowColor: '#FF6B6B',
   },
   focusButtonText: {
     color: '#FFFFFF',
     fontFamily: 'DMSans-Bold',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   reactionsContainer: {
     display: 'none',
   },
   emojiPickerPopup: {
     position: 'absolute',
-    bottom: 56,
+    bottom: 60,
     left: 16,
     right: 16,
     flexDirection: 'row',
     justifyContent: 'space-around',
-    backgroundColor: '#1E1E30',
-    borderRadius: 20,
+    backgroundColor: '#1B1B36',
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingVertical: 8,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    paddingVertical: 10,
     paddingHorizontal: 12,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
     zIndex: 10,
   },
   emojiPickerButton: {
@@ -1665,25 +1801,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emojiPickerText: {
-    fontSize: 22,
+    fontSize: 24,
   },
   emojiTriggerButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   musicBar: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 16,
-    marginHorizontal: 20,
-    padding: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 20,
+    marginHorizontal: 16,
+    padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     marginBottom: 10,
   },
   musicRowHeader: {
@@ -1697,23 +1833,25 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   musicIconWrapper: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: 'rgba(91, 79, 232, 0.1)',
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: 'rgba(108, 92, 231, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(108, 92, 231, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   musicStationName: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 13,
+    fontSize: 14,
     color: '#FFFFFF',
     fontWeight: '700',
   },
   musicStationGenre: {
     fontFamily: 'DMSans',
     fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.35)',
+    color: 'rgba(255, 255, 255, 0.45)',
     marginTop: 1,
   },
   musicControls: {
@@ -1722,78 +1860,78 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   musicPlayButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#5B4FE8',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#6C5CE7',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#5B4FE8',
+    shadowColor: '#6C5CE7',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 6,
     elevation: 3,
   },
   musicPlayButtonActive: {
-    backgroundColor: '#3B36B3',
+    backgroundColor: '#4834D4',
   },
   musicMuteButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   stationSelectorContainer: {
-    marginTop: 8,
+    marginTop: 10,
     borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.06)',
     paddingTop: 8,
   },
   hostControlTag: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: 'bold',
-    color: '#E8A020',
-    letterSpacing: 0.5,
+    color: '#FFD166',
+    letterSpacing: 0.6,
     marginBottom: 6,
   },
   stationSelector: {
     flexGrow: 0,
   },
   stationSelectorContent: {
-    gap: 6,
+    gap: 8,
     paddingRight: 10,
   },
   stationChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   stationChipActive: {
-    backgroundColor: 'rgba(91, 79, 232, 0.15)',
-    borderColor: '#5B4FE8',
+    backgroundColor: 'rgba(108, 92, 231, 0.22)',
+    borderColor: '#6C5CE7',
   },
   stationEmoji: {
-    fontSize: 12,
+    fontSize: 13,
   },
   stationChipText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 11.5,
+    color: 'rgba(255, 255, 255, 0.6)',
   },
   stationChipTextActive: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   memberMusicTag: {
     marginTop: 8,
@@ -1803,8 +1941,8 @@ const styles = StyleSheet.create({
   },
   memberMusicTagText: {
     fontFamily: 'DMSans',
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.3)',
-    lineHeight: 14,
+    fontSize: 10.5,
+    color: 'rgba(255, 255, 255, 0.4)',
+    lineHeight: 15,
   },
 });

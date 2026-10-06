@@ -8,14 +8,13 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
-import { Bell } from 'lucide-react-native';
+import { Bell, Flame, Users } from 'lucide-react-native';
 import { router, Href } from 'expo-router';
 
 // Constants
-const TIME_MORNING = 'Good morning ☀️';
-const TIME_AFTERNOON = 'Good afternoon 👋';
-const TIME_EVENING = 'Good evening 🌙';
-const FIRE_EMOJI = '🔥';
+const TIME_MORNING = 'Good morning';
+const TIME_AFTERNOON = 'Good afternoon';
+const TIME_EVENING = 'Good evening';
 const SHADOW_COLOR = '#000000';
 const BORDER_COLOR = '#E8E7E3';
 
@@ -24,9 +23,18 @@ interface HomeHeaderProps {
   streakCount: number;
   isLoading: boolean;
   avatarUrl?: string | null;
+  onPressStreak?: () => void;
+  onPressNotification?: () => void;
 }
 
-export const HomeHeader: React.FC<HomeHeaderProps> = ({ name, streakCount, isLoading, avatarUrl }) => {
+export const HomeHeader: React.FC<HomeHeaderProps> = ({
+  name,
+  streakCount,
+  isLoading,
+  avatarUrl,
+  onPressStreak,
+  onPressNotification,
+}) => {
   // Reanimated shared value for loading skeleton pulse
   const opacity = useSharedValue(0.4);
 
@@ -123,11 +131,16 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({ name, streakCount, isLoa
       </View>
 
       <View style={styles.rightSide}>
-        <View style={styles.streakPill} accessibilityLabel={`${streakCount} day streak`}>
-          <Text style={styles.streakText}>
-            {FIRE_EMOJI} {streakCount}
-          </Text>
-        </View>
+        <TouchableOpacity
+          style={[styles.streakPill, { flexDirection: 'row', alignItems: 'center' }]}
+          onPress={onPressStreak}
+          activeOpacity={0.7}
+          accessibilityLabel={`${streakCount} day streak`}
+          accessibilityRole="button"
+        >
+          <Flame size={13} color="#E8A020" fill="#E8A020" style={{ marginRight: 3 }} />
+          <Text style={styles.streakText}>{streakCount}</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.roomsButton}
@@ -137,17 +150,29 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({ name, streakCount, isLoa
           accessibilityRole="button"
           accessibilityHint="Navigate to active study rooms"
         >
-          <Text style={{ fontSize: 16 }}>👥</Text>
+          <Users size={17} color="#17172A" />
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={styles.notificationButton} 
+          style={[styles.notificationButton, { position: 'relative' }]} 
+          onPress={onPressNotification}
           activeOpacity={0.7}
           accessibilityLabel="Notifications"
           accessibilityRole="button"
           accessibilityHint="View notifications"
         >
           <Bell size={18} color="#17172A" />
+          <View
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: '#5B4FE8',
+            }}
+          />
         </TouchableOpacity>
       </View>
     </View>

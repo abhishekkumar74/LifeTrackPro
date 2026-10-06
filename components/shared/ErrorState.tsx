@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, TYPOGRAPHY } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
 
+import { AlertCircle } from 'lucide-react-native';
+
 interface ErrorStateProps {
   message?: string;
   onRetry: () => void;
@@ -19,7 +21,9 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.emoji}>😕</Text>
+      <View style={{ marginBottom: 16 }}>
+        <AlertCircle size={40} color="#E85858" />
+      </View>
       <Text style={styles.message}>{message}</Text>
       <TouchableOpacity
         style={styles.button}

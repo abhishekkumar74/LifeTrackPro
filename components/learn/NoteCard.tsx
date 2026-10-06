@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Pin } from 'lucide-react-native';
+import { Pin, Clock } from 'lucide-react-native';
 import { Note } from '@/types/app.types';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
 
@@ -149,7 +149,10 @@ export const NoteCard = React.memo<NoteCardProps>(({ note, onPress, onPin, searc
           <View style={styles.headerRight}>
             {isDue && (
               <View style={styles.dueBadge}>
-                <Text style={styles.dueText}>📅 Due for revision</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Clock size={10} color="#E8A020" />
+                  <Text style={styles.dueText}>Due for revision</Text>
+                </View>
               </View>
             )}
             {note.is_pinned && (

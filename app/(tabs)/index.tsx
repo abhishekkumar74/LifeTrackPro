@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { View, StyleSheet, ScrollView, RefreshControl, StatusBar, Text, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Flame, Timer, AlertCircle, AlertTriangle } from 'lucide-react-native';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
 
 import { useAuthStore } from '@/lib/store/auth.store';
@@ -27,6 +28,8 @@ import { DailyCheckinCard } from '@/components/home/DailyCheckinCard';
 // Quick Add Sheets
 import { QuickAddTaskSheet } from '@/components/home/QuickAddTaskSheet';
 import { QuickAddScheduleSheet } from '@/components/home/QuickAddScheduleSheet';
+import { StreakModal } from '@/components/shared/StreakModal';
+import { NotificationSheet } from '@/components/shared/NotificationSheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Constants
@@ -41,6 +44,8 @@ export default function HomeDashboardScreen(): React.JSX.Element {
 
   const [taskSheetVisible, setTaskSheetVisible] = useState(false);
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false);
+  const [streakModalVisible, setStreakModalVisible] = useState(false);
+  const [notificationSheetVisible, setNotificationSheetVisible] = useState(false);
   const [editingScheduleBlock, setEditingScheduleBlock] = useState<ScheduleBlock | null>(null);
   const [todayScheduleSnapshot, setTodayScheduleSnapshot] = useState<ScheduleBlock[]>([]);
   const completeTaskMutation = useCompleteTask();
@@ -356,6 +361,8 @@ export default function HomeDashboardScreen(): React.JSX.Element {
         streakCount={stats.habitStreak}
         isLoading={stats.isLoading}
         avatarUrl={profile?.avatar_url}
+        onPressStreak={() => setStreakModalVisible(true)}
+        onPressNotification={() => setNotificationSheetVisible(true)}
       />
 
       {/* Scrollable Dashboard zones */}
@@ -391,16 +398,20 @@ export default function HomeDashboardScreen(): React.JSX.Element {
             onPress={() => router.push('/(tabs)/stats')}
             activeOpacity={0.8}
           >
-            <View style={styles.summaryCardLeft}>
+            <View style={[styles.summaryCardLeft, { flexDirection: 'row', alignItems: 'center' }]}>
+              <Flame size={14} color="#E8A020" fill="#E8A020" style={{ marginRight: 4 }} />
               <Text style={styles.summaryStreakText}>
-                🔥 {stats.focusStreak} day focus streak
+                {stats.focusStreak} day focus streak
               </Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryCardRight}>
-              <Text style={styles.summaryFocusText}>
-                ⏱️ Today: {stats.focusMinutesToday}m focused
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Timer size={14} color="#5B4FE8" style={{ marginRight: 4 }} />
+                <Text style={styles.summaryFocusText}>
+                  Today: {stats.focusMinutesToday}m focused
+                </Text>
+              </View>
               <Text style={styles.arrowIcon}>→</Text>
             </View>
           </TouchableOpacity>
@@ -454,8 +465,8 @@ export default function HomeDashboardScreen(): React.JSX.Element {
                         </View>
                       )}
                     </View>
-                    {t.priority === 'urgent' && <Text style={styles.priorityEmoji}>🔴</Text>}
-                    {t.priority === 'important' && <Text style={styles.priorityEmoji}>🟡</Text>}
+                    {t.priority === 'urgent' && <AlertCircle size={15} color="#E53E3E" style={{ marginLeft: 8 }} />}
+                    {t.priority === 'important' && <AlertTriangle size={15} color="#DD6B20" style={{ marginLeft: 8 }} />}
                   </TouchableOpacity>
                 );
               })}
@@ -531,6 +542,19 @@ export default function HomeDashboardScreen(): React.JSX.Element {
         }}
         onSuccess={handleRefreshStats}
         editingBlock={editingScheduleBlock}
+      />
+
+      {/* Interactive Streak Modal */}
+      <StreakModal
+        isVisible={streakModalVisible}
+        streakCount={stats.habitStreak}
+        onClose={() => setStreakModalVisible(false)}
+      />
+
+      {/* Interactive Notification Sheet */}
+      <NotificationSheet
+        isVisible={notificationSheetVisible}
+        onClose={() => setNotificationSheetVisible(false)}
       />
     </SafeAreaView>
   );

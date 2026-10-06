@@ -8,14 +8,12 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
+import { Timer, CheckCircle2, Flame } from 'lucide-react-native';
 
 // Constants
 const LABEL_FOCUS = "Focus today";
 const LABEL_TASKS = "Tasks done";
 const LABEL_STREAK = "Day streak";
-const ICON_FOCUS = "⏱️";
-const ICON_TASKS = "✅";
-const ICON_STREAK = "🔥";
 const SHADOW_COLOR = '#000000';
 const BORDER_COLOR = '#E8E7E3';
 
@@ -88,7 +86,7 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         onPress={() => router.push('/(tabs)/focus')}
         activeOpacity={0.7}
       >
-        <Text style={styles.icon}>{ICON_FOCUS}</Text>
+        <Timer size={18} color="#5B4FE8" style={{ marginBottom: 4 }} />
         <Text style={styles.number}>{focusDisplay}</Text>
         <Text style={styles.label}>{LABEL_FOCUS}</Text>
       </TouchableOpacity>
@@ -99,7 +97,7 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         onPress={() => router.push('/(tabs)/goals')}
         activeOpacity={0.7}
       >
-        <Text style={styles.icon}>{ICON_TASKS}</Text>
+        <CheckCircle2 size={18} color="#00B894" style={{ marginBottom: 4 }} />
         <Text style={styles.number}>{tasksRatio}</Text>
         <Text style={styles.label}>{LABEL_TASKS}</Text>
       </TouchableOpacity>
@@ -110,7 +108,7 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         onPress={() => router.push('/habits')}
         activeOpacity={0.7}
       >
-        <Text style={styles.icon}>{ICON_STREAK}</Text>
+        <Flame size={18} color="#E8A020" fill="#E8A020" style={{ marginBottom: 4 }} />
         <Text style={styles.number}>{streakDays}</Text>
         <Text style={styles.label}>{LABEL_STREAK}</Text>
       </TouchableOpacity>
