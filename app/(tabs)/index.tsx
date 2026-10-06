@@ -30,6 +30,7 @@ import { QuickAddTaskSheet } from '@/components/home/QuickAddTaskSheet';
 import { QuickAddScheduleSheet } from '@/components/home/QuickAddScheduleSheet';
 import { StreakModal } from '@/components/shared/StreakModal';
 import { NotificationSheet } from '@/components/shared/NotificationSheet';
+import { AdBanner } from '@/components/ads';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Constants
@@ -524,6 +525,9 @@ export default function HomeDashboardScreen(): React.JSX.Element {
             completedTopics={syllabusStats.completedTopics}
           />
         </View>
+
+        {/* AdMob Non-Intrusive Banner */}
+        <AdBanner style={{ marginTop: 12, marginBottom: 16 }} />
       </ScrollView>
 
       {/* Quick Add Task Bottom Sheet */}

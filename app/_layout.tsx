@@ -30,6 +30,7 @@ import { UserProfile } from '@/types/app.types';
 import { requestNotificationPermission, useNotificationResponse, scheduleMorningBrief } from '@/lib/notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
+import { AdManager } from '@/components/ads';
 
 // Ignore non-fatal fetch cancellation/abort, background sync, and network failure redboxes in LogBox
 LogBox.ignoreLogs([
@@ -143,8 +144,9 @@ function InnerApp({ children }: { children: React.ReactNode }) {
 }
 
 function RootLayout() {
-  // Check for OTA updates on start (deferred by 2 seconds)
+  // Check for OTA updates & initialize AdMob SDK on start
   useEffect(() => {
+    AdManager.initialize();
     const timer = setTimeout(() => {
       checkForUpdate();
     }, 2000);

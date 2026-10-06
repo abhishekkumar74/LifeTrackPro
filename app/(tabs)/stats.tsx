@@ -39,6 +39,7 @@ import Svg, {
 
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { AdBanner } from '@/components/ads';
 
 // Custom Hooks & Stats Data Hooks
 import {
@@ -1238,6 +1239,9 @@ Stay focused, track your goals! 🚀`;
               ))}
             </View>
           )}
+
+          {/* AdMob Banner */}
+          <AdBanner style={{ marginTop: 16, marginBottom: 24 }} />
         </ScrollView>
       </SafeAreaView>
     </View>

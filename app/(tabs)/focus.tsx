@@ -27,6 +27,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { supabase } from '@/lib/supabase/client';
 import { useUiStore } from '@/lib/store/ui.store';
 import { useQueryClient } from '@tanstack/react-query';
+import { AdManager } from '@/components/ads';
 
 // Custom Hooks & Stores
 import { useFocusStore, SoundKey, FocusPreset } from '@/lib/store/focus.store';
@@ -174,6 +175,11 @@ export default function FocusScreen(): React.JSX.Element {
       if (interval) clearInterval(interval);
     };
   }, [isRunning, tick]);
+
+  // Suppress ads during active focus sessions
+  useEffect(() => {
+    AdManager.setFocusSessionActive(isRunning);
+  }, [isRunning]);
 
   const gardenShopSheetRef = useRef<BottomSheet>(null);
   const settingsSheetRef = useRef<BottomSheet>(null);
