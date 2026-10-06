@@ -4,6 +4,7 @@ import { Platform, NativeModules, TurboModuleRegistry } from 'react-native';
  * Check if RNGoogleMobileAdsModule is registered in the native binary
  */
 export const isAdMobNativeModuleAvailable = (): boolean => {
+  if (Platform.OS === 'web') return false;
   try {
     const turbo = TurboModuleRegistry?.get ? TurboModuleRegistry.get('RNGoogleMobileAdsModule') : null;
     const legacy = NativeModules?.RNGoogleMobileAdsModule;
