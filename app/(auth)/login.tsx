@@ -304,10 +304,9 @@ export default function LoginScreen(): React.JSX.Element {
     setErrorMessage(null);
 
     try {
-      const redirectTo = AuthSession.makeRedirectUri({
-        scheme: 'lifetrackpro',
-        path: 'google-auth',
-      });
+      const redirectTo = Platform.OS === 'web'
+        ? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081')
+        : 'lifetrackpro://google-auth';
 
       console.log('[Google Auth] Initiating OAuth with redirectTo:', redirectTo);
 
