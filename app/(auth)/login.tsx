@@ -7,6 +7,7 @@ import { UserProfile } from '@/types/app.types';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -199,7 +200,7 @@ export default function LoginScreen(): React.JSX.Element {
     try {
       const redirectTo = Platform.OS === 'web'
         ? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081')
-        : 'lifetrackpro://google-auth';
+        : Linking.createURL('google-auth', { scheme: 'lifetrackpro' });
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
