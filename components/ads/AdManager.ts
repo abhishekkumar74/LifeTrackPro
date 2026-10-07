@@ -14,7 +14,7 @@ class AdManagerClass {
    * Initialize Google Mobile Ads SDK safely
    */
   async initialize(): Promise<boolean> {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !isAdMobNativeModuleAvailable()) {
       this.isAvailable = false;
       return false;
     }

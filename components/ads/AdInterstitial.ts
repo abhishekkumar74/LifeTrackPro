@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { getAdUnitId, AD_FREQUENCY_LIMITS } from '@/lib/config/ads';
+import { getAdUnitId, AD_FREQUENCY_LIMITS, isAdMobNativeModuleAvailable } from '@/lib/config/ads';
 import { AdManager } from './AdManager';
 
 class AdInterstitialManager {
@@ -10,14 +10,14 @@ class AdInterstitialManager {
   private sessionShowCount = 0;
 
   constructor() {
-    this.preload();
+    // Lazily preloaded on demand when AdManager is initialized
   }
 
   /**
    * Preload an interstitial ad safely
    */
   preload() {
-    if (Platform.OS === 'web' || !AdManager.canShowAds()) return;
+    if (Platform.OS === 'web' || !isAdMobNativeModuleAvailable() || !AdManager.canShowAds()) return;
     if (this.isLoading || this.isLoaded) return;
 
     try {

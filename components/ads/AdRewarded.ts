@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { getAdUnitId } from '@/lib/config/ads';
+import { getAdUnitId, isAdMobNativeModuleAvailable } from '@/lib/config/ads';
 import { AdManager } from './AdManager';
 
 class AdRewardedManager {
@@ -8,14 +8,14 @@ class AdRewardedManager {
   private isLoading = false;
 
   constructor() {
-    this.preload();
+    // Lazily preloaded on demand when AdManager is initialized
   }
 
   /**
    * Preload rewarded video ad safely
    */
   preload() {
-    if (Platform.OS === 'web' || !AdManager.canShowAds()) return;
+    if (Platform.OS === 'web' || !isAdMobNativeModuleAvailable() || !AdManager.canShowAds()) return;
     if (this.isLoading || this.isLoaded) return;
 
     try {

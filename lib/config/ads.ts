@@ -8,11 +8,7 @@ export const isAdMobNativeModuleAvailable = (): boolean => {
   try {
     const turbo = TurboModuleRegistry?.get ? TurboModuleRegistry.get('RNGoogleMobileAdsModule') : null;
     const legacy = NativeModules?.RNGoogleMobileAdsModule;
-    if (turbo || legacy) return true;
-
-    // Fallback for TurboModule lazy loading on Android/iOS
-    const mobileAdsModule = require('react-native-google-mobile-ads');
-    return Boolean(mobileAdsModule && mobileAdsModule.default);
+    return Boolean(turbo || legacy);
   } catch (e) {
     return false;
   }
