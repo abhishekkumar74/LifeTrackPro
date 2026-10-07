@@ -196,7 +196,7 @@ export default function LoginScreen(): React.JSX.Element {
     try {
       const redirectTo = Platform.OS === 'web'
         ? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081')
-        : Linking.createURL('google-auth', { scheme: 'lifetrackpro' });
+        : Linking.createURL('google-auth');
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -214,7 +214,35 @@ export default function LoginScreen(): React.JSX.Element {
       if (Platform.OS !== 'web' && data?.url) {
         const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
         if (result.type === 'success' && result.url) {
-          // Deep link handler in _layout.tsx will capture this redirect
+          const urlStr = result.url;
+          let tokenPart = '';
+          const hashIdx = urlStr.indexOf('#');
+          const queryIdx = urlStr.indexOf('?');
+          if (hashIdx !== -1) {
+            tokenPart = urlStr.slice(hashIdx + 1);
+          } else if (queryIdx !== -1) {
+            tokenPart = urlStr.slice(queryIdx + 1);
+          }
+          if (tokenPart) {
+            const parts = tokenPart.split('&');
+            let accessToken = '';
+            let refreshToken = '';
+            for (const part of parts) {
+              const [key, val] = part.split('=');
+              if (key === 'access_token') accessToken = decodeURIComponent(val);
+              if (key === 'refresh_token') refreshToken = decodeURIComponent(val);
+            }
+            if (accessToken) {
+              const { data: sessionData, error: sessionErr } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken || '',
+              });
+              if (sessionData?.session) {
+                useAuthStore.getState().setSession(sessionData.session);
+                router.replace('/(tabs)');
+              }
+            }
+          }
         }
       }
     } catch (err: unknown) {
