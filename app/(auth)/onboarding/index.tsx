@@ -182,14 +182,21 @@ export default function OnboardingScreen(): React.JSX.Element {
       }
 
       // 2. Perform Profile details insertion
+      const isCse = state.category === 'cse_student';
       const finalSubcategories = state.subcategories.includes('Other') && state.customSubcategory
         ? [...state.subcategories, state.customSubcategory.trim()]
-        : state.subcategories;
+        : [...state.subcategories];
+
+      if (isCse && !finalSubcategories.includes('cse_student')) {
+        finalSubcategories.unshift('cse_student');
+      }
+
+      const dbCategory = isCse ? 'student' : state.category!;
 
       const profileData = {
         id: user.id,
         name: state.name.trim(),
-        category: state.category!,
+        category: dbCategory,
         sub_category: finalSubcategories,
         daily_hours: state.hours,
         peak_time: state.peakTime!,
@@ -211,9 +218,16 @@ export default function OnboardingScreen(): React.JSX.Element {
         .single();
 
       if (fullProfile) {
-        useAuthStore.getState().setProfile(fullProfile as UserProfile);
+        const userProf = fullProfile as UserProfile;
+        if ((userProf.category as string) === 'student' && userProf.sub_category?.includes('cse_student')) {
+          userProf.category = 'cse_student';
+        }
+        useAuthStore.getState().setProfile(userProf);
       } else {
-        useAuthStore.getState().setProfile(profileData as unknown as UserProfile);
+        useAuthStore.getState().setProfile({
+          ...profileData,
+          category: state.category!,
+        } as unknown as UserProfile);
       }
 
       // 3. Perform Primary Goal configuration insertion

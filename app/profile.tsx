@@ -357,9 +357,17 @@ export default function ProfileScreen(): React.JSX.Element {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
+      const dbUpdates = { ...updates };
+      if ((dbUpdates.category as string) === 'cse_student') {
+        dbUpdates.category = 'student' as any;
+        if (!dbUpdates.sub_category?.includes('cse_student')) {
+          dbUpdates.sub_category = ['cse_student', ...(dbUpdates.sub_category || [])];
+        }
+      }
+
       const { data, error } = await supabase
         .from('profiles')
-        .update(updates)
+        .update(dbUpdates)
         .eq('id', session.user.id)
         .select()
         .single();
@@ -368,7 +376,11 @@ export default function ProfileScreen(): React.JSX.Element {
       return data as UserProfile;
     },
     onSuccess: (data) => {
-      setProfile(data);
+      const userProf = { ...data } as UserProfile;
+      if ((userProf.category as string) === 'student' && userProf.sub_category?.includes('cse_student')) {
+        userProf.category = 'cse_student';
+      }
+      setProfile(userProf);
       queryClient.invalidateQueries({ queryKey: ['profile'] });
     },
   });

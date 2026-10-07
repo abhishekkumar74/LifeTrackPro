@@ -312,7 +312,11 @@ function RootLayout() {
         }
         setProfile(null);
       } else {
-        setProfile(data as UserProfile);
+        const userProf = data as UserProfile;
+        if (userProf && (userProf.category as string) === 'student' && userProf.sub_category?.includes('cse_student')) {
+          userProf.category = 'cse_student';
+        }
+        setProfile(userProf);
       }
     } catch (err) {
       if (__DEV__) {
