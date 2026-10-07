@@ -187,27 +187,39 @@ export default function LoginScreen(): React.JSX.Element {
     }
   };
 
+  // Set to prevent duplicate PKCE code exchange attempts
+  const processedUrlsRef = useRef<Set<string>>(new Set());
+
   // Process redirect URL containing OAuth PKCE code or access tokens
   const processAuthUrl = async (urlStr: string): Promise<boolean> => {
+    if (!urlStr || processedUrlsRef.current.has(urlStr)) return false;
+    
+    // Check if the URL actually contains auth params before marking processed
+    const hasAuthParams = urlStr.includes('code=') || urlStr.includes('access_token=') || urlStr.includes('error=');
+    if (!hasAuthParams) return false;
+
+    processedUrlsRef.current.add(urlStr);
+
     try {
       console.log('[Google Auth] Processing redirect URL:', urlStr);
-      let searchParams: URLSearchParams | null = null;
+      
+      const params = new Map<string, string>();
+      const queryString = urlStr.includes('?') ? urlStr.split('?')[1]?.split('#')[0] : '';
+      const hashString = urlStr.includes('#') ? urlStr.split('#')[1]?.split('?')[0] : '';
 
-      const hashIdx = urlStr.indexOf('#');
-      const queryIdx = urlStr.indexOf('?');
+      [queryString, hashString].forEach((str) => {
+        if (str) {
+          const sp = new URLSearchParams(str);
+          sp.forEach((val, key) => {
+            params.set(key, val);
+          });
+        }
+      });
 
-      if (hashIdx !== -1) {
-        searchParams = new URLSearchParams(urlStr.slice(hashIdx + 1));
-      } else if (queryIdx !== -1) {
-        searchParams = new URLSearchParams(urlStr.slice(queryIdx + 1));
-      }
-
-      if (!searchParams) return false;
-
-      const code = searchParams.get('code');
-      const accessToken = searchParams.get('access_token');
-      const refreshToken = searchParams.get('refresh_token') || '';
-      const errorDescription = searchParams.get('error_description') || searchParams.get('error');
+      const code = params.get('code');
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token') || '';
+      const errorDescription = params.get('error_description') || params.get('error');
 
       if (errorDescription) {
         setErrorMessage(decodeURIComponent(errorDescription));
@@ -223,6 +235,7 @@ export default function LoginScreen(): React.JSX.Element {
           return false;
         }
         if (sessionData?.session) {
+          console.log('[Google Auth] Session successfully acquired via PKCE code exchange!');
           useAuthStore.getState().setSession(sessionData.session);
           router.replace('/(tabs)');
           return true;
@@ -239,6 +252,7 @@ export default function LoginScreen(): React.JSX.Element {
           return false;
         }
         if (sessionData?.session) {
+          console.log('[Google Auth] Session successfully set from access token!');
           useAuthStore.getState().setSession(sessionData.session);
           router.replace('/(tabs)');
           return true;
@@ -252,21 +266,30 @@ export default function LoginScreen(): React.JSX.Element {
     return false;
   };
 
-  // Listen for incoming deep links (e.g. when browser redirects back to app)
+  // Listen for incoming deep links on mobile and handle web redirects on mount
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
-      if (event.url && (event.url.includes('code=') || event.url.includes('access_token='))) {
+      if (event.url) {
         processAuthUrl(event.url);
       }
     };
 
     const subscription = Linking.addEventListener('url', handleDeepLink);
 
+    // Mobile initial URL check
     Linking.getInitialURL().then((url) => {
-      if (url && (url.includes('code=') || url.includes('access_token='))) {
+      if (url) {
         processAuthUrl(url);
       }
     });
+
+    // Web initial URL check
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const currentUrl = window.location.href;
+      if (currentUrl.includes('code=') || currentUrl.includes('access_token=')) {
+        processAuthUrl(currentUrl);
+      }
+    }
 
     return () => {
       subscription.remove();
