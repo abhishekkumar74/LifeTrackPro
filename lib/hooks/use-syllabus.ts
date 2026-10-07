@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { SyllabusTopic, SyllabusStatus } from '@/types/app.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthStore } from '@/lib/store/auth.store';
 
 export interface GroupedSubject {
   chapters: {
@@ -17,12 +18,15 @@ export type GroupedSyllabus = {
 };
 
 export function useSyllabus() {
+  const { user } = useAuthStore();
+  const cacheKey = `syllabus_grouped_${user?.id || 'guest'}`;
+
   return useQuery<GroupedSyllabus>({
-    queryKey: ['syllabus'],
+    queryKey: ['syllabus', user?.id],
     queryFn: async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        if (!session) return {};
 
         const { data, error } = await supabase
           .from('syllabus_topics')
@@ -67,7 +71,7 @@ export function useSyllabus() {
             sub.totalCount > 0 ? Math.round((sub.doneCount / sub.totalCount) * 100) : 0;
         });
 
-        AsyncStorage.setItem('syllabus_grouped_cache', JSON.stringify(grouped)).catch(() => {});
+        AsyncStorage.setItem(cacheKey, JSON.stringify(grouped)).catch(() => {});
         return grouped;
       } catch (err: any) {
         const isNetError = 
@@ -77,12 +81,13 @@ export function useSyllabus() {
           err.status === 0;
 
         if (isNetError) {
-          const cached = await AsyncStorage.getItem('syllabus_grouped_cache');
+          const cached = await AsyncStorage.getItem(cacheKey);
           if (cached) return JSON.parse(cached);
         }
         throw err;
       }
     },
+    enabled: !!user?.id,
   });
 }
 

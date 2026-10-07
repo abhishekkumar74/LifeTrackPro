@@ -51,7 +51,7 @@ export function useNotes(subject?: string) {
     queryFn: async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        if (!session) return [];
 
         let query = supabase
           .from('notes')
@@ -95,7 +95,7 @@ export function useDueRevisions() {
     queryFn: async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        if (!session) return [];
 
         const today = new Date();
         const yyyy = today.getFullYear();

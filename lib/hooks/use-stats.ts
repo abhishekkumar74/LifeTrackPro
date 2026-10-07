@@ -66,7 +66,18 @@ export function usePeriodStats(period: 'day' | 'week' | 'month') {
     queryFn: async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        if (!session) return {
+          focusMinutes: 0,
+          focusMinutesPrev: 0,
+          focusChangePercent: 0,
+          tasksTotal: 0,
+          tasksDone: 0,
+          tasksDonePrev: 0,
+          taskChangePercent: 0,
+          sessionsCount: 0,
+          avgSessionMinutes: 0,
+          topSubject: null,
+        };
         const userId = session.user.id;
 
         const today = new Date();
@@ -260,7 +271,7 @@ export function useHeatmapData() {
     queryFn: async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        if (!session) return [];
 
       const today = new Date();
       const startDate = new Date(today);
@@ -350,7 +361,7 @@ function usePeriodFocusSessions(period: 'day' | 'week' | 'month') {
     queryFn: async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        if (!session) return [];
 
       const today = new Date();
       let periodStart = new Date(today);
@@ -609,7 +620,7 @@ export function useMoodHistory() {
     queryFn: async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        if (!session) return [];
 
         const today = new Date();
         const startDate = new Date(today);
@@ -658,7 +669,7 @@ export function useTodayCheckin() {
     queryFn: async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        if (!session) return null;
 
         const todayStr = getLocalDateStr(new Date());
 
@@ -815,7 +826,7 @@ export function useAchievements() {
     queryFn: async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        if (!session) return [];
         const userId = session.user.id;
 
         const [focusRes, goalsRes, habitsRes] = await Promise.all([
@@ -1062,7 +1073,7 @@ export function useEnhancedStats() {
     queryFn: async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        if (!session) return null;
         const userId = session.user.id;
 
         // 1. Fetch data in parallel

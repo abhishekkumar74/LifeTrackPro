@@ -20,7 +20,7 @@ export function useGoals(status: 'active' | 'achieved' = 'active') {
     queryFn: async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        if (!session) return [];
 
         const [goalsRes, milestonesRes, tasksRes] = await Promise.all([
           supabase.from('goals').select('*').eq('status', status),
