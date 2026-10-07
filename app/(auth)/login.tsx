@@ -8,6 +8,7 @@ import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import * as AuthSession from 'expo-auth-session';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -303,9 +304,10 @@ export default function LoginScreen(): React.JSX.Element {
     setErrorMessage(null);
 
     try {
-      const redirectTo = Platform.OS === 'web'
-        ? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081')
-        : Linking.createURL('google-auth');
+      const redirectTo = AuthSession.makeRedirectUri({
+        scheme: 'lifetrackpro',
+        path: 'google-auth',
+      });
 
       console.log('[Google Auth] Initiating OAuth with redirectTo:', redirectTo);
 
