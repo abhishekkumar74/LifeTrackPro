@@ -187,6 +187,92 @@ export default function LoginScreen(): React.JSX.Element {
     }
   };
 
+  // Process redirect URL containing OAuth PKCE code or access tokens
+  const processAuthUrl = async (urlStr: string): Promise<boolean> => {
+    try {
+      console.log('[Google Auth] Processing redirect URL:', urlStr);
+      let searchParams: URLSearchParams | null = null;
+
+      const hashIdx = urlStr.indexOf('#');
+      const queryIdx = urlStr.indexOf('?');
+
+      if (hashIdx !== -1) {
+        searchParams = new URLSearchParams(urlStr.slice(hashIdx + 1));
+      } else if (queryIdx !== -1) {
+        searchParams = new URLSearchParams(urlStr.slice(queryIdx + 1));
+      }
+
+      if (!searchParams) return false;
+
+      const code = searchParams.get('code');
+      const accessToken = searchParams.get('access_token');
+      const refreshToken = searchParams.get('refresh_token') || '';
+      const errorDescription = searchParams.get('error_description') || searchParams.get('error');
+
+      if (errorDescription) {
+        setErrorMessage(decodeURIComponent(errorDescription));
+        return false;
+      }
+
+      if (code) {
+        console.log('[Google Auth] Exchanging PKCE code for session...');
+        const { data: sessionData, error: sessionErr } = await supabase.auth.exchangeCodeForSession(code);
+        if (sessionErr) {
+          console.error('[Google Auth] Code exchange error:', sessionErr);
+          setErrorMessage(sessionErr.message);
+          return false;
+        }
+        if (sessionData?.session) {
+          useAuthStore.getState().setSession(sessionData.session);
+          router.replace('/(tabs)');
+          return true;
+        }
+      } else if (accessToken) {
+        console.log('[Google Auth] Setting session from access token...');
+        const { data: sessionData, error: sessionErr } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (sessionErr) {
+          console.error('[Google Auth] Set session error:', sessionErr);
+          setErrorMessage(sessionErr.message);
+          return false;
+        }
+        if (sessionData?.session) {
+          useAuthStore.getState().setSession(sessionData.session);
+          router.replace('/(tabs)');
+          return true;
+        }
+      }
+    } catch (err: unknown) {
+      console.error('[Google Auth] Exception during URL processing:', err);
+      const message = err instanceof Error ? err.message : 'An unexpected error occurred during Google sign-in.';
+      setErrorMessage(message);
+    }
+    return false;
+  };
+
+  // Listen for incoming deep links (e.g. when browser redirects back to app)
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      if (event.url && (event.url.includes('code=') || event.url.includes('access_token='))) {
+        processAuthUrl(event.url);
+      }
+    };
+
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    Linking.getInitialURL().then((url) => {
+      if (url && (url.includes('code=') || url.includes('access_token='))) {
+        processAuthUrl(url);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   // Google OAuth redirect/native login handler
   const handleGoogleSignIn = async (): Promise<void> => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -197,6 +283,8 @@ export default function LoginScreen(): React.JSX.Element {
       const redirectTo = Platform.OS === 'web'
         ? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081')
         : Linking.createURL('google-auth');
+
+      console.log('[Google Auth] Initiating OAuth with redirectTo:', redirectTo);
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -212,37 +300,11 @@ export default function LoginScreen(): React.JSX.Element {
       }
 
       if (Platform.OS !== 'web' && data?.url) {
+        console.log('[Google Auth] Opening WebBrowser with URL:', data.url);
         const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        console.log('[Google Auth] WebBrowser result type:', result.type);
         if (result.type === 'success' && result.url) {
-          const urlStr = result.url;
-          let tokenPart = '';
-          const hashIdx = urlStr.indexOf('#');
-          const queryIdx = urlStr.indexOf('?');
-          if (hashIdx !== -1) {
-            tokenPart = urlStr.slice(hashIdx + 1);
-          } else if (queryIdx !== -1) {
-            tokenPart = urlStr.slice(queryIdx + 1);
-          }
-          if (tokenPart) {
-            const parts = tokenPart.split('&');
-            let accessToken = '';
-            let refreshToken = '';
-            for (const part of parts) {
-              const [key, val] = part.split('=');
-              if (key === 'access_token') accessToken = decodeURIComponent(val);
-              if (key === 'refresh_token') refreshToken = decodeURIComponent(val);
-            }
-            if (accessToken) {
-              const { data: sessionData, error: sessionErr } = await supabase.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken || '',
-              });
-              if (sessionData?.session) {
-                useAuthStore.getState().setSession(sessionData.session);
-                router.replace('/(tabs)');
-              }
-            }
-          }
+          await processAuthUrl(result.url);
         }
       }
     } catch (err: unknown) {
