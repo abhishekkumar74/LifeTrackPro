@@ -53,8 +53,8 @@ export default function LoginScreen(): React.JSX.Element {
     };
   }, []);
 
-  // Authentication method state
-  const [authMethod, setAuthMethod] = useState<'phone' | 'email'>('phone');
+  // Authentication method state (Phone auth hidden for now, phase 2 feature)
+  const [authMethod, setAuthMethod] = useState<'phone' | 'email'>('email');
 
   // Input states
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -73,17 +73,13 @@ export default function LoginScreen(): React.JSX.Element {
   const [isForgotState, setIsForgotState] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Trigger autoFocus on mount or tab change
+  // Trigger autoFocus on mount
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (authMethod === 'phone') {
-        phoneInputRef.current?.focus();
-      } else {
-        emailInputRef.current?.focus();
-      }
+      emailInputRef.current?.focus();
     }, 150);
     return () => clearTimeout(timer);
-  }, [authMethod]);
+  }, []);
 
   // Format phone number dynamically as "XXXXX XXXXX"
   const handlePhoneChange = (text: string): void => {
@@ -264,9 +260,9 @@ export default function LoginScreen(): React.JSX.Element {
     }
   };
 
-  const isSubmitDisabled = authMethod === 'phone'
-    ? (rawPhoneNumber.length < 10 || isLoading)
-    : (isForgotState ? (!email || isLoading) : (!email || password.length < 6 || isLoading));
+  const isSubmitDisabled = isForgotState
+    ? (!email || isLoading)
+    : (!email || password.length < 6 || isLoading);
 
   return (
     <KeyboardAvoidingView
@@ -300,72 +296,7 @@ export default function LoginScreen(): React.JSX.Element {
 
         {/* SECTION 2: Input Area */}
         <View style={styles.inputSection}>
-          {/* Auth Method Toggle Tabs */}
-          {!isForgotState && (
-            <View style={styles.tabContainer}>
-              <Pressable
-                style={[styles.tabButton, authMethod === 'phone' && styles.activeTabButton]}
-                onPress={() => {
-                  setAuthMethod('phone');
-                  setErrorMessage(null);
-                  setValidationError(null);
-                }}
-              >
-                <Text style={[styles.tabButtonText, authMethod === 'phone' && styles.activeTabButtonText]}>Phone OTP</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.tabButton, authMethod === 'email' && styles.activeTabButton]}
-                onPress={() => {
-                  setAuthMethod('email');
-                  setErrorMessage(null);
-                  setValidationError(null);
-                }}
-              >
-                <Text style={[styles.tabButtonText, authMethod === 'email' && styles.activeTabButtonText]}>Email / Pass</Text>
-              </Pressable>
-            </View>
-          )}
-
-          {authMethod === 'phone' ? (
-            <>
-              <Text style={styles.inputLabel}>Enter your mobile number</Text>
-              <View
-                style={[
-                  styles.inputRowContainer,
-                  isFocused && styles.inputRowContainerFocused,
-                  (validationError || errorMessage) && styles.inputRowContainerError,
-                ]}
-              >
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.countryPickerBtn,
-                    pressed && styles.countryPickerBtnPressed,
-                  ]}
-                  onPress={() => setCountryPickerVisible(true)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Select country code"
-                >
-                  <Text style={styles.countryPickerText}>
-                    {selectedCountry.flag} {selectedCountry.dialCode}
-                  </Text>
-                </Pressable>
-
-                <TextInput
-                  ref={phoneInputRef}
-                  style={styles.textInput}
-                  keyboardType="phone-pad"
-                  placeholder="98765 43210"
-                  placeholderTextColor={COLORS.t3}
-                  value={phoneNumber}
-                  onChangeText={handlePhoneChange}
-                  onFocus={() => setIsFocused(true)}
-                  onBlur={() => setIsFocused(false)}
-                  maxLength={11}
-                  editable={!isLoading}
-                />
-              </View>
-            </>
-          ) : isForgotState ? (
+          {isForgotState ? (
             <View style={{ gap: SPACING.md }}>
               <Text style={{ fontFamily: TYPOGRAPHY.fonts.sans, fontSize: 14, color: COLORS.t2, marginBottom: 4, lineHeight: 20 }}>
                 Enter the email address associated with your account and we will send you a password recovery link.
@@ -530,16 +461,16 @@ export default function LoginScreen(): React.JSX.Element {
               isSubmitDisabled && styles.submitBtnDisabled,
               !isSubmitDisabled && pressed && styles.submitBtnPressed,
             ]}
-            onPress={authMethod === 'phone' ? handleSendOtp : (isForgotState ? handleForgotPassword : handleEmailAuth)}
+            onPress={isForgotState ? handleForgotPassword : handleEmailAuth}
             disabled={isSubmitDisabled}
             accessibilityRole="button"
-            accessibilityLabel={authMethod === 'phone' ? 'Send OTP' : (isForgotState ? 'Send Reset Link' : (isSignUp ? 'Sign Up' : 'Sign In'))}
+            accessibilityLabel={isForgotState ? 'Send Reset Link' : (isSignUp ? 'Sign Up' : 'Sign In')}
           >
             {isLoading ? (
               <ActivityIndicator color={COLORS.surface} size="small" />
             ) : (
               <Text style={styles.submitBtnText}>
-                {authMethod === 'phone' ? 'Send OTP' : (isForgotState ? 'Send Reset Link' : (isSignUp ? 'Create Account' : 'Sign In'))}
+                {isForgotState ? 'Send Reset Link' : (isSignUp ? 'Create Account' : 'Sign In')}
               </Text>
             )}
           </Pressable>
