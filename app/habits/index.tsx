@@ -22,6 +22,7 @@ import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
 import { getTodayLocal } from '@/lib/utils/date';
 import { ArrowLeft, Flame } from 'lucide-react-native';
+import { useAuthStore } from '@/lib/store/auth.store';
 import {
   useHabits,
   useArchivedHabits,
@@ -36,6 +37,7 @@ export default function HabitsManagementScreen() {
   useAndroidBackHandler();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
   const { toggleHabit } = useToggleHabit();
 
   const [createSheetVisible, setCreateSheetVisible] = useState(false);
@@ -46,8 +48,8 @@ export default function HabitsManagementScreen() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['habits'] }),
-      queryClient.invalidateQueries({ queryKey: ['habits', 'archived'] }),
+      queryClient.invalidateQueries({ queryKey: ['habits', user?.id] }),
+      queryClient.invalidateQueries({ queryKey: ['habits', user?.id, 'archived'] }),
     ]);
     setIsRefreshing(false);
   };
@@ -77,7 +79,7 @@ export default function HabitsManagementScreen() {
       completedToday: habit.completedToday,
       onOptimisticUpdate: (newValue) => {
         // Optimistic query data updates
-        queryClient.setQueryData(['habits'], (old: any) => {
+        queryClient.setQueryData(['habits', user?.id], (old: any) => {
           if (!old) return [];
           return old.map((h: any) =>
             h.id === habit.id ? { ...h, completedToday: newValue } : h
@@ -85,12 +87,12 @@ export default function HabitsManagementScreen() {
         });
 
         // Trigger background sync refetches
-        queryClient.invalidateQueries({ queryKey: ['habits'] });
+        queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
         queryClient.invalidateQueries({ queryKey: ['todayStats'] });
         queryClient.invalidateQueries({ queryKey: ['stats'] });
       },
     });
-  }, [queryClient]);
+  }, [queryClient, user?.id]);
 
   // Reorder by Swapping
   const handleMove = useCallback(async (index: number, direction: 'up' | 'down') => {

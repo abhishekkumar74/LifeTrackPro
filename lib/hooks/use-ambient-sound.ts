@@ -1,44 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import { Image, Platform } from 'react-native';
 import { SoundKey } from '@/lib/store/focus.store';
 import { captureError } from '@/lib/sentry';
 
-let AudioModule: any = null;
-let isAudioAvailable: boolean | null = null;
-
-function getAudioModule() {
-  if (isAudioAvailable === false) return null;
-  if (AudioModule) return AudioModule;
-
-  try {
-    const { NativeModules } = require('react-native');
-    const { NativeModulesProxy } = require('expo-modules-core') || {};
-
-    const hasExpoAudioNative = !!(
-      NativeModules?.ExpoAudio ||
-      (NativeModulesProxy && NativeModulesProxy.ExpoAudio)
-    );
-
-    if (!hasExpoAudioNative) {
-      isAudioAvailable = false;
-      return null;
-    }
-
-    AudioModule = require('expo-audio');
-    isAudioAvailable = !!AudioModule;
-  } catch (e) {
-    isAudioAvailable = false;
-    AudioModule = null;
-  }
-  return AudioModule;
-}
-
-const SOUND_FILES = {
+const SOUND_FILES: Record<SoundKey, any> = {
   rain: require('../../assets/sounds/rain.mp3'),
   cafe: require('../../assets/sounds/cafe.mp3'),
   ocean: require('../../assets/sounds/ocean.mp3'),
   lofi: require('../../assets/sounds/lofi.mp3'),
   brown_noise: require('../../assets/sounds/brown_noise.mp3'),
-} as const;
+};
 
 export interface AmbientSoundHook {
   activeSound: SoundKey | null;
@@ -51,41 +22,91 @@ export interface AmbientSoundHook {
 export function useAmbientSound(): AmbientSoundHook {
   const [activeSound, setActiveSound] = useState<SoundKey | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const playerRef = useRef<any>(null);
+  const soundInstanceRef = useRef<any>(null);
+  const soundTypeRef = useRef<'expo-audio' | 'web' | null>(null);
+
+  const stopInternal = async () => {
+    if (!soundInstanceRef.current) return;
+    try {
+      if (soundTypeRef.current === 'expo-audio') {
+        soundInstanceRef.current.pause?.();
+        if (typeof soundInstanceRef.current.remove === 'function') {
+          soundInstanceRef.current.remove();
+        } else if (typeof soundInstanceRef.current.release === 'function') {
+          soundInstanceRef.current.release();
+        }
+      } else if (soundTypeRef.current === 'web') {
+        soundInstanceRef.current.pause?.();
+        soundInstanceRef.current.currentTime = 0;
+      }
+    } catch (e) {
+    } finally {
+      soundInstanceRef.current = null;
+      soundTypeRef.current = null;
+    }
+  };
 
   const play = async (key: SoundKey, volume: number) => {
     setIsLoading(true);
     try {
-      // 1. Release existing player
-      if (playerRef.current) {
-        try {
-          playerRef.current.pause();
-          playerRef.current.release?.();
-        } catch (e) {}
-        playerRef.current = null;
-      }
+      await stopInternal();
 
-      const audioMod = getAudioModule();
-      if (!audioMod || !audioMod.createAudioPlayer) {
-        setIsLoading(false);
+      const source = SOUND_FILES[key];
+      if (!source) {
         setActiveSound(null);
+        setIsLoading(false);
         return;
       }
 
-      // 2. Load and play sound asset via expo-audio
-      try {
-        const source = SOUND_FILES[key];
-        const player = audioMod.createAudioPlayer(source);
-        player.loop = true;
-        player.volume = volume;
-        player.play();
-
-        playerRef.current = player;
-        setActiveSound(key);
-      } catch (e) {
-        console.warn('[Audio] Failed to play ambient sound:', e);
-        setActiveSound(null);
+      // 1. Web / HTML5 Audio fallback
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio) {
+        try {
+          const resolved = Image.resolveAssetSource(source);
+          const uri = resolved?.uri;
+          if (uri) {
+            const webAudio = new (window as any).Audio(uri);
+            webAudio.loop = true;
+            webAudio.volume = Math.min(1, Math.max(0, volume));
+            await webAudio.play();
+            soundInstanceRef.current = webAudio;
+            soundTypeRef.current = 'web';
+            setActiveSound(key);
+            setIsLoading(false);
+            return;
+          }
+        } catch (webErr) {
+          if (__DEV__) console.warn('[useAmbientSound] Web Audio failed:', webErr);
+        }
       }
+
+      // 2. Native Expo 57 Audio (expo-audio)
+      try {
+        const { createAudioPlayer, setAudioModeAsync } = require('expo-audio');
+        if (typeof setAudioModeAsync === 'function') {
+          await setAudioModeAsync({
+            playsInSilentMode: true,
+            shouldPlayInBackground: true,
+          }).catch(() => {});
+        }
+
+        if (typeof createAudioPlayer === 'function') {
+          const player = createAudioPlayer(source);
+          if (player) {
+            player.loop = true;
+            player.volume = Math.min(1, Math.max(0, volume));
+            player.play?.();
+            soundInstanceRef.current = player;
+            soundTypeRef.current = 'expo-audio';
+            setActiveSound(key);
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch (audioErr: any) {
+        // Safe silent catch when expo-audio native binary module is not present in dev client binary
+      }
+
+      setActiveSound(null);
     } catch (err) {
       setActiveSound(null);
     } finally {
@@ -95,11 +116,7 @@ export function useAmbientSound(): AmbientSoundHook {
 
   const stop = async () => {
     try {
-      if (playerRef.current) {
-        playerRef.current.pause();
-        playerRef.current.release?.();
-        playerRef.current = null;
-      }
+      await stopInternal();
     } catch (err) {
       captureError(err, { context: 'ambient_stop' });
     } finally {
@@ -109,23 +126,22 @@ export function useAmbientSound(): AmbientSoundHook {
 
   const setVolume = async (vol: number) => {
     try {
-      if (playerRef.current) {
-        playerRef.current.volume = vol;
+      if (!soundInstanceRef.current) return;
+      const safeVol = Math.min(1, Math.max(0, vol));
+
+      if (soundTypeRef.current === 'expo-audio') {
+        soundInstanceRef.current.volume = safeVol;
+      } else if (soundTypeRef.current === 'web') {
+        soundInstanceRef.current.volume = safeVol;
       }
     } catch (err) {
       captureError(err, { context: 'ambient_volume' });
     }
   };
 
-  // Perform automatic resource cleanup on unmount
   useEffect(() => {
     return () => {
-      if (playerRef.current) {
-        try {
-          playerRef.current.pause();
-          playerRef.current.release?.();
-        } catch (e) {}
-      }
+      stopInternal().catch(() => {});
     };
   }, []);
 

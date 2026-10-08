@@ -408,6 +408,7 @@ function RootLayout() {
                   <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                   <Stack.Screen name="rooms/index" options={{ headerShown: false }} />
                   <Stack.Screen name="rooms/[id]" options={{ headerShown: false }} />
+                  <Stack.Screen name="notifications" options={{ headerShown: false }} />
                   <Stack.Screen name="profile" options={{ headerShown: false }} />
                   <Stack.Screen name="paywall" options={{ presentation: 'modal', headerShown: false }} />
                   <Stack.Screen name="habit/[id]" options={{ headerShown: false }} />

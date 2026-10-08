@@ -427,23 +427,27 @@ export default function FocusScreen(): React.JSX.Element {
       if (error) throw error;
 
       // Award seeds for any completed focus session
+      // Award seeds for any completed focus session
       if (status === 'completed') {
         const earned = seedsEarned && seedsEarned > 0
           ? seedsEarned
           : Math.max(5, 5 + Math.floor(dbDuration / 5) + (isStrictModeActive ? 5 : 0));
 
-        const currentSeeds = profile?.focus_seeds || 0;
+        const currentSeeds = Number(profile?.focus_seeds || 0);
         const newSeeds = currentSeeds + earned;
-        const { error: seedError } = await supabase
+        const { data: updatedProfData, error: seedError } = await supabase
           .from('profiles')
           .update({ focus_seeds: newSeeds })
-          .eq('id', session.user.id);
+          .eq('id', session.user.id)
+          .select()
+          .maybeSingle();
         
-        if (!seedError && profile) {
-          setProfile({ ...profile, focus_seeds: newSeeds });
-          queryClient.invalidateQueries({ queryKey: ['profile'] });
-          useUiStore.getState().showToast(`+${earned} Focus Seeds Earned! 🌱`, 'success');
+        const nextProfile = updatedProfData ? (updatedProfData as any) : (profile ? { ...profile, focus_seeds: newSeeds } : null);
+        if (nextProfile) {
+          setProfile(nextProfile);
         }
+        queryClient.invalidateQueries({ queryKey: ['profile'] });
+        useUiStore.getState().showToast(`+${earned} Focus Seeds Earned! 🌱`, 'success');
       }
 
       // Schedule spaced-repetition reminders

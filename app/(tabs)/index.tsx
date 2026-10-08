@@ -167,7 +167,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
     const initializeAndMergeSnapshot = async () => {
       try {
         const todayStr = getTodayLocal();
-        const snapshotKey = `schedule_snapshot_${todayStr}`;
+        const snapshotKey = `schedule_snapshot_${user?.id || 'guest'}_${todayStr}`;
         const storedSnapshot = await AsyncStorage.getItem(snapshotKey);
 
         const currentRoutines = stats.nextBlocks || [];
@@ -363,7 +363,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
         isLoading={stats.isLoading}
         avatarUrl={profile?.avatar_url}
         onPressStreak={() => setStreakModalVisible(true)}
-        onPressNotification={() => setNotificationSheetVisible(true)}
+        onPressNotification={() => router.push('/notifications')}
       />
 
       {/* Scrollable Dashboard zones */}

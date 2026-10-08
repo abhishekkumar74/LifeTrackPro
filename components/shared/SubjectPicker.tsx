@@ -318,9 +318,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
 };
 
 const styles = StyleSheet.create({
-  wrapper: {
-    alignSelf: 'stretch',
-  },
+  wrapper: {},
   trigger: {
     borderRadius: 12,
     justifyContent: 'center',

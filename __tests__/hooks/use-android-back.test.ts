@@ -18,7 +18,7 @@ describe('useAndroidBackHandler', () => {
     expect(addListenerSpy).toHaveBeenCalledWith('hardwareBackPress', expect.any(Function));
 
     const onBackPress = addListenerSpy.mock.calls[0][1];
-    const handled = onBackPress();
+    const handled = onBackPress({} as any);
 
     expect(router.canGoBack).toHaveBeenCalled();
     expect(router.back).toHaveBeenCalled();
@@ -35,7 +35,7 @@ describe('useAndroidBackHandler', () => {
     // Get the most recent listener added
     const callCount = addListenerSpy.mock.calls.length;
     const onBackPress = addListenerSpy.mock.calls[callCount - 1][1];
-    const handled = onBackPress();
+    const handled = onBackPress({} as any);
 
     expect(customHandler).toHaveBeenCalled();
     expect(handled).toBe(true);

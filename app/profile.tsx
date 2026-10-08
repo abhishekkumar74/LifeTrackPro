@@ -21,9 +21,10 @@ import BottomSheet, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
-import { router } from 'expo-router';
+import { router, Href } from 'expo-router';
 import {
   ArrowLeft,
+  Bell,
   Check,
   ChevronRight,
   FileText,
@@ -873,7 +874,44 @@ export default function ProfileScreen(): React.JSX.Element {
 
         {/* NOTIFICATIONS SECTION */}
         <View style={styles.settingsSection}>
-          <Text style={styles.sectionTitle}>Notifications</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={styles.sectionTitle}>Notifications</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/notifications' as Href)}
+              activeOpacity={0.7}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+            >
+              <Text style={{ fontFamily: 'DMSans-Medium', fontSize: 13, color: '#5B4FE8' }}>Notification Center</Text>
+              <ChevronRight size={14} color="#5B4FE8" />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#F0EFFB',
+              borderRadius: 14,
+              padding: 14,
+              marginBottom: 12,
+              borderWidth: 1,
+              borderColor: '#EAE8FD',
+            }}
+            onPress={() => router.push('/notifications' as Href)}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#5B4FE8', justifyContent: 'center', alignItems: 'center' }}>
+                <Bell size={18} color="#FFFFFF" />
+              </View>
+              <View>
+                <Text style={{ fontFamily: 'DMSans-Bold', fontSize: 14, color: '#17172A' }}>Notification Hub & Activity</Text>
+                <Text style={{ fontFamily: 'DMSans', fontSize: 12, color: '#6B7280' }}>Manage history, test alerts & channels</Text>
+              </View>
+            </View>
+            <ChevronRight size={16} color="#5B4FE8" />
+          </TouchableOpacity>
 
           <View style={styles.row}>
             <View style={styles.rowLabelCol}>

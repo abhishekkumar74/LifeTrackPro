@@ -1,20 +1,17 @@
 import { renderHook, act } from '@testing-library/react-native';
 import { useAmbientSound } from '../../lib/hooks/use-ambient-sound';
-import { Audio } from 'expo-av';
 
-jest.mock('expo-av', () => ({
-  Audio: {
-    Sound: {
-      createAsync: jest.fn().mockResolvedValue({
-        sound: {
-          stopAsync: jest.fn().mockResolvedValue({}),
-          unloadAsync: jest.fn().mockResolvedValue({}),
-          setVolumeAsync: jest.fn().mockResolvedValue({}),
-        }
-      })
-    },
-    setAudioModeAsync: jest.fn().mockResolvedValue({}),
-  }
+const mockPlayer = {
+  loop: false,
+  volume: 1,
+  play: jest.fn(),
+  pause: jest.fn(),
+  remove: jest.fn(),
+};
+
+jest.mock('expo-audio', () => ({
+  createAudioPlayer: jest.fn(() => mockPlayer),
+  setAudioModeAsync: jest.fn().mockResolvedValue({}),
 }));
 
 describe('useAmbientSound', () => {
@@ -28,7 +25,6 @@ describe('useAmbientSound', () => {
     });
 
     expect(result.current.activeSound).toBe('rain');
-    expect(Audio.Sound.createAsync).toHaveBeenCalled();
 
     await act(async () => {
       await result.current.setVolume(0.8);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Modal,
   View,
@@ -8,58 +8,26 @@ import {
   ScrollView,
   Switch,
 } from 'react-native';
-import { Bell, Flame, Brain, Trophy, CheckCheck, X, ChevronRight, Settings, Sparkles } from 'lucide-react-native';
+import {
+  Bell,
+  Flame,
+  Brain,
+  Trophy,
+  CheckCheck,
+  X,
+  ChevronRight,
+  SlidersHorizontal,
+  Sparkles,
+  ExternalLink,
+  BellOff,
+} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { router, Href } from 'expo-router';
-
-interface AppNotification {
-  id: string;
-  type: 'brief' | 'streak' | 'revision' | 'milestone';
-  title: string;
-  body: string;
-  time: string;
-  isRead: boolean;
-  targetScreen: string;
-}
-
-const INITIAL_NOTIFICATIONS: AppNotification[] = [
-  {
-    id: '1',
-    type: 'brief',
-    title: 'Daily Morning Brief ☀️',
-    body: "Today's focus: Complete your planned focus blocks and keep momentum!",
-    time: '8:00 AM',
-    isRead: false,
-    targetScreen: '/',
-  },
-  {
-    id: '2',
-    type: 'streak',
-    title: "Don't break your streak! 🔥",
-    body: 'You are on a streak! Complete 1 habit today to keep your fire alive.',
-    time: '2h ago',
-    isRead: false,
-    targetScreen: '/habits',
-  },
-  {
-    id: '3',
-    type: 'revision',
-    title: 'Spaced Repetition Nudge 🧠',
-    body: 'Time to revise key syllabus topics to lock knowledge into long-term memory.',
-    time: 'Yesterday',
-    isRead: true,
-    targetScreen: '/(tabs)/learn',
-  },
-  {
-    id: '4',
-    type: 'milestone',
-    title: 'Focus Goal Achieved! 🏆',
-    body: 'Congratulations! You reached over 10 hours of total deep focus time.',
-    time: '2 days ago',
-    isRead: true,
-    targetScreen: '/(tabs)/stats',
-  },
-];
+import {
+  useNotificationStore,
+  AppNotification,
+  NotificationType,
+} from '@/lib/store/notification.store';
 
 interface NotificationSheetProps {
   isVisible: boolean;
@@ -70,37 +38,61 @@ export const NotificationSheet: React.FC<NotificationSheetProps> = ({
   isVisible,
   onClose,
 }) => {
-  const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
-  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
+  const { notifications, settings, markAsRead, markAllAsRead, updateSetting } =
+    useNotificationStore();
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  const handleMarkAllRead = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })));
-  };
-
   const handleItemPress = async (item: AppNotification) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
-    );
+    markAsRead(item.id);
     onClose();
     setTimeout(() => {
-      router.push(item.targetScreen as Href);
+      if (item.targetScreen) {
+        router.push(item.targetScreen as Href);
+      }
     }, 150);
   };
 
-  const getIcon = (type: AppNotification['type']) => {
+  const handleOpenFullPage = () => {
+    onClose();
+    setTimeout(() => {
+      router.push('/notifications' as Href);
+    }, 150);
+  };
+
+  const getItemStyles = (type: NotificationType) => {
     switch (type) {
       case 'brief':
-        return <Sparkles size={18} color="#5B4FE8" />;
+        return {
+          bg: '#EAE7FF',
+          color: '#5B4FE8',
+          icon: <Sparkles size={18} color="#5B4FE8" />,
+        };
       case 'streak':
-        return <Flame size={18} color="#E8A020" fill="#E8A020" />;
+        return {
+          bg: '#FEF3C7',
+          color: '#D97706',
+          icon: <Flame size={18} color="#D97706" fill="#D97706" />,
+        };
       case 'revision':
-        return <Brain size={18} color="#00B894" />;
+        return {
+          bg: '#D1FAE5',
+          color: '#059669',
+          icon: <Brain size={18} color="#059669" />,
+        };
       case 'milestone':
-        return <Trophy size={18} color="#E85858" />;
+        return {
+          bg: '#FFE4E6',
+          color: '#E11D48',
+          icon: <Trophy size={18} color="#E11D48" />,
+        };
+      default:
+        return {
+          bg: '#EEF2FF',
+          color: '#4F46E5',
+          icon: <Bell size={18} color="#4F46E5" />,
+        };
     }
   };
 
@@ -112,48 +104,62 @@ export const NotificationSheet: React.FC<NotificationSheetProps> = ({
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+
         <View style={styles.sheet}>
-          {/* Header */}
+          {/* Cozy Drag Handle Indicator */}
+          <View style={styles.dragHandleContainer}>
+            <View style={styles.dragHandle} />
+          </View>
+
+          {/* Sheet Header */}
           <View style={styles.header}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <View style={styles.bellIconBadge}>
+            <View style={styles.headerTitleRow}>
+              <View style={styles.bellBadgeCircle}>
                 <Bell size={18} color="#5B4FE8" />
               </View>
               <Text style={styles.headerTitle}>Notifications</Text>
               {unreadCount > 0 && (
-                <View style={styles.unreadBadge}>
-                  <Text style={styles.unreadBadgeText}>{unreadCount} new</Text>
+                <View style={styles.unreadPill}>
+                  <Text style={styles.unreadPillText}>{unreadCount} new</Text>
                 </View>
               )}
             </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={styles.headerActionGroup}>
               {unreadCount > 0 && (
-                <TouchableOpacity onPress={handleMarkAllRead} activeOpacity={0.7}>
+                <TouchableOpacity
+                  onPress={markAllAsRead}
+                  activeOpacity={0.7}
+                  style={styles.headerIconBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
                   <CheckCheck size={18} color="#5B4FE8" />
                 </TouchableOpacity>
               )}
               <TouchableOpacity
                 onPress={onClose}
                 activeOpacity={0.7}
-                style={styles.closeBtn}
+                style={styles.headerCloseBtn}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <X size={18} color="#9B9BAF" />
+                <X size={18} color="#78716C" />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Quick Settings Toggle Row */}
+          {/* Cozy Quick Settings Toggle Row */}
           <View style={styles.settingsRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Settings size={15} color="#9B9BAF" />
+            <View style={styles.settingsLeft}>
+              <View style={styles.slidersIconCircle}>
+                <SlidersHorizontal size={14} color="#5B4FE8" />
+              </View>
               <Text style={styles.settingsText}>Daily Reminders Active</Text>
             </View>
             <Switch
-              value={notificationsEnabled}
-              onValueChange={setNotificationsEnabled}
-              trackColor={{ false: '#E8E7E3', true: '#5B4FE8' }}
+              value={settings.morningBriefEnabled}
+              onValueChange={(val) => updateSetting('morningBriefEnabled', val)}
+              trackColor={{ false: '#E7E5E4', true: '#5B4FE8' }}
               thumbColor="#FFFFFF"
             />
           </View>
@@ -163,40 +169,72 @@ export const NotificationSheet: React.FC<NotificationSheetProps> = ({
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           >
-            {notifications.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.notificationItem,
-                  !item.isRead && styles.notificationItemUnread,
-                ]}
-                onPress={() => handleItemPress(item)}
-                activeOpacity={0.75}
-              >
-                <View style={styles.itemIconCol}>{getIcon(item.type)}</View>
-
-                <View style={styles.itemTextCol}>
-                  <View style={styles.itemTitleRow}>
-                    <Text
-                      style={[
-                        styles.itemTitle,
-                        !item.isRead && styles.itemTitleUnread,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.title}
-                    </Text>
-                    <Text style={styles.itemTime}>{item.time}</Text>
-                  </View>
-                  <Text style={styles.itemBody} numberOfLines={2}>
-                    {item.body}
-                  </Text>
+            {notifications.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <View style={styles.emptyIconCircle}>
+                  <BellOff size={26} color="#A8A29E" />
                 </View>
+                <Text style={styles.emptyTitle}>All Caught Up!</Text>
+                <Text style={styles.emptySub}>No active notifications right now.</Text>
+              </View>
+            ) : (
+              notifications.slice(0, 5).map((item) => {
+                const styleMeta = getItemStyles(item.type);
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.card,
+                      !item.isRead && styles.cardUnread,
+                    ]}
+                    onPress={() => handleItemPress(item)}
+                    activeOpacity={0.8}
+                  >
+                    {/* Unread Accent Pill */}
+                    {!item.isRead && (
+                      <View style={[styles.unreadAccentBar, { backgroundColor: styleMeta.color }]} />
+                    )}
 
-                <ChevronRight size={16} color="#9B9BAF" />
-              </TouchableOpacity>
-            ))}
+                    {/* Pastel Icon Bubble */}
+                    <View style={[styles.iconBubble, { backgroundColor: styleMeta.bg }]}>
+                      {styleMeta.icon}
+                    </View>
+
+                    {/* Card Content */}
+                    <View style={styles.cardTextCol}>
+                      <View style={styles.cardHeaderRow}>
+                        <Text
+                          style={[
+                            styles.cardTitle,
+                            !item.isRead && styles.cardTitleUnread,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.title}
+                        </Text>
+                        <Text style={styles.cardTime}>{item.time}</Text>
+                      </View>
+                      <Text style={styles.cardBody} numberOfLines={2}>
+                        {item.body}
+                      </Text>
+                    </View>
+
+                    <ChevronRight size={16} color="#A8A29E" />
+                  </TouchableOpacity>
+                );
+              })
+            )}
           </ScrollView>
+
+          {/* Footer Full Center CTA */}
+          <TouchableOpacity
+            style={styles.fullCenterBtn}
+            onPress={handleOpenFullPage}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.fullCenterBtnText}>Open Notification Center</Text>
+            <ExternalLink size={15} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -206,135 +244,245 @@ export const NotificationSheet: React.FC<NotificationSheetProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(23, 23, 42, 0.65)',
+    backgroundColor: 'rgba(28, 25, 23, 0.55)',
     justifyContent: 'flex-end',
   },
+  backdrop: {
+    flex: 1,
+  },
   sheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '75%',
-    paddingTop: 20,
+    backgroundColor: '#FAF9F6',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '82%',
+    paddingTop: 10,
     paddingHorizontal: 20,
-    paddingBottom: 30,
-    shadowColor: '#17172A',
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 10,
+    paddingBottom: 28,
+    shadowColor: '#1C1917',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 12,
+    borderTopWidth: 1,
+    borderColor: '#F3EFEA',
+  },
+  dragHandleContainer: {
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  dragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E7E5E4',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginVertical: 12,
   },
-  bellIconBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#EAE8FD',
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bellBadgeCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EAE7FF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
     fontFamily: 'InstrumentSerif',
-    fontSize: 24,
-    color: '#17172A',
+    fontSize: 26,
+    color: '#1C1917',
   },
-  unreadBadge: {
+  unreadPill: {
     backgroundColor: '#5B4FE8',
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     paddingVertical: 3,
-    borderRadius: 10,
+    borderRadius: 12,
   },
-  unreadBadgeText: {
-    fontFamily: 'DMSans-Medium',
+  unreadPillText: {
+    fontFamily: 'DMSans-Bold',
     fontSize: 10,
     color: '#FFFFFF',
-    fontWeight: '600',
   },
-  closeBtn: {
-    padding: 4,
-    backgroundColor: '#F7F6F3',
-    borderRadius: 12,
+  headerActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EAE7FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F3EFEA',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   settingsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F7F6F3',
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginBottom: 14,
+    paddingVertical: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F0EBE1',
+    shadowColor: '#1C1917',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  settingsText: {
-    fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#17172A',
-  },
-  listContent: {
-    gap: 10,
-    paddingBottom: 10,
-  },
-  notificationItem: {
+  settingsLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F7F6F3',
-    borderRadius: 16,
-    padding: 14,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    gap: 8,
   },
-  notificationItemUnread: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#EAE8FD',
-    shadowColor: '#5B4FE8',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  itemIconCol: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#F0EFFB',
+  slidersIconCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#EAE7FF',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  itemTextCol: {
+  settingsText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
+    color: '#1C1917',
+  },
+  listContent: {
+    gap: 12,
+    paddingBottom: 12,
+  },
+  emptyBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 36,
+    gap: 8,
+  },
+  emptyIconCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#F3EFEA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 22,
+    color: '#1C1917',
+  },
+  emptySub: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#78716C',
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#F0EBE1',
+    position: 'relative',
+    overflow: 'hidden',
+    shadowColor: '#1C1917',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  cardUnread: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DCD6CB',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  unreadAccentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+  },
+  iconBubble: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardTextCol: {
     flex: 1,
   },
-  itemTitleRow: {
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 2,
+    marginBottom: 3,
   },
-  itemTitle: {
+  cardTitle: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 13,
-    color: '#17172A',
-    fontWeight: '500',
+    fontSize: 14,
+    color: '#292524',
     flex: 1,
   },
-  itemTitleUnread: {
-    fontWeight: '700',
-    color: '#17172A',
+  cardTitleUnread: {
+    fontFamily: 'DMSans-Bold',
+    color: '#1C1917',
   },
-  itemTime: {
-    fontFamily: 'DMSans',
-    fontSize: 10,
-    color: '#9B9BAF',
+  cardTime: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#A8A29E',
     marginLeft: 6,
   },
-  itemBody: {
+  cardBody: {
     fontFamily: 'DMSans',
     fontSize: 12,
-    color: '#9B9BAF',
-    lineHeight: 16,
+    color: '#57534E',
+    lineHeight: 17,
+  },
+  fullCenterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#5B4FE8',
+    borderRadius: 16,
+    paddingVertical: 14,
+    marginTop: 12,
+    shadowColor: '#5B4FE8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  fullCenterBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    color: '#FFFFFF',
   },
 });

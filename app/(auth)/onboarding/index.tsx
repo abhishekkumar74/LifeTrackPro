@@ -253,7 +253,7 @@ export default function OnboardingScreen(): React.JSX.Element {
         throw new Error(`Goal configuration failed: ${goalError.message}`);
       }
 
-      // 4. Default habits seeding
+      // 4. Default habits seeding based on user category
       try {
         const { count, error: countError } = await supabase
           .from('habits')
@@ -265,16 +265,58 @@ export default function OnboardingScreen(): React.JSX.Element {
             console.error('Failed to check existing habits:', countError);
           }
         } else if (count === 0) {
-          const defaultHabits = [
-            { emoji: '⏰', title: 'Wake up on time',    order_index: 0 },
-            { emoji: '💧', title: 'Drink 8 glasses',   order_index: 1 },
-            { emoji: '📚', title: 'Study 4 hours',     order_index: 2 },
-            { emoji: '🧘', title: 'Meditate',          order_index: 3 },
-            { emoji: '🚫', title: 'No sugar today',    order_index: 4 },
+          let categoryHabits = [
+            { emoji: '⏰', title: 'Wake up on time', order_index: 0 },
+            { emoji: '💧', title: 'Drink 8 glasses of water', order_index: 1 },
+            { emoji: '📚', title: 'Study / Work 4 hours', order_index: 2 },
+            { emoji: '🧘', title: 'Meditate & mindfulness', order_index: 3 },
+            { emoji: '🚫', title: 'No junk food today', order_index: 4 },
           ];
 
+          if (state.category === 'cse_student') {
+            categoryHabits = [
+              { emoji: '⏰', title: 'Wake up on time', order_index: 0 },
+              { emoji: '💻', title: 'Solve 1 DSA problem', order_index: 1 },
+              { emoji: '📚', title: 'Study CS core / Dev (3 hrs)', order_index: 2 },
+              { emoji: '💧', title: 'Drink 8 glasses of water', order_index: 3 },
+              { emoji: '🧘', title: 'Meditate & rest', order_index: 4 },
+            ];
+          } else if (state.category === 'employee') {
+            categoryHabits = [
+              { emoji: '⏰', title: 'Wake up early', order_index: 0 },
+              { emoji: '💼', title: 'Focus deep work (3 hrs)', order_index: 1 },
+              { emoji: '🏋️', title: 'Exercise / Walk 30 min', order_index: 2 },
+              { emoji: '💧', title: 'Drink 8 glasses of water', order_index: 3 },
+              { emoji: '📖', title: 'Read 20 mins', order_index: 4 },
+            ];
+          } else if (state.category === 'creator') {
+            categoryHabits = [
+              { emoji: '⏰', title: 'Wake up on time', order_index: 0 },
+              { emoji: '🎬', title: 'Script / Record content', order_index: 1 },
+              { emoji: '💡', title: 'Brainstorm 3 new ideas', order_index: 2 },
+              { emoji: '💧', title: 'Drink 8 glasses of water', order_index: 3 },
+              { emoji: '🧘', title: 'Meditate & reset', order_index: 4 },
+            ];
+          } else if (state.category === 'entrepreneur') {
+            categoryHabits = [
+              { emoji: '⏰', title: 'Wake up early', order_index: 0 },
+              { emoji: '🎯', title: 'Review business metrics', order_index: 1 },
+              { emoji: '💼', title: 'Execute top priority (4 hrs)', order_index: 2 },
+              { emoji: '💧', title: 'Drink 8 glasses of water', order_index: 3 },
+              { emoji: '🏋️', title: 'Workout / Fitness', order_index: 4 },
+            ];
+          } else if (state.category === 'aspirant') {
+            categoryHabits = [
+              { emoji: '⏰', title: 'Wake up at 6 AM', order_index: 0 },
+              { emoji: '📚', title: 'High-yield revision (3 hrs)', order_index: 1 },
+              { emoji: '📝', title: 'Solve practice MCQs / Mock', order_index: 2 },
+              { emoji: '💧', title: 'Drink 8 glasses of water', order_index: 3 },
+              { emoji: '🧘', title: 'Meditate & stay calm', order_index: 4 },
+            ];
+          }
+
           const { error: seedError } = await supabase.from('habits').insert(
-            defaultHabits.map(h => ({
+            categoryHabits.map(h => ({
               ...h,
               user_id: user.id,
               frequency: 'daily',

@@ -117,6 +117,7 @@ export function useTodayStats(): TodayStats {
         supabase
           .from('tasks')
           .select('*')
+          .eq('user_id', userId)
           .is('completed_at', null)
           .or(`due_date.lte.${todayStr},due_date.is.null`),
 
@@ -124,6 +125,7 @@ export function useTodayStats(): TodayStats {
         supabase
           .from('focus_sessions')
           .select('duration_min, status')
+          .eq('user_id', userId)
           .gte('started_at', startOfDay.toISOString())
           .lte('started_at', endOfDay.toISOString()),
 
@@ -131,18 +133,21 @@ export function useTodayStats(): TodayStats {
         supabase
           .from('tasks')
           .select('*')
+          .eq('user_id', userId)
           .eq('due_date', todayStr),
 
         // 4. All completed habit logs (for streak)
         supabase
           .from('habit_logs')
           .select('date, done')
+          .eq('user_id', userId)
           .eq('done', true),
 
         // 5a. Top active habits template
         supabase
           .from('habits')
           .select('*')
+          .eq('user_id', userId)
           .eq('is_active', true)
           .order('order_index', { ascending: true })
           .limit(5),
@@ -151,18 +156,21 @@ export function useTodayStats(): TodayStats {
         supabase
           .from('habit_logs')
           .select('habit_id, done')
+          .eq('user_id', userId)
           .eq('date', todayStr),
 
         // 6. Schedule blocks (to filter in JS)
         supabase
           .from('schedule_blocks')
           .select('*')
+          .eq('user_id', userId)
           .eq('is_active', true),
 
         // 7. Primary goal
         supabase
           .from('goals')
           .select('*')
+          .eq('user_id', userId)
           .eq('is_primary', true)
           .eq('status', 'active')
           .limit(1)
@@ -172,18 +180,21 @@ export function useTodayStats(): TodayStats {
         supabase
           .from('focus_sessions')
           .select('started_at')
+          .eq('user_id', userId)
           .eq('status', 'completed'),
 
         // 9. Today's schedule logs
         supabase
           .from('schedule_logs')
           .select('*')
+          .eq('user_id', userId)
           .eq('date', todayStr),
 
         // 10. Skips log (status = skipped in last 30 days)
         supabase
           .from('schedule_logs')
           .select('*')
+          .eq('user_id', userId)
           .eq('status', 'skipped')
           .gte('date', thirtyDaysAgoStr)
       ]);
@@ -442,7 +453,7 @@ export function useTodayStats(): TodayStats {
         skippedBlockIds,
         skipsLog,
       };
-      AsyncStorage.setItem('today_stats_cache', JSON.stringify(cachedPayload)).catch(() => {});
+      AsyncStorage.setItem(`today_stats_cache_${userId}`, JSON.stringify(cachedPayload)).catch(() => {});
     } catch (err: any) {
       handleSupabaseError(err, 'fetch_today_stats');
       
@@ -454,11 +465,14 @@ export function useTodayStats(): TodayStats {
 
       if (isNetError) {
         try {
-          const cached = await AsyncStorage.getItem('today_stats_cache');
-          if (cached) {
-            setData(JSON.parse(cached));
-            setIsLoading(false);
-            return;
+          const userId = useAuthStore.getState().user?.id;
+          if (userId) {
+            const cached = await AsyncStorage.getItem(`today_stats_cache_${userId}`);
+            if (cached) {
+              setData(JSON.parse(cached));
+              setIsLoading(false);
+              return;
+            }
           }
         } catch (localErr) {
           if (__DEV__) console.warn('Failed to read offline stats cache:', localErr);
@@ -489,10 +503,13 @@ export function useTodayStats(): TodayStats {
   useEffect(() => {
     const loadCacheAndFetch = async () => {
       try {
-        const cached = await AsyncStorage.getItem('today_stats_cache');
-        if (cached) {
-          setData(JSON.parse(cached));
-          setIsLoading(false);
+        const userId = useAuthStore.getState().user?.id || (await supabase.auth.getSession()).data.session?.user?.id;
+        if (userId) {
+          const cached = await AsyncStorage.getItem(`today_stats_cache_${userId}`);
+          if (cached) {
+            setData(JSON.parse(cached));
+            setIsLoading(false);
+          }
         }
       } catch (e) {
         if (__DEV__) console.warn('Failed to load initial today stats cache:', e);

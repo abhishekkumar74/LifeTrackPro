@@ -241,26 +241,43 @@ export function useDeleteJournalEntry() {
 
 // 6. Vault PIN Management Hook (Persists unlock state across session navigation)
 let globalVaultUnlocked = false;
+let globalVaultUnlockedUserId: string | null = null;
 
 export function useVaultPin() {
+  const { user, profile } = useAuthStore();
+  const userId = user?.id || profile?.id;
   const [hasPin, setHasPin] = useState<boolean | null>(null);
-  const [isUnlocked, setIsUnlockedState] = useState<boolean>(globalVaultUnlocked);
+  const [isUnlocked, setIsUnlockedState] = useState<boolean>(
+    globalVaultUnlockedUserId === userId ? globalVaultUnlocked : false
+  );
   const [loading, setLoading] = useState<boolean>(true);
 
+  const getPinStorageKey = useCallback(async (): Promise<string | null> => {
+    const id = userId || (await getAuthenticatedUserId());
+    return id ? `secret_journal_vault_pin_${id}` : null;
+  }, [userId]);
+
   const setIsUnlocked = useCallback((unlocked: boolean) => {
+    if (userId) globalVaultUnlockedUserId = userId;
     globalVaultUnlocked = unlocked;
     setIsUnlockedState(unlocked);
-  }, []);
+  }, [userId]);
 
   const lockVault = useCallback(() => {
     globalVaultUnlocked = false;
+    globalVaultUnlockedUserId = null;
     setIsUnlockedState(false);
   }, []);
 
   const checkPinStatus = useCallback(async () => {
     try {
       setLoading(true);
-      const storedPin = await AsyncStorage.getItem(VAULT_PIN_KEY);
+      const storageKey = await getPinStorageKey();
+      if (!storageKey) {
+        setHasPin(false);
+        return;
+      }
+      const storedPin = await AsyncStorage.getItem(storageKey);
       setHasPin(!!storedPin && storedPin.length === 4);
     } catch (e) {
       if (__DEV__) console.warn('Failed to check vault pin:', e);
@@ -268,16 +285,23 @@ export function useVaultPin() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getPinStorageKey]);
 
   useEffect(() => {
+    if (globalVaultUnlockedUserId && globalVaultUnlockedUserId !== userId) {
+      globalVaultUnlocked = false;
+      globalVaultUnlockedUserId = null;
+      setIsUnlockedState(false);
+    }
     checkPinStatus();
-  }, [checkPinStatus]);
+  }, [userId, checkPinStatus]);
 
   const savePin = async (newPin: string): Promise<boolean> => {
     if (!newPin || newPin.length !== 4) return false;
     try {
-      await AsyncStorage.setItem(VAULT_PIN_KEY, newPin);
+      const storageKey = await getPinStorageKey();
+      if (!storageKey) return false;
+      await AsyncStorage.setItem(storageKey, newPin);
       setHasPin(true);
       setIsUnlocked(true);
       return true;
@@ -289,7 +313,9 @@ export function useVaultPin() {
 
   const verifyPin = async (inputPin: string): Promise<boolean> => {
     try {
-      const storedPin = await AsyncStorage.getItem(VAULT_PIN_KEY);
+      const storageKey = await getPinStorageKey();
+      if (!storageKey) return false;
+      const storedPin = await AsyncStorage.getItem(storageKey);
       if (storedPin === inputPin) {
         setIsUnlocked(true);
         return true;
@@ -303,7 +329,9 @@ export function useVaultPin() {
 
   const resetPin = async (): Promise<boolean> => {
     try {
-      await AsyncStorage.removeItem(VAULT_PIN_KEY);
+      const storageKey = await getPinStorageKey();
+      if (!storageKey) return false;
+      await AsyncStorage.removeItem(storageKey);
       setHasPin(false);
       lockVault();
       return true;
@@ -315,7 +343,7 @@ export function useVaultPin() {
 
   return {
     hasPin,
-    isUnlocked: globalVaultUnlocked,
+    isUnlocked: globalVaultUnlockedUserId === userId ? globalVaultUnlocked : false,
     loading,
     savePin,
     verifyPin,
