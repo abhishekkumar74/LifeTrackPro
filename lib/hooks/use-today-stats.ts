@@ -13,6 +13,7 @@ export interface TodayStats {
   tasksDone: number;
   habitStreak: number;
   focusStreak: number;
+  weeklyActivity: boolean[];
   habits: (Habit & { completedToday: boolean })[];
   nextBlocks: ScheduleBlock[];
   primaryGoal: (Goal & {
@@ -39,6 +40,7 @@ export function useTodayStats(): TodayStats {
     tasksDone: number;
     habitStreak: number;
     focusStreak: number;
+    weeklyActivity: boolean[];
     habits: (Habit & { completedToday: boolean })[];
     nextBlocks: ScheduleBlock[];
     primaryGoal: (Goal & { totalTasks: number; doneTasks: number }) | null;
@@ -53,6 +55,7 @@ export function useTodayStats(): TodayStats {
     tasksDone: 0,
     habitStreak: 0,
     focusStreak: 0,
+    weeklyActivity: [false, false, false, false, false, false, false],
     habits: [],
     nextBlocks: [],
     primaryGoal: null,
@@ -356,6 +359,21 @@ export function useTodayStats(): TodayStats {
         }
       }
 
+      // 4c. Weekly activity calculation (Mon=0..Sun=6 for current week)
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const distToMon = (dayOfWeek + 6) % 7;
+      const monDate = new Date(now);
+      monDate.setDate(now.getDate() - distToMon);
+
+      const weeklyActivity: boolean[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monDate);
+        d.setDate(monDate.getDate() + i);
+        const dStr = formatDateStr(d);
+        weeklyActivity.push(doneDates.has(dStr));
+      }
+
       // 5. Habits template and today logs merging
       const habits = (habitsRes.data || []).map(h => {
         const isCompleted = (todayHabitLogsRes.data || []).some(
@@ -429,6 +447,7 @@ export function useTodayStats(): TodayStats {
         tasksDone,
         habitStreak,
         focusStreak,
+        weeklyActivity,
         habits,
         nextBlocks,
         primaryGoal,
@@ -445,6 +464,7 @@ export function useTodayStats(): TodayStats {
         tasksDone,
         habitStreak,
         focusStreak,
+        weeklyActivity,
         habits,
         nextBlocks,
         primaryGoal,

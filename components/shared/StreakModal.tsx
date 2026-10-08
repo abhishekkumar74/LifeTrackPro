@@ -15,6 +15,7 @@ import { router, Href } from 'expo-router';
 interface StreakModalProps {
   isVisible: boolean;
   streakCount: number;
+  weeklyActivity?: boolean[];
   onClose: () => void;
 }
 
@@ -23,6 +24,7 @@ const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 export const StreakModal: React.FC<StreakModalProps> = ({
   isVisible,
   streakCount,
+  weeklyActivity,
   onClose,
 }) => {
   const handleAction = async (target: string) => {
@@ -79,9 +81,15 @@ export const StreakModal: React.FC<StreakModalProps> = ({
 
               <View style={styles.daysRow}>
                 {DAYS_OF_WEEK.map((day, idx) => {
-                  const isPast = idx < currentDayIndex;
                   const isToday = idx === currentDayIndex;
-                  const isCompleted = isPast || (isToday && streakCount > 0);
+                  let isCompleted = false;
+
+                  if (weeklyActivity && Array.isArray(weeklyActivity) && weeklyActivity.length === 7) {
+                    isCompleted = !!weeklyActivity[idx];
+                  } else if (streakCount > 0) {
+                    const startStreakIdx = Math.max(0, currentDayIndex - streakCount + 1);
+                    isCompleted = idx >= startStreakIdx && idx <= currentDayIndex;
+                  }
 
                   return (
                     <View key={day} style={styles.dayCol}>

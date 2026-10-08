@@ -552,6 +552,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
       <StreakModal
         isVisible={streakModalVisible}
         streakCount={stats.habitStreak}
+        weeklyActivity={stats.weeklyActivity}
         onClose={() => setStreakModalVisible(false)}
       />
 
