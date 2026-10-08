@@ -113,14 +113,6 @@ cd LifeTrackPro
 npm install
 ```
 
-### 3. Set Up Environment Variables
-Create a `.env` file in the root directory:
-```env
-EXPO_PUBLIC_SUPABASE_URL=https://your-supabase-project.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-EXPO_PUBLIC_SENTRY_DSN=your-sentry-dsn
-```
-
 ### 4. Run Development Server
 ```bash
 # Start Metro bundler
