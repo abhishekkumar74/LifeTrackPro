@@ -1,402 +1,171 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/Platform-iOS%20%7C%20Android-17172A?style=for-the-badge&logo=react&logoColor=white" />
-<img src="https://img.shields.io/badge/Expo-SDK%2051-000020?style=for-the-badge&logo=expo&logoColor=white" />
-<img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
-<img src="https://img.shields.io/badge/Supabase-Backend-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
-<img src="https://img.shields.io/badge/Status-Pre--Development-E8A020?style=for-the-badge" />
+  <img src="assets/images/icon.png" alt="LifeTrack Pro Logo" width="128" height="128" style="border-radius: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);" />
 
-<br /><br />
+  # LifeTrack Pro
+  ### *The Ultimate Life Operating System*
 
-# LifeTrack Pro
+  **One App. Every Goal. Absolute Consistency.**
 
-### *Your Life Operating System*
+  [![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android-17172A?style=for-the-badge&logo=react&logoColor=white)](https://expo.dev)
+  [![Expo SDK](https://img.shields.io/badge/Expo-SDK%2057-000020?style=for-the-badge&logo=expo&logoColor=white)](https://docs.expo.dev)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+  [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%2015-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com)
+  [![License](https://img.shields.io/badge/License-MIT-5B4FE8?style=for-the-badge)](./LICENSE)
 
-**One app. Every goal. Zero excuses.**
+  <br />
 
-LifeTrack Pro unifies goal-setting, daily scheduling, focus sessions, knowledge management, and community accountability — built for ambitious Indians who are tired of juggling 5 apps and still falling behind.
-
-[📱 Download](#) · [📖 Docs](#) · [🐛 Report Bug](https://github.com/abhishekkumar74/LifeTrackPro/issues) · [💡 Request Feature](https://github.com/abhishekkumar74/LifeTrackPro/issues)
+  [📱 Explore App](#-app-showcase) · [🚀 Features](#-core-features) · [🛠️ Tech Stack](#%EF%B8%8F-technology-stack) · [⚡ Quick Start](#-getting-started) · [🔒 Security](#-security--privacy)
 
 </div>
 
 ---
 
-## 🎯 The Problem
+## 📖 Overview
 
-Indian students and young professionals face three compounding problems:
+**LifeTrack Pro** is an all-in-one productivity power-suite built for ambitious students, professionals, creators, and exam aspirants (NEET, JEE, UPSC, SDE Placement Prep) who want to bridge the gap between long-term ambition and daily execution.
 
-| Problem | Reality |
+Unlike fragmented task apps, **LifeTrack Pro** unifies **Goal Pacing**, **Daily Routines**, **Deep Work Focus Timers**, **Physical Vintage Journaling**, **Exam Syllabus Maps**, and **Realtime Study Rooms** into a single, seamless ecosystem.
+
+---
+
+## 📱 App Showcase
+
+<div align="center">
+
+| **Home Dashboard** | **Goal Vault** | **Learn & Syllabus** |
+|:---:|:---:|:---:|
+| <img src="assets/images/screenshots/dashboard.png" width="250" alt="Home Dashboard" /> | <img src="assets/images/screenshots/goals.png" width="250" alt="Goal Vault" /> | <img src="assets/images/screenshots/learn.png" width="250" alt="Learn & Syllabus" /> |
+| *Focus Card & Routines* | *Goal Hierarchy & Pacing* | *Exam Syllabus & Notes* |
+
+<br />
+
+| **Secret Journal Vault** | **Profile & Stats** |
+|:---:|:---:|
+| <img src="assets/images/screenshots/journal.png" width="250" alt="Secret Vault" /> | <img src="assets/images/screenshots/profile.png" width="250" alt="Profile & Settings" /> |
+| *Vintage Physical Diary* | *Focus Analytics & Vault Lock* |
+
+</div>
+
+---
+
+## 🚀 Core Features
+
+### 🏠 1. Executive Home Dashboard
+- **Focus Launcher**: Highlight top priority micro-commitments and launch 25-minute Pomodoro sessions in **1 tap**.
+- **Schedule Strip**: Live horizontal timeline tracking today's routine blocks (Active, Completed, Missed, Skipped).
+- **Streak & Analytics Summary**: Realtime feedback on focus hours logged, task completions, and daily streaks.
+
+### 🏆 2. Goal Vault & Dynamic Pacing
+- **4-Level Hierarchy**: `Big Goal` → `Milestones` → `Weekly Tasks` → `Daily Action Items`.
+- **Automated Pacing Engine**: Live status calculation (`🟢 On Track`, `🟡 At Risk`, `🔴 Behind`) based on time remaining vs. completion velocity.
+
+### ⏱️ 3. Smart Focus Mode & Audio Engine
+- **Pomodoro Presets**: Standard 25/5, 50/10, 90/20, or custom duration timers.
+- **Ambient Soundscapes**: 5 high-fidelity audio tracks (*Rain*, *Café*, *Ocean*, *Lo-Fi*, *Brown Noise*) running on native background players (`expo-audio`).
+- **Zero Distraction Guarantee**: Ads are automatically suppressed during active focus sessions.
+
+### 🔒 4. Physical Vintage Journal Vault
+- **Aesthetic Diary Theme**: Parchment paper background, red notebook margin lines, and vintage `InstrumentSerif` handwriting typography.
+- **PIN Lock & Password Recovery**: 4-digit PIN protection backed by Supabase Auth password verification for instant recovery.
+- **Structured Daily Growth Logs**: Track `Daily Thoughts`, `Wins of the Day`, `Not To-Dos`, and `Improvements`.
+
+### 📚 5. Syllabus Tracker & Spaced Repetition
+- **Multi-Exam Syllabus Maps**: Pre-configured chapter maps for UPSC CSE, NEET, JEE, GATE, and SDE Placement Prep.
+- **SuperMemo SM-2 Flashcards**: Memory retention algorithm scheduling revision intervals based on recall difficulty.
+
+### 👥 6. Realtime Study Rooms
+- **Synchronous Collaboration**: Live presence sync (`Supabase Realtime`) showing active participants, silent/music/discussion room modes, and shared room timers.
+- **In-Room Chat**: Realtime sanitized room messaging with client-side rate limiting and anti-phishing filters.
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer | Technologies Used |
 |---|---|
-| **Fragmented tools** | Notes in one app, tasks in another, timer elsewhere, goals nowhere |
-| **Digital distraction** | Average Indian spends 4.5+ hours/day on social media — directly competing with deep work |
-| **No accountability** | Goals are set but never tracked against daily behavior — course deviation is noticed too late |
+| **Framework** | [React Native 0.86](https://reactnative.dev) + [Expo SDK 57](https://expo.dev) |
+| **Language** | [TypeScript 5.0](https://www.typescriptlang.org) (Strict Mode) |
+| **Routing** | [Expo Router v4](https://docs.expo.dev/router/introduction/) (File-based navigation) |
+| **Backend & DB** | [Supabase](https://supabase.com) (PostgreSQL 15, Auth, Row-Level Security, Realtime, Storage) |
+| **State & Cache** | [Zustand](https://github.com/pmndrs/zustand) + [TanStack React Query v5](https://tanstack.com/query/v5) |
+| **Audio Engine** | `expo-audio` (SDK 57 native background audio player) |
+| **UI & Animations** | Lucide React Native, React Native Reanimated v4, Custom Design Tokens |
+| **Observability** | Sentry React Native (Automated crash logging & performance tracing) |
 
 ---
 
-## ✨ The Solution
+## ⚡ Getting Started
 
-LifeTrack Pro solves the **whole system**, not just one piece of it.
+### Prerequisites
+- **Node.js**: v20.0.0 or higher
+- **Package Manager**: `npm` or `yarn`
+- **Mobile Environment**: [Expo Go](https://expo.dev/go) app, iOS Simulator, or Android Emulator
 
-A NEET aspirant can store their syllabus, plan their week, block distracting apps, join a live group study room, and see whether they're on pace to clear their exam — **all without leaving the app.**
-
-> **Vision:** Every person in India has a structured, focused path to their biggest goal.  
-> **Mission:** Remove friction between intention and execution for **10 million users by 2027.**
-
----
-
-## 👥 Who It's For
-
-| Segment | Profile | Primary Need |
-|---|---|---|
-| 🎓 **Student** (60%) | 16–25, NEET/JEE/UPSC/CAT/GATE/SSC/CLAT aspirant | Syllabus tracker + focus timer + exam countdown |
-| 💼 **Employee** (20%) | 24–40, side goal alongside 9-to-5 | Separate work vs. personal goal time |
-| 🎨 **Creator** (10%) | 20–32, YouTuber / designer / developer | Content calendar + posting streak |
-| 🚀 **Entrepreneur** (7%) | 24–38, founder / business owner | Top 3 big rocks + deep work tracking |
-| 🏫 **Educator** (3%) | Teacher / coach running batches | Batch management + student progress visibility |
-
----
-
-## 🚀 Features
-
-<details>
-<summary><strong>🧭 Personalised Onboarding (5 screens)</strong></summary>
-
-- Profile type selection: Student, Employee, Creator, Entrepreneur, Educator, Aspirant
-- Conditional sub-category (e.g. Students pick exams: NEET, JEE, UPSC, CAT…)
-- Big goal input with timeline picker (3M / 6M / 1Y / 2Y / 5Y)
-- Daily hours dial + peak productivity time
-- Summary confirmation card → all saved to Supabase atomically
-
-</details>
-
-<details>
-<summary><strong>🏠 Home Dashboard — 7 Action Zones</strong></summary>
-
-| Zone | Component | Purpose |
-|---|---|---|
-| A | Sticky Header | Avatar + greeting + streak badge + notifications |
-| B | Today's Focus Card | Top priority task → one tap to start focus session |
-| C | Quick Stats Row | Focus hours / Tasks done / Habit streak |
-| D | Schedule Strip | Next 2 upcoming time blocks |
-| E | Habit Row | Top 5 habits as inline checkboxes |
-| F | Goal Progress Bar | Goal name + progress ring + days left |
-| G | AI Insight Card | Smart nudge from AI coach (dismissable) |
-
-**Rule:** Start your most important task in **≤2 taps** from home.
-
-</details>
-
-<details>
-<summary><strong>🏆 Goal Vault</strong></summary>
-
-- 4-level hierarchy: Big Goal → Milestones → Weekly Tasks → Daily Items
-- Auto on-track calculation: 🟢 On Track / 🟡 At Risk / 🔴 Behind
-- Swipe right to complete, swipe left to reschedule
-- Animated progress rings on screen entry
-- Weekly reflection journal (prompted every Sunday at 9 PM)
-
-</details>
-
-<details>
-<summary><strong>⏱️ Focus Mode</strong></summary>
-
-- Pomodoro presets: 25/5, 50/10, 90/20 + fully custom
-- Session goal text field for micro-commitment before starting
-- 5 ambient soundscapes: Rain, Café, Ocean, Lo-fi, Brown Noise
-- Background audio on both iOS and Android (even when minimised)
-- **App Blocker:** Android via Accessibility Service; iOS via Screen Time API
-- End-of-session summary with mood rating + accomplishment log
-
-</details>
-
-<details>
-<summary><strong>📚 Notes & Knowledge Hub</strong></summary>
-
-**Tab 1 — Syllabus Tracker**
-- Subject → Chapter → Topic hierarchy
-- Topic status: Not Started / In Progress / Done / Needs Revision
-- Auto-calculated completion % per subject
-
-**Tab 2 — Notes**
-- Rich text editor with auto-save (debounced 2s)
-- Image attachments via camera or gallery → Supabase Storage
-- Spaced repetition: amber highlight for notes due for revision today
-
-**Tab 3 — Flashcards**
-- SM-2 spaced repetition algorithm
-- Tinder-style swipe: ✅ Got it / 🔄 Review again
-- Auto-generate from notes or create manually
-
-</details>
-
-<details>
-<summary><strong>✅ Task Manager</strong></summary>
-
-- Views: Today / Upcoming / Completed
-- Priority system: 🔴 Urgent / 🟡 Important / ⚪ Normal
-- Swipe gestures: right = complete (green flash), left = reschedule
-- Recurring tasks with custom day patterns
-- Quick add FAB: title + priority only (rest optional)
-
-</details>
-
-<details>
-<summary><strong>🔥 Habit Tracker</strong></summary>
-
-- Create habits with emoji + name + custom frequency
-- Top 5 habits on home screen as inline toggles
-- Streak calculation with consecutive-day logic
-- Calendar heatmap showing all-time completions
-- Soft-delete (archive) to preserve history
-
-</details>
-
-<details>
-<summary><strong>📅 Routine Maker & Scheduler</strong></summary>
-
-- Drag-to-create time blocks, drag edges to resize
-- Pre-built templates: NEET 10hr plan, Corporate 9-to-5, Creator week
-- Recurring daily/weekly blocks
-- Morning brief notification at 8 AM with today's top 3 blocks
-
-</details>
-
-<details>
-<summary><strong>👥 Group Study Rooms</strong></summary>
-
-- Live rooms with real-time member presence (Supabase Realtime)
-- Room types: Silent 🔇 / Music 🎵 / Discussion 💬
-- Shared Pomodoro timer synced across all members
-- Ephemeral in-room chat (not stored)
-- Public room discovery + private invite-link rooms
-
-</details>
-
-<details>
-<summary><strong>📊 Analytics & Progress</strong></summary>
-
-- 90-day GitHub-style focus heatmap
-- 7-day bar chart with average line overlay
-- Subject distribution donut chart
-- Achievement badges: "30-Day Streak", "100hr Focus Club", "Syllabus Crusher"
-- Burnout detector: 3 low-mood days + streak break → rest recommendation
-
-</details>
-
-<details>
-<summary><strong>🤖 AI Coach (Claude API)</strong></summary>
-
-- Weekly on-track analysis via Supabase Edge Function
-- Auto-generated Sunday review report
-- Pattern detection (skipped subjects/days)
-- Burnout early warning
-- Displayed as a single-line card on home; full view in Profile → AI Insights
-
-</details>
-
----
-
-## 🎨 Design System
-
-**Philosophy: Calm Productivity** — the UI must not add visual stress to users already under academic and professional pressure.
-
-### Color Palette
-
-| Token | Hex | Usage |
-|---|---|---|
-| Background | `#F7F6F3` | App background (warm white) |
-| Surface | `#FFFFFF` | Cards, modals, sheets |
-| Navy | `#17172A` | Hero cards, focus screen, primary headings |
-| Violet | `#5B4FE8` | CTAs, active nav, progress rings |
-| Mint | `#00B894` | Success, completed, on-track |
-| Amber | `#E8A020` | Streaks, warnings, AI nudge |
-| Coral | `#E85858` | Errors, danger, blocker active |
-
-### Typography
-
-| Role | Font | Usage |
-|---|---|---|
-| Display | Instrument Serif | Screen titles, hero headings, goal names |
-| UI | DM Sans | All interface text, labels, buttons |
-| Numbers | DM Mono | Timers, statistics, streaks, percentages |
-
-### Spacing
-- Card border-radius: `16px` · Button border-radius: `12px`
-- Card padding: `20px` · Section gap: `24px` · Screen margin: `20px`
-- Min touch target: `48×48px`
-
----
-
-## 🛠️ Tech Stack
-
-### Frontend
-
-| Layer | Technology |
-|---|---|
-| Framework | React Native + Expo SDK 51 |
-| Language | TypeScript (strict mode) |
-| Styling | NativeWind v4 (Tailwind for RN) |
-| Navigation | Expo Router v3 (file-based) |
-| State | Zustand (local) + React Query v5 (server) |
-| Animations | React Native Reanimated v3 (60fps) |
-| Audio | expo-av (ambient sounds + background play) |
-| Gestures | react-native-gesture-handler |
-| Charts | react-native-svg |
-| Bottom Sheets | react-native-bottom-sheet |
-
-### Backend
-
-| Layer | Technology |
-|---|---|
-| Database | Supabase (PostgreSQL) |
-| Auth | Supabase Auth |
-| Realtime | Supabase Realtime Presence (study rooms) |
-| Storage | Supabase Storage (note images) |
-| Edge Functions | Supabase Edge Functions (AI coach job) |
-| AI | Claude API (insights & weekly review) |
-
----
-
-## 📐 Business Logic
-
-### On-Track Calculation
-```
-expected_ratio = days_elapsed / days_total
-actual_ratio   = tasks_completed / total_tasks
-
-actual ≥ expected × 0.90  →  🟢 On Track
-actual ≥ expected × 0.70  →  🟡 At Risk
-else                       →  🔴 Behind
+### 1. Clone the Repository
+```bash
+git clone https://github.com/abhishekkumar74/LifeTrackPro.git
+cd LifeTrackPro
 ```
 
-### SM-2 Spaced Repetition (Flashcards & Notes)
-```
-quality 0–2  →  reset: repetitions=0, interval=1 day
-quality 3–5  →  success:
-  rep=0: interval=1d  |  rep=1: interval=6d  |  else: interval × ease_factor
-  ease_factor = max(1.3, ease_factor + 0.1 − (5−quality) × (0.08 + (5−quality) × 0.02))
+### 2. Install Dependencies
+```bash
+npm install
 ```
 
-### Streak Calculation
+### 3. Set Up Environment Variables
+Create a `.env` file in the root directory:
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://your-supabase-project.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+EXPO_PUBLIC_SENTRY_DSN=your-sentry-dsn
 ```
-Walk habit_logs descending from today.
-Count consecutive days where done=true.
-Break on first gap or done=false.
+
+### 4. Run Development Server
+```bash
+# Start Metro bundler
+npm start
+
+# Run on iOS Simulator
+npm run ios
+
+# Run on Android Device / Emulator
+npm run android
 ```
 
 ---
 
-## 📁 Project Structure
+## 🧪 Quality Assurance & Build Checks
 
-```
-app/
-├── (auth)/
-│   ├── login.tsx
-│   ├── verify-otp.tsx
-│   └── onboarding/
-│       ├── index.tsx          # Step manager
-│       └── steps/             # 5 step components
-├── (tabs)/
-│   ├── index.tsx              # Home Dashboard
-│   ├── goals.tsx              # Goal Vault
-│   ├── focus.tsx              # Focus Mode
-│   ├── learn.tsx              # Notes + Syllabus
-│   └── stats.tsx              # Analytics
-├── rooms/
-│   ├── index.tsx              # Room list
-│   └── [id].tsx               # Active study room
-└── note/
-    └── [id].tsx               # Full-screen note editor
+Verify project health and configuration using built-in scripts:
 
-lib/
-├── utils/
-│   ├── on-track.ts            # Goal on-track calculation
-│   ├── spaced-rep.ts          # SM-2 algorithm
-│   └── streak.ts              # Habit streak logic
-├── supabase/                  # Typed Supabase client
-└── stores/                    # Zustand stores
+```bash
+# Type check TypeScript files
+npx tsc --noEmit
 
-constants/
-├── theme.ts                   # All design tokens (no magic numbers)
-└── strings.ts                 # All copy (no hardcoded strings)
+# Validate AdMob safety & configuration
+npm run validate:ads
+
+# Validate Expo public configuration
+npx expo config --type public
 ```
 
 ---
 
-## 📋 Code Standards
+## 🔒 Security & Privacy
 
-- **TypeScript strict**: no `any`, all props typed, all returns typed
-- One component per file
-- `StyleSheet.create()` only — no inline styles
-- Every screen: loading skeleton + error state + empty state
-- All async operations: `try/catch` with user-friendly error messages
-- No hardcoded strings → `constants/strings.ts`
-- No magic numbers → `constants/theme.ts`
-- No PII in logs or error messages
-
----
-
-## 💰 Monetisation
-
-| Tier | Price | Features |
-|---|---|---|
-| **Free** | ₹0 | Core goal tracking, basic focus timer, 5 habits, 1 study room |
-| **Pro** | ₹99/month | AI coach, ambient sound mixing, unlimited habits, advanced analytics |
-| **Batch** | ₹499/month | Educator tools, batch management, student progress dashboard |
-
-**Target:** India first → Southeast Asia → Global
-
----
-
-## 🗺️ Roadmap
-
-- [x] Project architecture & design system
-- [ ] Onboarding flow
-- [ ] Home dashboard
-- [ ] Goal Vault
-- [ ] Focus Mode with ambient audio
-- [ ] Task Manager
-- [ ] Habit Tracker
-- [ ] Syllabus Tracker + Notes + Flashcards
-- [ ] Routine Maker & Scheduler
-- [ ] Analytics & heatmap
-- [ ] Group Study Rooms (Realtime)
-- [ ] AI Coach integration (Claude API)
-- [ ] App Store & Play Store release
-- [ ] Gamification (XP, levels, badges)
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please open an issue first to discuss what you'd like to change.
-
-1. Fork the repository
-2. Create your feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
+- **100% PostgreSQL Row-Level Security (RLS)**: Every single table restricts `SELECT`, `INSERT`, `UPDATE`, and `DELETE` access exclusively to the authenticated owner (`user_id = auth.uid()`).
+- **Zero Frontend Secret Exposure**: Service role keys, database credentials, and signing secrets are strictly omitted from frontend builds.
+- **Encrypted Local Storage**: Auth sessions and PIN hashes use `AsyncStorage` with native secure storage options.
 
 ---
 
 ## 📄 License
 
-Distributed under the MIT License. See `LICENSE` for more information.
-
----
-
-## 👨‍💻 Author
-
-**Abhishek Kumar**  
-[GitHub](https://github.com/abhishekkumar74) · [LinkedIn](https://www.linkedin.com/in/abhishekkumar74/)
+Distributed under the **MIT License**. See [`LICENSE`](./LICENSE) for more information.
 
 ---
 
 <div align="center">
-
-Built with ❤️ for every ambitious Indian who refuses to settle.
-
-**⭐ Star this repo if LifeTrack Pro resonates with your journey.**
-
+  <sub>Crafted with ❤️ for ambitious builders and high achievers worldwide.</sub>
 </div>
