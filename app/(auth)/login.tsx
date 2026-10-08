@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import * as AuthSession from 'expo-auth-session';
+import { AppLogo } from '@/components/ui/AppLogo';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -392,17 +393,7 @@ export default function LoginScreen(): React.JSX.Element {
         {/* SECTION 1: Top Branding Area */}
         <View style={[styles.brandingSection, isKeyboardOpen && { height: screenHeight * 0.14, justifyContent: 'center', paddingVertical: 6 }]}>
           <View style={[styles.logoContainer, isKeyboardOpen && { width: 44, height: 44, borderRadius: RADIUS.md }]}>
-            <Svg width={isKeyboardOpen ? "24" : "36"} height={isKeyboardOpen ? "24" : "36"} viewBox="0 0 24 24" fill="none">
-              <Circle cx="12" cy="12" r="10" stroke="white" strokeWidth="2" />
-              <Path
-                d="M13 6L8 13H12L11 18L16 11H12L13 6Z"
-                fill="white"
-                stroke="white"
-                strokeWidth="1"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
+            <AppLogo size={isKeyboardOpen ? 28 : 44} variant="dark" />
           </View>
           <Text style={[styles.appName, isKeyboardOpen && { fontSize: 22, marginTop: SPACING.xs }]}>{STRINGS.common.appName}</Text>
           {!isKeyboardOpen && <Text style={styles.tagline}>Your life. One app.</Text>}
@@ -656,13 +647,12 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: RADIUS.lg,
-    backgroundColor: COLORS.violet,
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
-    // Gradient mock styling for background
     shadowColor: COLORS.navy,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },

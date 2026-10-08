@@ -1,0 +1,13 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- LifeTrack Pro · North Star Icon · Violet bg -->
+  <rect width="1024" height="1024" rx="230" fill="#5B5CF0"/>
+  <circle cx="512" cy="480" r="280" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.1"/>
+  <circle cx="512" cy="480" r="180" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.07"/>
+  <polygon points="512,170  528,474  512,510  496,474" fill="#FFFFFF"/>
+  <polygon points="512,790  528,486  512,450  496,486" fill="#FFFFFF" opacity="0.5"/>
+  <polygon points="820,480  530,464  494,480  530,496" fill="#FFFFFF" opacity="0.8"/>
+  <polygon points="204,480  494,496  530,480  494,464" fill="#FFFFFF" opacity="0.55"/>
+  <circle cx="512" cy="480" r="28" fill="#14B8A6"/>
+  <circle cx="512" cy="480" r="14" fill="#5B5CF0" opacity="0.5"/>
+  <circle cx="512" cy="480" r="7"  fill="#FFFFFF" opacity="0.9"/>
+</svg>

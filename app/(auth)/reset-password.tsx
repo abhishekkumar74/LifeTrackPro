@@ -13,10 +13,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import Svg, { Circle, Path } from 'react-native-svg';
 import { supabase } from '@/lib/supabase/client';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '@/constants/theme';
 import { STRINGS } from '@/constants/strings';
+import { AppLogo } from '@/components/ui/AppLogo';
 
 export default function ResetPasswordScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
@@ -96,17 +96,7 @@ export default function ResetPasswordScreen(): React.JSX.Element {
         {/* Top Branding Section */}
         <View style={styles.brandingSection}>
           <View style={styles.logoContainer}>
-            <Svg width="36" height="36" viewBox="0 0 24 24" fill="none">
-              <Circle cx="12" cy="12" r="10" stroke="white" strokeWidth="2" />
-              <Path
-                d="M13 6L8 13H12L11 18L16 11H12L13 6Z"
-                fill="white"
-                stroke="white"
-                strokeWidth="1"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
+            <AppLogo size={40} variant="dark" />
           </View>
           <Text style={styles.appName}>{STRINGS.common.appName}</Text>
           <Text style={styles.tagline}>Reset Password</Text>
@@ -242,12 +232,12 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: RADIUS.md,
-    backgroundColor: COLORS.violet,
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: COLORS.navy,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },

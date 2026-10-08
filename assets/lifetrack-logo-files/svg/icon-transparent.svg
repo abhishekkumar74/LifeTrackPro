@@ -1,0 +1,9 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- LifeTrack Pro · North Star · Transparent bg (for splash/adaptive) -->
+  <polygon points="512,170  528,474  512,510  496,474" fill="#5B5CF0"/>
+  <polygon points="512,790  528,486  512,450  496,486" fill="#3B3BA8" opacity="0.75"/>
+  <polygon points="820,480  530,464  494,480  530,496" fill="#5B5CF0" opacity="0.82"/>
+  <polygon points="204,480  494,496  530,480  494,464" fill="#3B3BA8" opacity="0.65"/>
+  <circle cx="512" cy="480" r="28" fill="#14B8A6"/>
+  <circle cx="512" cy="480" r="7"  fill="#FFFFFF" opacity="0.9"/>
+</svg>

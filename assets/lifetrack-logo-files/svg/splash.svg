@@ -1,0 +1,25 @@
+<svg width="1284" height="2778" viewBox="0 0 1284 2778" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- LifeTrack Pro · Splash Screen · iPhone 14 Pro Max size -->
+  <rect width="1284" height="2778" fill="#0F172A"/>
+
+  <!-- Star mark centered at (642, 1200) -->
+  <circle cx="642" cy="1180" r="260" fill="none" stroke="#5B5CF0" stroke-width="1" opacity="0.1"/>
+  <circle cx="642" cy="1180" r="170" fill="none" stroke="#5B5CF0" stroke-width="1" opacity="0.07"/>
+
+  <polygon points="642,920   658,1174  642,1210  626,1174" fill="#5B5CF0"/>
+  <polygon points="642,1440  658,1214  642,1178  626,1214" fill="#3B3BA8" opacity="0.75"/>
+  <polygon points="900,1182  660,1166  624,1182  660,1198" fill="#5B5CF0" opacity="0.82"/>
+  <polygon points="384,1182  624,1198  660,1182  624,1166" fill="#3B3BA8" opacity="0.65"/>
+
+  <circle cx="642" cy="1182" r="28" fill="#14B8A6"/>
+  <circle cx="642" cy="1182" r="14" fill="#0F172A" opacity="0.5"/>
+  <circle cx="642" cy="1182" r="7"  fill="#FFFFFF" opacity="0.9"/>
+
+  <!-- Wordmark -->
+  <text x="642" y="1560" font-family="Georgia, serif" font-size="120" font-weight="700"
+    fill="#FFFFFF" text-anchor="middle" letter-spacing="-2">Life</text>
+  <text x="642" y="1560" font-family="Georgia, serif" font-size="120" font-weight="700"
+    fill="#5B5CF0" text-anchor="middle" letter-spacing="-2" dx="220">Track</text>
+  <text x="642" y="1640" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="52"
+    fill="#7070A8" text-anchor="middle" letter-spacing="20">PRO</text>
+</svg>

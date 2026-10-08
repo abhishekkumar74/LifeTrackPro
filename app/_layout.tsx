@@ -59,13 +59,16 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 SplashScreen.preventAutoHideAsync();
 
 
+import { AppLogo } from '@/components/ui/AppLogo';
+
 function BrandedLoadingScreen() {
   return (
-    <View style={{ flex: 1, backgroundColor: '#F7F6F3', justifyContent: 'center', alignItems: 'center' }}>
-      <Text style={{ fontFamily: 'InstrumentSerif', fontSize: 32, color: '#17172A' }}>
-        LifeTrack Pro
+    <View style={{ flex: 1, backgroundColor: '#0F172A', justifyContent: 'center', alignItems: 'center' }}>
+      <AppLogo size={64} variant="dark" />
+      <Text style={{ fontFamily: 'Georgia', fontSize: 30, fontWeight: '700', color: '#FFFFFF', marginTop: 16, letterSpacing: -0.5 }}>
+        Life<Text style={{ color: '#5B5CF0' }}>Track</Text> PRO
       </Text>
-      <ActivityIndicator color="#5B4FE8" style={{ marginTop: 24 }} />
+      <ActivityIndicator color="#5B5CF0" style={{ marginTop: 24 }} />
     </View>
   );
 }

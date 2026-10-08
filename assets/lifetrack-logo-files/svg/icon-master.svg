@@ -1,0 +1,24 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- LifeTrack Pro · North Star Icon · Master 1024x1024 -->
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="230" fill="#0F172A"/>
+
+  <!-- Outer soft circle guide (subtle, low opacity) -->
+  <circle cx="512" cy="480" r="280" fill="none" stroke="#5B5CF0" stroke-width="1" opacity="0.12"/>
+  <circle cx="512" cy="480" r="180" fill="none" stroke="#5B5CF0" stroke-width="1" opacity="0.08"/>
+
+  <!-- NORTH STAR — 4 spikes -->
+  <!-- Top spike — tall, sharp, primary -->
+  <polygon points="512,170  528,474  512,510  496,474" fill="#5B5CF0"/>
+  <!-- Bottom spike — shorter -->
+  <polygon points="512,790  528,486  512,450  496,486" fill="#3B3BA8" opacity="0.75"/>
+  <!-- Right spike — medium -->
+  <polygon points="820,480  530,464  494,480  530,496" fill="#5B5CF0" opacity="0.82"/>
+  <!-- Left spike — medium -->
+  <polygon points="204,480  494,496  530,480  494,464" fill="#3B3BA8" opacity="0.65"/>
+
+  <!-- Teal center jewel -->
+  <circle cx="512" cy="480" r="28" fill="#14B8A6"/>
+  <circle cx="512" cy="480" r="14" fill="#0F172A" opacity="0.5"/>
+  <circle cx="512" cy="480" r="7"  fill="#FFFFFF" opacity="0.9"/>
+</svg>
