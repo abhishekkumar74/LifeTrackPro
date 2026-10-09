@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,6 +29,7 @@ import {
   useArchivedHabits,
   useReorderHabits,
   useRestoreHabit,
+  useDeleteHabit,
   HabitWithStatus,
 } from '@/lib/hooks/use-habits';
 import { useToggleHabit } from '@/lib/hooks/use-toggle-habit';
@@ -61,6 +63,28 @@ export default function HabitsManagementScreen() {
   // Mutations
   const reorderMutation = useReorderHabits();
   const restoreMutation = useRestoreHabit();
+  const deleteMutation = useDeleteHabit();
+
+  const handleDeleteHabit = useCallback((id: string, title: string) => {
+    Alert.alert(
+      'Delete Habit',
+      `Are you sure you want to permanently delete "${title}"? All streak history and logs will be deleted forever.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Permanently',
+          style: 'destructive',
+          onPress: () => {
+            deleteMutation.mutate(id, {
+              onSuccess: () => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              },
+            });
+          },
+        },
+      ]
+    );
+  }, [deleteMutation]);
 
   // Completion calculation
   const totalHabits = habits.length;
@@ -341,6 +365,13 @@ export default function HabitsManagementScreen() {
                             activeOpacity={0.6}
                           >
                             <Text style={styles.restoreBtnText}>Restore</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.restoreBtn, { backgroundColor: '#FEE2E2', marginLeft: 6 }]}
+                            onPress={() => handleDeleteHabit(habit.id, habit.title)}
+                            activeOpacity={0.6}
+                          >
+                            <Text style={[styles.restoreBtnText, { color: '#E85858' }]}>Delete</Text>
                           </TouchableOpacity>
                         </View>
                       ))}

@@ -38,7 +38,7 @@ function getAudioModule() {
   return AudioModule;
 }
 import { Href, router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Music, Pause, Play, Send, Share2, Smile, Volume2, VolumeX, CheckCircle, Award, Sparkles, Target } from 'lucide-react-native';
+import { ArrowLeft, Music, Pause, Play, Send, Share2, Smile, Volume2, VolumeX, CheckCircle, Award, Sparkles, Target, MessageSquare, LayoutGrid } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   Alert,
@@ -200,6 +200,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   const [musicVolume, setMusicVolume] = useState(0.5);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<'lounge' | 'chat'>('lounge');
 
   const safeGoBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -397,6 +398,41 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     }
   }, [isRoomLoading, room, isHost, hostIsPremium, memberCount, safeGoBack]);
 
+  const handleRoomExpired = useCallback(async () => {
+    if (hasExpiredRef.current) return;
+    hasExpiredRef.current = true;
+
+    stopMusic();
+
+    try {
+      await endRoomMutation.mutateAsync(id || '');
+    } catch (e) { }
+
+    if (reactionChannelRef.current) {
+      try {
+        reactionChannelRef.current.send({
+          type: 'broadcast',
+          event: 'room_ended',
+          payload: {},
+        });
+      } catch (e) { }
+    }
+
+    Alert.alert(
+      'Session Finished',
+      'This study room group session time limit has been reached. Great job studying together!',
+      [{ text: 'OK', onPress: () => safeGoBack() }],
+      { cancelable: false }
+    );
+  }, [id, endRoomMutation, stopMusic, safeGoBack]);
+
+  // Monitor room status for all participants
+  useEffect(() => {
+    if (room && room.is_active === false) {
+      handleRoomExpired();
+    }
+  }, [room, handleRoomExpired]);
+
   useEffect(() => {
     if (!id) return;
 
@@ -449,6 +485,24 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           stopMusic();
         }
       })
+      .on('broadcast', { event: 'room_ended' }, () => {
+        handleRoomExpired();
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'study_rooms',
+          filter: `id=eq.${id}`,
+        },
+        (payload) => {
+          const updatedRoom = payload.new as any;
+          if (updatedRoom && updatedRoom.is_active === false) {
+            handleRoomExpired();
+          }
+        }
+      )
       .subscribe();
 
     reactionChannelRef.current = channel;
@@ -456,7 +510,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [id, currentUserId, playStation, stopMusic, musicVolume]);
+  }, [id, currentUserId, playStation, stopMusic, musicVolume, handleRoomExpired]);
 
   const sendCheerOrNudge = (targetUserId: string, type: 'cheer' | 'nudge') => {
     if (reactionChannelRef.current) {
@@ -510,23 +564,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     }
   };
 
-  const handleRoomExpired = useCallback(async () => {
-    if (hasExpiredRef.current) return;
-    hasExpiredRef.current = true;
 
-    try {
-      if (isHost) {
-        await endRoomMutation.mutateAsync(id || '');
-      }
-    } catch (e) { }
-
-    Alert.alert(
-      'Session Finished ⏱',
-      'This study room group session time limit has been reached.',
-      [{ text: 'OK', onPress: () => safeGoBack() }],
-      { cancelable: false }
-    );
-  }, [id, isHost, endRoomMutation, safeGoBack]);
 
   // Shared Group Countdown Timer
   useEffect(() => {
@@ -597,8 +635,8 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         .eq('id', currentUserId);
 
       Alert.alert(
-        'Congratulations! 🎉',
-        `You focused for ${durationMin}m in the study room! You earned 5 Focus Seeds. ✨`,
+        'Congratulations!',
+        `You focused for ${durationMin}m in the study room! You earned 5 Focus Seeds.`,
         [{ text: 'Great!' }]
       );
     } catch (e) {
@@ -972,9 +1010,49 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           </View>
         </View>
 
-        {!isChatExpanded ? (
-          <>
-            {/* SHARED TIMER */}
+        {/* SEGMENTED TAB SWITCHER */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'lounge' && styles.tabButtonActive]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              setActiveTab('lounge');
+            }}
+            activeOpacity={0.8}
+          >
+            <LayoutGrid size={15} color={activeTab === 'lounge' ? '#FFFFFF' : '#9B9BAF'} />
+            <Text style={[styles.tabButtonText, activeTab === 'lounge' && styles.tabButtonTextActive]}>
+              Room Lounge
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'chat' && styles.tabButtonActive]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              setActiveTab('chat');
+            }}
+            activeOpacity={0.8}
+          >
+            <MessageSquare size={15} color={activeTab === 'chat' ? '#FFFFFF' : '#9B9BAF'} />
+            <Text style={[styles.tabButtonText, activeTab === 'chat' && styles.tabButtonTextActive]}>
+              Chat & Feed
+            </Text>
+            {messages.length > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>{messages.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {activeTab === 'lounge' ? (
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingVertical: 12 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* SHARED TIMER CARD */}
             <View style={styles.timerCard}>
               <Text style={styles.timerDisplay}>
                 {focusActive ? formatFocusTime(focusTimeLeft) : timerText}
@@ -985,6 +1063,33 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                   {focusActive ? 'Personal Focus Session' : 'Group Session Timer'}
                 </Text>
               </View>
+
+              {/* Start/Stop Focus Action inside Timer Card */}
+              <TouchableOpacity
+                style={[styles.focusButton, focusActive && styles.stopFocusButton, { marginTop: 14, width: '90%' }]}
+                onPress={handleStartFocus}
+                activeOpacity={0.8}
+              >
+                <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+                  <Defs>
+                    <LinearGradient id="btnGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <Stop offset="0%" stopColor={focusActive ? '#FF5E7E' : '#5B4FE8'} />
+                      <Stop offset="100%" stopColor={focusActive ? '#E85858' : '#8B6FE8'} />
+                    </LinearGradient>
+                  </Defs>
+                  <Rect width="100%" height="100%" rx={16} fill="url(#btnGrad)" />
+                </Svg>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {focusActive ? (
+                    <Pause size={15} color="#FFFFFF" fill="#FFFFFF" />
+                  ) : (
+                    <Play size={15} color="#FFFFFF" fill="#FFFFFF" />
+                  )}
+                  <Text style={styles.focusButtonText}>
+                    {focusActive ? 'Stop Focus Session' : 'Start Focus Session ⏱'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </View>
 
             {/* MUSIC PLAYER BAR (only for Music Rooms) */}
@@ -1122,51 +1227,100 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               </View>
             </View>
 
-            {/* MEMBERS GRID */}
+            {/* STUDENTS STUDYING GRID */}
             <View style={styles.membersSection}>
               <View style={styles.membersHeaderRow}>
                 <Text style={styles.sectionLabel}>STUDENTS STUDYING</Text>
                 <Text style={styles.interactionSubtitle}>Tap avatar to Cheer or Nudge ✨</Text>
               </View>
-              <FlatList
-                data={members}
-                keyExtractor={(item) => item.userId}
-                numColumns={4}
-                columnWrapperStyle={styles.membersGridRow}
-                removeClippedSubviews={Platform.OS === 'android'}
-                renderItem={({ item }) => (
-                  <MemberBubble member={item} formatTimeAgo={formatTimeAgo} onPress={handleMemberPress} />
-                )}
-                contentContainerStyle={styles.membersGridContent}
-                style={{ flexGrow: 0 }}
-                scrollEnabled={members.length > 8}
-              />
-            </View>
-          </>
-        ) : null}
-
-        {/* CHAT SECTION */}
-        {showChat ? (
-          <View style={[styles.chatSection, isChatExpanded && styles.chatSectionExpanded]}>
-            <View style={styles.chatHeader}>
-              <View style={styles.chatDivider} />
-              <Text style={styles.sectionLabel}>{getChatHeaderLabel()}</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-start' }}>
+                {members.map((member) => (
+                  <MemberBubble
+                    key={member.userId}
+                    member={member}
+                    formatTimeAgo={formatTimeAgo}
+                    onPress={handleMemberPress}
+                  />
+                ))}
+              </View>
             </View>
 
+            {/* CHAT PREVIEW CARD */}
+            <View style={styles.chatPreviewCard}>
+              <View style={styles.chatPreviewHeader}>
+                <Text style={styles.chatPreviewTitle}>{getChatHeaderLabel()}</Text>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    setActiveTab('chat');
+                  }}
+                >
+                  <Text style={styles.chatPreviewOpenText}>Open Live Chat ({messages.length}) →</Text>
+                </TouchableOpacity>
+              </View>
+              {messages.length > 0 ? (
+                <Text style={styles.chatPreviewMsgText} numberOfLines={2}>
+                  💬 <Text style={{ fontWeight: 'bold' }}>{messages[messages.length - 1].userName}:</Text>{' '}
+                  {messages[messages.length - 1].text}
+                </Text>
+              ) : (
+                <Text style={[styles.chatPreviewMsgText, { color: '#9B9BAF' }]}>
+                  No messages yet. Be the first to say hi! 👋
+                </Text>
+              )}
+              <TouchableOpacity
+                style={styles.checkinButton}
+                onPress={() => setShowCheckinModal(true)}
+                activeOpacity={0.8}
+              >
+                <CheckCircle size={15} color="#00B894" />
+                <Text style={styles.checkinButtonText}>Post Progress Check-in ✨</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        ) : (
+          /* CHAT TAB VIEW */
+          <View style={{ flex: 1, backgroundColor: '#0C0C1A' }}>
+            {/* STICKY MINI HEADER */}
+            <View style={styles.stickyMiniBar}>
+              <View style={styles.stickyMiniItem}>
+                <Sparkles size={14} color="#A29BFE" />
+                <Text style={styles.stickyMiniTimerText}>
+                  {focusActive ? formatFocusTime(focusTimeLeft) : timerText}
+                </Text>
+              </View>
+
+              {room.room_type === 'music' && (
+                <TouchableOpacity
+                  style={styles.stickyMiniItem}
+                  onPress={isHost ? handleHostTogglePlay : handleMemberTogglePlay}
+                  activeOpacity={0.7}
+                >
+                  <Music size={13} color="#00B894" />
+                  <Text style={styles.stickyMiniMusicText} numberOfLines={1}>
+                    {isPlayingMusic ? `Playing: ${currentStation.name}` : `Paused: ${currentStation.name}`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.checkinButtonMini}
+                onPress={() => setShowCheckinModal(true)}
+                activeOpacity={0.8}
+              >
+                <CheckCircle size={13} color="#00B894" />
+                <Text style={styles.checkinButtonMiniText}>Check-in ✨</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* CHAT MESSAGES FLATLIST */}
             <FlatList
               data={[...messages].reverse()}
               keyExtractor={(item, index) => `${item.id}_${index}`}
               inverted
               removeClippedSubviews={Platform.OS === 'android'}
-              onScrollBeginDrag={() => {
-                if (isChatExpanded) {
-                  Keyboard.dismiss();
-                  setIsChatExpanded(false);
-                }
-              }}
-              renderItem={({ item }) => (
-                <MessageRow message={item} />
-              )}
+              renderItem={({ item }) => <MessageRow message={item} />}
               contentContainerStyle={styles.chatListContent}
               style={{ flex: 1 }}
             />
@@ -1190,6 +1344,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               </View>
             )}
 
+            {/* CHAT INPUT ROW */}
             <View style={styles.inputRow}>
               <TouchableOpacity
                 style={styles.emojiTriggerButton}
@@ -1209,62 +1364,9 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                 returnKeyType="send"
                 onSubmitEditing={handleSend}
                 blurOnSubmit={false}
-                onFocus={() => {
-                  setIsChatExpanded(true);
-                }}
               />
               <TouchableOpacity style={styles.sendButton} onPress={handleSend} activeOpacity={0.8}>
                 <Send size={16} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View style={{ flex: 1 }} />
-        )}
-
-        {/* START FOCUS & CHECK-IN BUTTONS */}
-        {!isChatExpanded && (
-          <View style={[
-            styles.bottomContainer,
-            !showChat && styles.bottomContainerNoChat,
-            {
-              paddingBottom: Platform.OS === 'android' ? Math.max(insets.bottom + 12, 16) : Math.max(insets.bottom, 12),
-            },
-          ]}>
-            <View style={styles.bottomActionsRow}>
-              <TouchableOpacity
-                style={[styles.focusButton, focusActive && styles.stopFocusButton, { flex: 1 }]}
-                onPress={handleStartFocus}
-                activeOpacity={0.8}
-              >
-                <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                  <Defs>
-                    <LinearGradient id="btnGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <Stop offset="0%" stopColor={focusActive ? '#FF5E7E' : '#5B4FE8'} />
-                      <Stop offset="100%" stopColor={focusActive ? '#E85858' : '#8B6FE8'} />
-                    </LinearGradient>
-                  </Defs>
-                  <Rect width="100%" height="100%" rx={12} fill="url(#btnGrad)" />
-                </Svg>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  {focusActive ? (
-                    <Pause size={15} color="#FFFFFF" fill="#FFFFFF" />
-                  ) : (
-                    <Play size={15} color="#FFFFFF" fill="#FFFFFF" />
-                  )}
-                  <Text style={styles.focusButtonText}>
-                    {focusActive ? 'Stop Focus' : 'Start Focus'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.checkinButton}
-                onPress={() => setShowCheckinModal(true)}
-                activeOpacity={0.8}
-              >
-                <CheckCircle size={15} color="#00B894" />
-                <Text style={styles.checkinButtonText}>Check-in ✨</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2377,5 +2479,131 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#14142B',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  tabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  tabButtonActive: {
+    backgroundColor: 'rgba(108, 92, 231, 0.25)',
+    borderColor: '#6C5CE7',
+  },
+  tabButtonText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontWeight: '600',
+  },
+  tabButtonTextActive: {
+    color: '#FFFFFF',
+    fontFamily: 'DMSans-Bold',
+  },
+  chatBadge: {
+    backgroundColor: '#6C5CE7',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 2,
+  },
+  chatBadgeText: {
+    fontFamily: 'DMMono',
+    fontSize: 9.5,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  stickyMiniBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#14142B',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  stickyMiniItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  stickyMiniTimerText: {
+    fontFamily: 'DMMono',
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#F0E6FF',
+  },
+  stickyMiniMusicText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#00B894',
+    maxWidth: 130,
+  },
+  checkinButtonMini: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 184, 148, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 184, 148, 0.3)',
+  },
+  checkinButtonMiniText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#00B894',
+    fontWeight: '600',
+  },
+  chatPreviewCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 16,
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 8,
+  },
+  chatPreviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  chatPreviewTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.5)',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  chatPreviewOpenText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#A29BFE',
+  },
+  chatPreviewMsgText: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#E0E0F0',
   },
 });

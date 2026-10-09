@@ -109,3 +109,27 @@ export function useUpdateMilestoneStatus() {
     },
   });
 }
+
+export function useDeleteMilestone() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, goalId }: { id: string; goalId: string }) => {
+      const { data, error } = await supabase
+        .from('milestones')
+        .delete()
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as Milestone;
+    },
+    onSuccess: (data) => {
+      if (data) {
+        queryClient.invalidateQueries({ queryKey: ['milestones', data.goal_id] });
+        queryClient.invalidateQueries({ queryKey: ['goals'] });
+      }
+    },
+  });
+}
