@@ -23,6 +23,13 @@ export const CONFIG = {
     enableLofiAmbientPlayer: true,
   },
 
+  // Official Store Listing URLs for viral growth & progress card sharing
+  storeUrls: {
+    android: process.env.EXPO_PUBLIC_PLAY_STORE_URL || 'https://play.google.com/store/apps/details?id=com.lifetrackpro.app',
+    ios: process.env.EXPO_PUBLIC_APP_STORE_URL || 'https://apps.apple.com/app/lifetrack-pro/id6400000000',
+    web: 'https://lifetrackpro.app',
+  },
+
   // Supabase keys - parsed securely via Expo environment variables
   supabase: {
     url: process.env.EXPO_PUBLIC_SUPABASE_URL || '',
