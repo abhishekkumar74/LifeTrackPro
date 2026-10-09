@@ -98,7 +98,6 @@ export const QuickCaptureSheet = forwardRef<QuickCaptureSheetRef, QuickCaptureSh
             placeholder="Capture your thought... (Press Enter 2x to save)"
             placeholderTextColor="#9B9BAF"
             multiline
-            autoFocus
             textAlignVertical="top"
           />
 
