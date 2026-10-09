@@ -593,11 +593,17 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     });
   }, [focusActive, focusTimeLeft, updatePresenceStatus]);
 
+  const handleCloseCheckinModal = useCallback(() => {
+    Keyboard.dismiss();
+    setShowCheckinModal(false);
+  }, []);
+
   // Handle Progress Check-in Submit
   const handleProgressCheckinSubmit = async () => {
     if (!checkinNoteInput.trim()) return;
     const note = checkinNoteInput.trim();
 
+    Keyboard.dismiss();
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
     // Update presence
@@ -1243,59 +1249,73 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         visible={showCheckinModal}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowCheckinModal(false)}
+        onRequestClose={handleCloseCheckinModal}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <CheckCircle size={18} color="#00B894" />
-                <Text style={styles.modalTitle}>Progress Check-in</Text>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={handleCloseCheckinModal}
+          >
+            <TouchableOpacity
+              style={styles.modalContent}
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <View style={styles.modalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <CheckCircle size={18} color="#00B894" />
+                  <Text style={styles.modalTitle}>Progress Check-in</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={handleCloseCheckinModal}
+                  style={styles.modalCloseBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={{ color: '#9B9BAF', fontWeight: 'bold' }}>✕</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                onPress={() => setShowCheckinModal(false)}
-                style={styles.modalCloseBtn}
-              >
-                <Text style={{ color: '#9B9BAF', fontWeight: 'bold' }}>✕</Text>
-              </TouchableOpacity>
-            </View>
 
-            <Text style={styles.modalSubtitle}>
-              Share a quick progress update with your study room members:
-            </Text>
+              <Text style={styles.modalSubtitle}>
+                Share a quick progress update with your study room members:
+              </Text>
 
-            <TextInput
-              style={styles.checkinInput}
-              placeholder="e.g., Finished 2 chapters of Physics, solved 10 DSA questions..."
-              placeholderTextColor="#9B9BAF"
-              value={checkinNoteInput}
-              onChangeText={setCheckinNoteInput}
-              multiline
-              maxLength={150}
-              autoFocus
-            />
+              <TextInput
+                style={styles.checkinInput}
+                placeholder="e.g., Finished 2 chapters of Physics, solved 10 DSA questions..."
+                placeholderTextColor="#9B9BAF"
+                value={checkinNoteInput}
+                onChangeText={setCheckinNoteInput}
+                multiline
+                maxLength={150}
+                textAlignVertical="top"
+              />
 
-            <View style={styles.modalActionsRow}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setShowCheckinModal(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
+              <View style={styles.modalActionsRow}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={handleCloseCheckinModal}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.modalSubmitBtn,
-                  !checkinNoteInput.trim() && styles.modalSubmitBtnDisabled,
-                ]}
-                onPress={handleProgressCheckinSubmit}
-                disabled={!checkinNoteInput.trim()}
-              >
-                <Text style={styles.modalSubmitText}>Post Check-in ✨</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+                <TouchableOpacity
+                  style={[
+                    styles.modalSubmitBtn,
+                    !checkinNoteInput.trim() && styles.modalSubmitBtnDisabled,
+                  ]}
+                  onPress={handleProgressCheckinSubmit}
+                  disabled={!checkinNoteInput.trim()}
+                >
+                  <Text style={styles.modalSubmitText}>Post Check-in ✨</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
