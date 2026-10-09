@@ -210,8 +210,6 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   }, []);
 
   const playStation = useCallback(async (station: MusicStation, volume: number) => {
-    const audioMod = getAudioModule();
-    if (!audioMod || !audioMod.createAudioPlayer) return;
     const loadId = Math.random().toString();
     loadingSoundIdRef.current = loadId;
 
@@ -219,30 +217,64 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       // 1. Release any existing player
       if (soundInstanceRef.current) {
         try {
-          soundInstanceRef.current.pause();
+          soundInstanceRef.current.pause?.();
+          soundInstanceRef.current.currentTime = 0;
           soundInstanceRef.current.release?.();
-        } catch (e) { }
+          soundInstanceRef.current.remove?.();
+        } catch (e) {}
         soundInstanceRef.current = null;
       }
 
-      // 2. Create and play sound asset
-      try {
-        const player = audioMod.createAudioPlayer(station.asset);
-        player.loop = true;
-        player.volume = volume;
-        player.play();
+      // 2. Web / HTML5 Audio fallback
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio) {
+        try {
+          const resolved = Image.resolveAssetSource(station.asset);
+          const uri = resolved?.uri;
+          if (uri) {
+            const webAudio = new (window as any).Audio(uri);
+            webAudio.loop = true;
+            webAudio.volume = Math.min(1, Math.max(0, volume));
+            await webAudio.play();
+            if (loadingSoundIdRef.current !== loadId) {
+              webAudio.pause();
+              return;
+            }
+            soundInstanceRef.current = webAudio;
+            setIsPlayingMusic(true);
+            return;
+          }
+        } catch (webErr) {
+          if (__DEV__) console.warn('Web Audio player failed:', webErr);
+        }
+      }
 
-        if (loadingSoundIdRef.current !== loadId) {
-          try {
-            player.pause();
-            player.release?.();
-          } catch (e) { }
-          return;
+      // 3. Native Expo 57 Audio (expo-audio)
+      try {
+        const { createAudioPlayer, setAudioModeAsync } = require('expo-audio');
+        if (typeof setAudioModeAsync === 'function') {
+          await setAudioModeAsync({
+            playsInSilentMode: true,
+            shouldPlayInBackground: true,
+          }).catch(() => {});
         }
 
-        soundInstanceRef.current = player;
-        setIsPlayingMusic(true);
-      } catch (e) {
+        if (typeof createAudioPlayer === 'function') {
+          const player = createAudioPlayer(station.asset);
+          if (player) {
+            player.loop = true;
+            player.volume = Math.min(1, Math.max(0, volume));
+            player.play?.();
+            if (loadingSoundIdRef.current !== loadId) {
+              player.pause?.();
+              return;
+            }
+            soundInstanceRef.current = player;
+            setIsPlayingMusic(true);
+            return;
+          }
+        }
+      } catch (nativeErr) {
+        if (__DEV__) console.warn('Native Expo Audio failed:', nativeErr);
         setIsPlayingMusic(false);
       }
     } catch (err) {
@@ -257,11 +289,13 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     loadingSoundIdRef.current = null;
     try {
       if (soundInstanceRef.current) {
-        soundInstanceRef.current.pause();
+        soundInstanceRef.current.pause?.();
+        soundInstanceRef.current.currentTime = 0;
         soundInstanceRef.current.release?.();
+        soundInstanceRef.current.remove?.();
         soundInstanceRef.current = null;
       }
-    } catch (e) { }
+    } catch (e) {}
     setIsPlayingMusic(false);
   }, []);
 
@@ -269,9 +303,9 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     setMusicVolume(vol);
     try {
       if (soundInstanceRef.current) {
-        soundInstanceRef.current.volume = vol;
+        soundInstanceRef.current.volume = Math.min(1, Math.max(0, vol));
       }
-    } catch (e) { }
+    } catch (e) {}
   }, []);
 
   const handleHostSelectStation = useCallback((station: MusicStation) => {
@@ -323,8 +357,13 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     return () => {
       loadingSoundIdRef.current = null;
       if (soundInstanceRef.current) {
-        soundInstanceRef.current.stopAsync().catch(() => { });
-        soundInstanceRef.current.unloadAsync().catch(() => { });
+        try {
+          soundInstanceRef.current.pause?.();
+          soundInstanceRef.current.currentTime = 0;
+          soundInstanceRef.current.release?.();
+          soundInstanceRef.current.remove?.();
+        } catch (e) {}
+        soundInstanceRef.current = null;
       }
     };
   }, []);
