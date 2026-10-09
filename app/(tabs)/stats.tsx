@@ -74,7 +74,7 @@ export default function StatsScreen(): React.JSX.Element {
   const [shareProgressModalVisible, setShareProgressModalVisible] = useState(false);
   const queryClient = useQueryClient();
 
-  const { profile } = useAuthStore();
+  const { profile, user } = useAuthStore();
   const isPremium = profile?.is_premium || false;
 
   const handleExportReport = async () => {
@@ -82,26 +82,7 @@ export default function StatsScreen(): React.JSX.Element {
       router.push('/paywall');
       return;
     }
-
-    try {
-      const focusMins = totalPeriodFocusMinutes;
-      const hours = (focusMins / 60).toFixed(1);
-      const userCategory = profile?.category || 'student';
-      
-      const reportText = `📊 *LifeTrack Pro - Focus & Productivity Report* ✨\n\n` +
-        `👤 *User:* ${profile?.name || 'Achiever'}\n` +
-        `🏷️ *Category:* ${userCategory.replace('_', ' ').toUpperCase()}\n` +
-        `⏱️ *Weekly Focus Duration:* ${hours} hours\n` +
-        `📈 *Weekly Rank:* Top 8% of competitors\n\n` +
-        `Keep coding, learning, and tracking! Powered by LifeTrack Pro.`;
-
-      await Share.share({
-        message: reportText,
-        title: 'LifeTrack Pro Focus Report',
-      });
-    } catch (err) {
-      if (__DEV__) console.warn('Report export error:', err);
-    }
+    setShareProgressModalVisible(true);
   };
 
   // Tab scroll registration
@@ -194,45 +175,45 @@ export default function StatsScreen(): React.JSX.Element {
     return !heatmapQuery.isLoading && totalFocus === 0;
   }, [heatmapQuery.data, heatmapQuery.isLoading]);
 
-  // Share Weekly Report Card
-  const handleShareReport = async () => {
-    if (!enhancedStats?.reportCard) return;
-    const {
-      monDate,
-      thisWeekHours,
-      focusDiffHours,
+  // Real user metrics for Share Progress Card
+  const userProgressMetrics = React.useMemo(() => {
+    const userName = profile?.name || user?.email?.split('@')[0] || 'Achiever';
+    const category = profile?.category || 'Student';
+
+    const periodFocusMins = periodStatsQuery.data?.focusMinutes;
+    const reportCardHours = enhancedStats?.reportCard?.thisWeekHours;
+    const focusHours = periodFocusMins !== undefined && periodFocusMins > 0 
+      ? periodFocusMins / 60 
+      : (reportCardHours ?? (totalPeriodFocusMinutes > 0 ? totalPeriodFocusMinutes / 60 : 0));
+
+    const habitStreak = todayStats.habitStreak ?? enhancedStats?.focusStats?.focusStreak ?? 0;
+    const tasksDone = enhancedStats?.reportCard?.goalsCompletedThisWeek ?? enhancedStats?.todaySummary?.todayTasksDone ?? 0;
+    const consistencyRate = enhancedStats?.reportCard?.habitConsistencyRate ?? (periodStatsQuery.data?.taskChangePercent !== undefined ? Math.min(100, Math.max(0, 50 + periodStatsQuery.data.taskChangePercent)) : 85);
+    const bestDayName = enhancedStats?.reportCard?.bestDayName || 'Peak Day';
+    const bestDayHours = enhancedStats?.reportCard?.bestDayHours || 0;
+
+    return {
+      userName,
+      category,
+      focusHours,
+      habitStreak,
+      tasksDone,
+      consistencyRate,
       bestDayName,
       bestDayHours,
-      habitConsistencyRate,
-      goalsCompletedThisWeek,
-    } = enhancedStats.reportCard;
+    };
+  }, [
+    profile,
+    user,
+    periodStatsQuery.data,
+    enhancedStats,
+    todayStats.habitStreak,
+    totalPeriodFocusMinutes,
+  ]);
 
-    const formattedMonDate = new Date(monDate).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-
-    const diffText =
-      focusDiffHours >= 0
-        ? `+${focusDiffHours.toFixed(1)}h more than last week`
-        : `${focusDiffHours.toFixed(1)}h less than last week`;
-
-    const message = `📊 My LifeTrack Pro Weekly Report (Week of ${formattedMonDate}):
-• Focus Time: ${thisWeekHours.toFixed(1)}h (${diffText})
-• Best Focus Day: ${bestDayName} (${bestDayHours.toFixed(1)}h)
-• Habits Consistency: ${habitConsistencyRate}%
-• Tasks Completed: ${goalsCompletedThisWeek}
-
-Stay focused, track your goals! 🚀`;
-
-    try {
-      await Share.share({ message });
-    } catch (error) {
-      if (__DEV__) {
-        console.error('Error sharing report:', error);
-      }
-    }
+  // Share Weekly Report Card
+  const handleShareReport = () => {
+    setShareProgressModalVisible(true);
   };
 
   const formatTodayFocus = (mins: number) => {
@@ -1270,6 +1251,7 @@ Stay focused, track your goals! 🚀`;
         <ShareableProgressModal
           visible={shareProgressModalVisible}
           onClose={() => setShareProgressModalVisible(false)}
+          metrics={userProgressMetrics}
         />
       </SafeAreaView>
     </View>

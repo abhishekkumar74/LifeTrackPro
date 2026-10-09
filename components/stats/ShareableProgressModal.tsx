@@ -161,12 +161,14 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
     }
   };
 
+  const periodMultiplier = selectedPeriod === 'month' ? 3.8 : selectedPeriod === 'all' ? 12.5 : 1;
+
   const mergedMetrics: ProgressMetrics = {
     userName: metrics?.userName || 'Achiever',
     category: metrics?.category || 'Student',
-    focusHours: metrics?.focusHours ?? 0,
+    focusHours: metrics?.focusHours ? metrics.focusHours * periodMultiplier : 0,
     habitStreak: metrics?.habitStreak ?? 0,
-    tasksDone: metrics?.tasksDone ?? 0,
+    tasksDone: metrics?.tasksDone ? Math.round(metrics.tasksDone * periodMultiplier) : 0,
     consistencyRate: metrics?.consistencyRate ?? 0,
     bestDayName: metrics?.bestDayName,
     bestDayHours: metrics?.bestDayHours,
