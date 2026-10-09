@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   AppState,
   Switch,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -35,7 +36,7 @@ import { useAmbientSound } from '@/lib/hooks/use-ambient-sound';
 import { useFocusSessions } from '@/lib/hooks/use-focus-sessions';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
 import { scheduleRevisionAlert } from '@/lib/notifications';
-import { Settings } from 'lucide-react-native';
+import { Settings, Maximize2 } from 'lucide-react-native';
 
 // Custom Components
 import { TimerCircle } from '@/components/focus/TimerCircle';
@@ -44,6 +45,7 @@ import { BlockerToggle } from '@/components/focus/BlockerToggle';
 import { SessionSummary } from '@/components/focus/SessionSummary';
 import { SubjectPicker } from '@/components/shared/SubjectPicker';
 import { RatingModal, shouldPromptRating } from '@/components/shared/RatingModal';
+import { LandscapeFocusClock } from '@/components/focus/LandscapeFocusClock';
 
 const TIMER_THEMES = [
   { id: 'default', label: 'Default', color: '#5B4FE8', isPremium: false },
@@ -56,6 +58,10 @@ const TIMER_THEMES = [
 ] as const;
 
 export default function FocusScreen(): React.JSX.Element {
+  const { width, height } = useWindowDimensions();
+  const [isManualLandscape, setIsManualLandscape] = useState(false);
+  const isLandscape = (width > height) || isManualLandscape;
+
   const queryClient = useQueryClient();
   const { data: history = [], isLoading: isLoadingHistory, refetch: refetchHistory } = useFocusSessions();
   const [showSummary, setShowSummary] = useState(false);
@@ -698,15 +704,19 @@ export default function FocusScreen(): React.JSX.Element {
   const handleSoundSelect = useCallback(async (key: SoundKey | null) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    // Opt-in Rewarded Video Ad for unlocking premium ambient soundscapes
-    if (key && (key === 'lofi' || key === 'cafe' || key === 'brown_noise')) {
+    // Opt-in Rewarded Video Ad for unlocking premium ambient soundscapes (ONLY for Non-Premium users)
+    if (!isPremium && key && (key === 'lofi' || key === 'cafe' || key === 'brown_noise' || key === 'ocean')) {
       Alert.alert(
         'Unlock Soundscape 🎧',
-        `Watch a short video ad to unlock ${key.toUpperCase()} ambient audio for your focus session.`,
+        `Upgrade to Gold for unlimited access, or watch a short video ad to unlock ${key.toUpperCase().replace('_', ' ')} for this focus session.`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Watch Ad & Unlock',
+            text: 'Upgrade to Gold 👑',
+            onPress: () => router.push('/paywall'),
+          },
+          {
+            text: 'Watch Ad & Unlock 🎬',
             onPress: () => {
               AdRewarded.showRewardAd(async () => {
                 setSound(key);
@@ -725,7 +735,7 @@ export default function FocusScreen(): React.JSX.Element {
     } else {
       await ambient.stop();
     }
-  }, [setSound, ambient, soundVolume]);
+  }, [isPremium, setSound, ambient, soundVolume]);
 
   const handleVolumeChange = useCallback(async (vol: number) => {
     setVolume(vol);
@@ -790,6 +800,18 @@ export default function FocusScreen(): React.JSX.Element {
                   activeOpacity={0.7}
                 >
                   <Text style={styles.seedsBalanceCleanText}>✨ {profile?.focus_seeds || 0} Seeds</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.settingsHeaderBtn}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    setIsManualLandscape(true);
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityLabel="StandBy Desk Clock"
+                >
+                  <Maximize2 size={16} color="rgba(255, 255, 255, 0.9)" />
                 </TouchableOpacity>
 
                 {!isRunning && (
@@ -1132,7 +1154,7 @@ export default function FocusScreen(): React.JSX.Element {
         }}
       >
         <BottomSheetView style={styles.settingsSheetContent}>
-          <Text style={styles.settingsSheetTitle}>Timer Options ⚙️</Text>
+          <Text style={styles.settingsSheetTitle}>Timer Options</Text>
 
           {/* Strict Mode Toggle inside Settings */}
           <View style={styles.settingsRow}>
@@ -1265,6 +1287,40 @@ export default function FocusScreen(): React.JSX.Element {
       <RatingModal
         isVisible={showRatingModal}
         onClose={() => setShowRatingModal(false)}
+      />
+
+      {/* iPhone StandBy / Desk Clock Landscape Overlay */}
+      <LandscapeFocusClock
+        isVisible={isLandscape}
+        secondsLeft={secondsLeft}
+        totalSeconds={totalSeconds}
+        isRunning={isRunning}
+        isPaused={isPaused}
+        sessionGoal={sessionGoal}
+        subjectTag={subjectTag}
+        activeThemeColor={TIMER_THEMES.find((t) => t.id === activeTheme)?.color || '#5B4FE8'}
+        activeSound={activeSound}
+        onPlayPause={() => {
+          if (isRunning && !isPaused) {
+            pause();
+          } else if (isPaused) {
+            resume();
+          } else {
+            start();
+          }
+        }}
+        onStop={() => stop()}
+        onToggleSound={() => {
+          if (activeSound) {
+            setSound(null);
+            ambient.stop();
+          } else {
+            const nextSound: SoundKey = 'rain';
+            setSound(nextSound);
+            ambient.play(nextSound, soundVolume);
+          }
+        }}
+        onClose={() => setIsManualLandscape(false)}
       />
     </View>
   );

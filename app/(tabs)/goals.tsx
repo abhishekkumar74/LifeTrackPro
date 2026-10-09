@@ -19,8 +19,8 @@ import { Plus, Mountain, Target, Trophy, CheckCircle2 } from 'lucide-react-nativ
 import * as Haptics from 'expo-haptics';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
-import { useGoals, AssembledGoal } from '@/lib/hooks/use-goals';
-import { useUpdateMilestoneStatus } from '@/lib/hooks/use-milestones';
+import { useGoals, useUpdateGoal, useDeleteGoal, AssembledGoal } from '@/lib/hooks/use-goals';
+import { useUpdateMilestoneStatus, useDeleteMilestone } from '@/lib/hooks/use-milestones';
 import {
   useTasks,
   useCompleteTask,
@@ -64,9 +64,12 @@ export default function GoalsScreen(): React.JSX.Element {
 
   // Mutation Hooks
   const { mutate: updateMilestoneStatus } = useUpdateMilestoneStatus();
+  const { mutate: deleteMilestone } = useDeleteMilestone();
   const { mutate: completeTask } = useCompleteTask();
   const { mutate: rescheduleTask } = useRescheduleTask();
   const { mutate: deleteTask } = useDeleteTask();
+  const { mutate: updateGoal } = useUpdateGoal();
+  const { mutate: deleteGoal } = useDeleteGoal();
 
   const [selectedTab, setSelectedTab] = useState<TabType>('active');
   const [defaultMilestoneId, setDefaultMilestoneId] = useState<string | null>(null);
@@ -290,20 +293,108 @@ export default function GoalsScreen(): React.JSX.Element {
     }
   }, [updateMilestoneStatus, activeGoalsQuery.data]);
 
+  const handleToggleGoalStatus = useCallback(
+    (
+      goalId: string,
+      currentStatus: 'active' | 'achieved',
+      title: string,
+      remainingItems: number
+    ) => {
+      if (currentStatus === 'achieved') {
+        Alert.alert(
+          'Re-activate Goal',
+          `Do you want to move "${title}" back to your Active Goals vault?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Re-activate',
+              onPress: () => updateGoal({ id: goalId, updates: { status: 'active' } }),
+            },
+          ]
+        );
+      } else {
+        if (remainingItems > 0) {
+          Alert.alert(
+            'Unfinished Tasks & Milestones',
+            `"${title}" still has ${remainingItems} incomplete task(s)/milestone(s).\n\nAre you sure you want to mark this goal as Achieved now?`,
+            [
+              { text: 'Keep Working', style: 'cancel' },
+              {
+                text: 'Mark Achieved',
+                onPress: () => updateGoal({ id: goalId, updates: { status: 'achieved' } }),
+              },
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Goal Achievement',
+            `Awesome work! Are you ready to mark "${title}" as completed?`,
+            [
+              { text: 'Not Yet', style: 'cancel' },
+              {
+                text: 'Mark Achieved',
+                onPress: () => updateGoal({ id: goalId, updates: { status: 'achieved' } }),
+              },
+            ]
+          );
+        }
+      }
+    },
+    [updateGoal]
+  );
+
+  const handleDeleteGoal = useCallback((goalId: string, title: string) => {
+    Alert.alert(
+      'Delete Goal',
+      `Are you sure you want to delete "${title}"?\n\nThis goal will be removed from your active vault.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Goal',
+          style: 'destructive',
+          onPress: () => {
+            deleteGoal(goalId);
+          },
+        },
+      ]
+    );
+  }, [deleteGoal]);
+
   const renderGoalItem = useCallback(({ item }: { item: AssembledGoal }) => (
     <GoalCard
       goal={item}
       isPrimary={item.is_primary}
       onAddMilestone={handleAddMilestone}
+      onToggleStatus={handleToggleGoalStatus}
+      onDeleteGoal={handleDeleteGoal}
     />
-  ), [handleAddMilestone]);
+  ), [handleAddMilestone, handleToggleGoalStatus, handleDeleteGoal]);
 
   const renderAchievedGoalItem = useCallback(({ item }: { item: AssembledGoal }) => (
     <GoalCard
       goal={item}
       isPrimary={item.is_primary}
+      onToggleStatus={handleToggleGoalStatus}
+      onDeleteGoal={handleDeleteGoal}
     />
-  ), []);
+  ), [handleToggleGoalStatus, handleDeleteGoal]);
+
+  const handleDeleteMilestone = useCallback((id: string, goalId: string, title: string) => {
+    Alert.alert(
+      'Delete Milestone',
+      `Are you sure you want to delete "${title}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Milestone',
+          style: 'destructive',
+          onPress: () => {
+            deleteMilestone({ id, goalId });
+          },
+        },
+      ]
+    );
+  }, [deleteMilestone]);
 
   const renderMilestoneItem = useCallback(({ item }: { item: MilestoneSectionItem }) => {
     if ('isPlaceholder' in item && item.isPlaceholder) {
@@ -325,9 +416,10 @@ export default function GoalsScreen(): React.JSX.Element {
         milestone={item as Milestone & { tasks: Task[] }}
         onStatusChange={handleMilestoneStatusChange}
         onAddTask={handleOpenCreateTask}
+        onDeleteMilestone={handleDeleteMilestone}
       />
     );
-  }, [handleMilestoneStatusChange, handleOpenCreateTask]);
+  }, [handleMilestoneStatusChange, handleOpenCreateTask, handleDeleteMilestone]);
 
   const renderSectionHeader = useCallback(({ section }: { section: { id: string; title: string } }) => (
     <View style={styles.groupHeaderRow}>

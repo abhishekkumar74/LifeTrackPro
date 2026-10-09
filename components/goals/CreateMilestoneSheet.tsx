@@ -121,9 +121,9 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
     const isSaving = createMilestoneMutation.isPending;
     const isValid = title.trim().length > 0 && dueDate !== null;
 
-    // Minimum date: tomorrow
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // Minimum date: today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     return (
       <BottomSheet
@@ -175,11 +175,11 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
 
           {showDatePicker && (
             <DateTimePicker
-              value={dueDate || tomorrow}
+              value={dueDate || today}
               mode="date"
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={handleDateChange}
-              minimumDate={tomorrow}
+              minimumDate={today}
               textColor="#000000"
             />
           )}

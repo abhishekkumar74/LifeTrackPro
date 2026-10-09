@@ -167,11 +167,7 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
                 isLocked && styles.chipLocked,
               ]}
               onPress={() => {
-                if (isLocked) {
-                  onPremiumTrigger?.();
-                } else {
-                  onSelect(sound.key);
-                }
+                onSelect(sound.key);
               }}
               activeOpacity={0.7}
             >

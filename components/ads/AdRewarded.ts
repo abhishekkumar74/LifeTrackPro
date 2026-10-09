@@ -78,49 +78,78 @@ class AdRewardedManager {
    * Show rewarded video ad and execute callback on success
    */
   async showRewardAd(onRewardEarned: () => void): Promise<boolean> {
-    if (!isAdMobNativeModuleAvailable() || !AdManager.canShowAds()) {
-      // In dev / fallback mode, unlock directly for user convenience
+    if (Platform.OS === 'web' || !isAdMobNativeModuleAvailable() || !AdManager.canShowAds()) {
+      // Dev / fallback mode
       onRewardEarned();
       return true;
     }
 
-    if (!this.isLoaded || !this.rewarded) {
-      this.preload();
-      // If ad is not loaded yet, fallback to grant reward so user experience isn't blocked
-      onRewardEarned();
-      return false;
-    }
+    // Function to present an already loaded ad
+    const presentLoadedAd = async (): Promise<boolean> => {
+      try {
+        const mobileAdsModule = require('react-native-google-mobile-ads');
+        const { RewardedAdEventType } = mobileAdsModule;
 
-    try {
-      const mobileAdsModule = require('react-native-google-mobile-ads');
-      const { RewardedAdEventType } = mobileAdsModule;
+        let rewardEarned = false;
 
-      let rewardEarned = false;
+        const rewardUnsubscribe = this.rewarded.addAdEventListener(
+          RewardedAdEventType.EARNED_REWARD,
+          () => {
+            rewardEarned = true;
+          }
+        );
 
-      const rewardUnsubscribe = this.rewarded.addAdEventListener(
-        RewardedAdEventType.EARNED_REWARD,
-        () => {
-          rewardEarned = true;
+        const closeUnsubscribe = this.rewarded.addAdEventListener('closed', () => {
+          if (rewardEarned) {
+            onRewardEarned();
+          }
+          rewardUnsubscribe();
+          closeUnsubscribe();
+        });
+
+        await this.rewarded.show();
+        return true;
+      } catch (error) {
+        if (__DEV__) {
+          console.warn('[AdRewarded] Failed to present rewarded ad:', error);
         }
-      );
-
-      const closeUnsubscribe = this.rewarded.addAdEventListener('closed', () => {
-        if (rewardEarned) {
-          onRewardEarned();
-        }
-        rewardUnsubscribe();
-        closeUnsubscribe();
-      });
-
-      await this.rewarded.show();
-      return true;
-    } catch (error) {
-      if (__DEV__) {
-        console.warn('[AdRewarded] Failed to show rewarded ad:', error);
+        onRewardEarned();
+        return false;
       }
-      onRewardEarned();
-      return false;
+    };
+
+    // Case 1: Ad is already loaded and ready
+    if (this.isLoaded && this.rewarded) {
+      return presentLoadedAd();
     }
+
+    // Case 2: Ad not loaded yet. Preload and wait up to 4.5 seconds for load event
+    this.preload();
+
+    return new Promise<boolean>((resolve) => {
+      let isSettled = false;
+
+      const finishWithFallback = () => {
+        if (isSettled) return;
+        isSettled = true;
+        onRewardEarned();
+        resolve(false);
+      };
+
+      const timer = setTimeout(() => {
+        finishWithFallback();
+      }, 4500);
+
+      const checkInterval = setInterval(async () => {
+        if (this.isLoaded && this.rewarded && !isSettled) {
+          isSettled = true;
+          clearInterval(checkInterval);
+          clearTimeout(timer);
+          const success = await presentLoadedAd();
+          resolve(success);
+        }
+      }, 300);
+    });
   }
 }
 

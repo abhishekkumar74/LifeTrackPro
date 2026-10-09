@@ -12,6 +12,7 @@ import { Milestone, Task } from '@/types/app.types';
 import { useCompleteTask } from '@/lib/hooks/use-tasks';
 import { formatDeadline } from '@/lib/utils/date';
 import { getSubjectColor, getSubjectBgColor } from '@/lib/utils/subject-colors';
+import { ChevronDown, ChevronUp, Trash2, CheckCircle2, Circle } from 'lucide-react-native';
 
 // Constants
 const ADD_TASK_LABEL = "+ Add task";
@@ -28,12 +29,14 @@ interface MilestoneItemProps {
   milestone: Milestone & { tasks: Task[] };
   onStatusChange: (id: string, status: 'pending' | 'completed') => void;
   onAddTask: (milestoneId: string) => void;
+  onDeleteMilestone?: (id: string, goalId: string, title: string) => void;
 }
 
 export const MilestoneItem = React.memo<MilestoneItemProps>(({
   milestone,
   onStatusChange,
   onAddTask,
+  onDeleteMilestone,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const { mutate: completeTask } = useCompleteTask();
@@ -51,22 +54,12 @@ export const MilestoneItem = React.memo<MilestoneItemProps>(({
   // Progress metrics
   const totalTasks = milestone.tasks.length;
   const completedTasks = milestone.tasks.filter((t) => t.completed_at !== null).length;
-  const progressPercent = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
-
-  // Determine status color theme
-  const getStatusTheme = () => {
-    if (milestone.status === 'completed') {
-      return { fill: '#00B894', ring: 'transparent' };
-    }
-    // If not completed but has tasks in progress, treat as in_progress
-    const hasStartedTasks = milestone.tasks.some((t) => t.completed_at !== null);
-    if (hasStartedTasks || totalTasks > 0) {
-      return { fill: '#5B4FE8', ring: 'rgba(91, 79, 232, 0.2)' };
-    }
-    return { fill: '#E8E7E3', ring: 'transparent' };
-  };
-
-  const statusTheme = getStatusTheme();
+  const progressPercent =
+    milestone.status === 'completed'
+      ? 100
+      : totalTasks > 0
+      ? Math.round((completedTasks / totalTasks) * 100)
+      : 0;
 
   // Overdue check
   const isOverdue = (() => {
@@ -86,6 +79,35 @@ export const MilestoneItem = React.memo<MilestoneItemProps>(({
     }
   };
 
+  const renderStatusBadge = () => {
+    if (milestone.status === 'completed') {
+      return (
+        <View style={[styles.badge, { backgroundColor: 'rgba(0, 184, 148, 0.12)' }]}>
+          <Text style={[styles.badgeText, { color: '#00B894' }]}>Completed</Text>
+        </View>
+      );
+    }
+    if (isOverdue) {
+      return (
+        <View style={[styles.badge, { backgroundColor: 'rgba(232, 88, 88, 0.12)' }]}>
+          <Text style={[styles.badgeText, { color: '#E85858' }]}>Overdue</Text>
+        </View>
+      );
+    }
+    if (completedTasks > 0) {
+      return (
+        <View style={[styles.badge, { backgroundColor: 'rgba(91, 79, 232, 0.12)' }]}>
+          <Text style={[styles.badgeText, { color: '#5B4FE8' }]}>In Progress</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={[styles.badge, { backgroundColor: '#F7F6F3' }]}>
+        <Text style={[styles.badgeText, { color: '#9B9BAF' }]}>Pending</Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -93,14 +115,21 @@ export const MilestoneItem = React.memo<MilestoneItemProps>(({
         onPress={toggleExpand}
         activeOpacity={0.7}
       >
-        {/* Status Dot */}
+        {/* Status Check Circle */}
         <TouchableOpacity
-          style={[styles.statusDotContainer, { backgroundColor: statusTheme.ring }]}
-          onPress={handleStatusDotPress}
-          activeOpacity={0.6}
+          style={styles.statusDotContainer}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleStatusDotPress();
+          }}
+          activeOpacity={0.7}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <View style={[styles.statusDot, { backgroundColor: statusTheme.fill }]} />
+          {milestone.status === 'completed' ? (
+            <CheckCircle2 size={22} color="#00B894" />
+          ) : (
+            <Circle size={22} color={isOverdue ? '#E85858' : '#9B9BAF'} />
+          )}
         </TouchableOpacity>
 
         {/* Middle Section */}
@@ -123,86 +152,127 @@ export const MilestoneItem = React.memo<MilestoneItemProps>(({
                     </Text>
                   </View>
                 )}
-                <Text style={styles.titleText}>{cleanTitle}</Text>
+                <Text
+                  style={[
+                    styles.titleText,
+                    milestone.status === 'completed' && styles.titleCompleted,
+                  ]}
+                >
+                  {cleanTitle}
+                </Text>
               </View>
             );
           })()}
-          <View style={styles.progressBarBg}>
-            <View
-              style={[
-                styles.progressBarFill,
-                { width: `${progressPercent}%` },
-              ]}
-            />
+
+          {/* Sub-info Row: Progress Bar + Badges */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            <View style={styles.progressBarBg}>
+              <View
+                style={[
+                  styles.progressBarFill,
+                  {
+                    width: `${progressPercent}%`,
+                    backgroundColor: milestone.status === 'completed' ? '#00B894' : '#5B4FE8',
+                  },
+                ]}
+              />
+            </View>
+            <Text style={styles.taskCountText}>
+              {totalTasks > 0 ? `${completedTasks}/${totalTasks} tasks` : `${progressPercent}%`}
+            </Text>
+            {renderStatusBadge()}
           </View>
         </View>
 
-        {/* Right Section */}
-        {milestone.due_date && (
-          <Text style={[styles.dateText, isOverdue && styles.overdueText]}>
-            {formatDeadline(milestone.due_date)}
-          </Text>
-        )}
+        {/* Right Section: Due Date & Chevron */}
+        <View style={{ alignItems: 'flex-end', gap: 4 }}>
+          {milestone.due_date && (
+            <Text style={[styles.dateText, isOverdue && styles.overdueText]}>
+              {formatDeadline(milestone.due_date)}
+            </Text>
+          )}
+          {expanded ? (
+            <ChevronUp size={16} color="#9B9BAF" />
+          ) : (
+            <ChevronDown size={16} color="#9B9BAF" />
+          )}
+        </View>
       </TouchableOpacity>
 
       {/* Expandable Tasks List */}
       {expanded && (
         <View style={styles.tasksSection}>
           <View style={styles.divider} />
-          {milestone.tasks.map((task) => {
-            const isTaskDone = task.completed_at !== null;
-            return (
-              <View key={task.id} style={styles.taskRow}>
-                {/* Task Checkbox */}
-                <TouchableOpacity
-                  style={[
-                    styles.checkboxCircle,
-                    isTaskDone ? styles.checkboxChecked : styles.checkboxUnchecked,
-                  ]}
-                  onPress={() =>
-                    completeTask({
-                      id: task.id,
-                      completed: !isTaskDone,
-                      milestoneId: milestone.id,
-                    })
-                  }
-                  activeOpacity={0.6}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  {isTaskDone && <Text style={styles.checkIcon}>✓</Text>}
-                </TouchableOpacity>
+          {milestone.tasks.length === 0 ? (
+            <Text style={styles.emptyTasksText}>No sub-tasks added yet</Text>
+          ) : (
+            milestone.tasks.map((task) => {
+              const isTaskDone = task.completed_at !== null;
+              return (
+                <View key={task.id} style={styles.taskRow}>
+                  {/* Task Checkbox */}
+                  <TouchableOpacity
+                    style={[
+                      styles.checkboxCircle,
+                      isTaskDone ? styles.checkboxChecked : styles.checkboxUnchecked,
+                    ]}
+                    onPress={() =>
+                      completeTask({
+                        id: task.id,
+                        completed: !isTaskDone,
+                        milestoneId: milestone.id,
+                      })
+                    }
+                    activeOpacity={0.6}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {isTaskDone && <Text style={styles.checkIcon}>✓</Text>}
+                  </TouchableOpacity>
 
-                {/* Task Title */}
-                <Text
-                  style={[
-                    styles.taskTitle,
-                    isTaskDone && styles.taskTitleCompleted,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {task.title}
-                </Text>
+                  {/* Task Title */}
+                  <Text
+                    style={[
+                      styles.taskTitle,
+                      isTaskDone && styles.taskTitleCompleted,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {task.title}
+                  </Text>
 
-                {/* Priority Dot */}
-                <View
-                  style={[
-                    styles.priorityDot,
-                    { backgroundColor: getPriorityColor(task.priority) },
-                  ]}
-                />
-              </View>
-            );
-          })}
+                  {/* Priority Dot */}
+                  <View
+                    style={[
+                      styles.priorityDot,
+                      { backgroundColor: getPriorityColor(task.priority) },
+                    ]}
+                  />
+                </View>
+              );
+            })
+          )}
 
-          {/* Add Task Button */}
-          <TouchableOpacity
-            style={styles.addTaskButton}
-            onPress={() => onAddTask(milestone.id)}
-            activeOpacity={0.6}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.addTaskText}>{ADD_TASK_LABEL}</Text>
-          </TouchableOpacity>
+          {/* Bottom Action Row inside expanded section */}
+          <View style={styles.milestoneActionRow}>
+            <TouchableOpacity
+              style={styles.addTaskButton}
+              onPress={() => onAddTask(milestone.id)}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.addTaskText}>{ADD_TASK_LABEL}</Text>
+            </TouchableOpacity>
+
+            {onDeleteMilestone && (
+              <TouchableOpacity
+                style={styles.deleteMilestoneBtn}
+                onPress={() => onDeleteMilestone(milestone.id, milestone.goal_id, milestone.title)}
+                activeOpacity={0.7}
+              >
+                <Trash2 size={13} color="#E85858" />
+                <Text style={styles.deleteMilestoneText}>Delete</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       )}
     </View>
@@ -252,17 +322,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#17172A',
   },
+  titleCompleted: {
+    color: '#9B9BAF',
+    textDecorationLine: 'line-through',
+  },
   progressBarBg: {
-    height: 3,
+    height: 4,
     backgroundColor: '#E8E7E3',
     borderRadius: 2,
-    marginTop: 6,
-    width: '100%',
+    flex: 1,
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#5B4FE8',
     borderRadius: 2,
+  },
+  taskCountText: {
+    fontFamily: 'DMSans',
+    fontSize: 10,
+    color: '#9B9BAF',
+  },
+  badge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  badgeText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    fontWeight: '600',
   },
   dateText: {
     fontFamily: 'DMSans',
@@ -281,6 +368,13 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#E8E7E3',
     marginBottom: 8,
+  },
+  emptyTasksText: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9B9BAF',
+    paddingVertical: 6,
+    fontStyle: 'italic',
   },
   taskRow: {
     flexDirection: 'row',
@@ -324,15 +418,33 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     marginLeft: 10,
   },
+  milestoneActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
   addTaskButton: {
-    paddingVertical: 8,
-    marginTop: 4,
+    paddingVertical: 4,
     alignSelf: 'flex-start',
   },
   addTaskText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 12,
     color: '#5B4FE8',
+    fontWeight: '600',
+  },
+  deleteMilestoneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  deleteMilestoneText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#E85858',
     fontWeight: '600',
   },
   subjectBadge: {

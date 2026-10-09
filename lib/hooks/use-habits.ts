@@ -438,3 +438,40 @@ export function useReorderHabits() {
     },
   });
 }
+
+// 8. Delete habit permanently
+export function useDeleteHabit() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // First delete associated habit logs
+      await supabase.from('habit_logs').delete().eq('habit_id', id).eq('user_id', user.id);
+
+      // Then delete the habit row
+      const { data, error } = await supabase
+        .from('habits')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      const user = useAuthStore.getState().user;
+      queryClient.invalidateQueries({ queryKey: ['habits', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['habits', user?.id, 'archived'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+    },
+    onError: (err) => {
+      handleSupabaseError(err, 'delete_habit');
+    },
+  });
+}
+

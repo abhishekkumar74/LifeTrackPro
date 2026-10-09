@@ -3,11 +3,12 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Goal, Milestone } from '@/types/app.types';
 import { ProgressRing } from './ProgressRing';
 import { calculateOnTrackStatus } from '@/lib/utils/on-track';
-import { daysFromNow, formatDeadline } from '@/lib/utils/date';
+import { formatDeadline } from '@/lib/utils/date';
+import { CheckCircle2, RotateCcw, Trash2 } from 'lucide-react-native';
 
 // Constants
 const LABEL_BIG_GOAL = "BIG GOAL";
-const BADGE_PRIMARY = "⭐ Primary";
+const BADGE_PRIMARY = "Primary";
 const SHADOW_COLOR = '#000000';
 const BORDER_COLOR = '#E8E7E3';
 
@@ -20,6 +21,13 @@ interface GoalCardProps {
   onPress?: () => void;
   isPrimary: boolean;
   onAddMilestone?: (goalId: string) => void;
+  onToggleStatus?: (
+    goalId: string,
+    currentStatus: 'active' | 'achieved',
+    title: string,
+    remainingItems: number
+  ) => void;
+  onDeleteGoal?: (goalId: string, title: string) => void;
 }
 
 export const GoalCard = React.memo<GoalCardProps>(({
@@ -27,10 +35,26 @@ export const GoalCard = React.memo<GoalCardProps>(({
   onPress,
   isPrimary,
   onAddMilestone,
+  onToggleStatus,
+  onDeleteGoal,
 }) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const deadlineFormatted = formatDeadline(goal.deadline);
-  const daysLeft = daysFromNow(goal.deadline);
+
+  // Raw Days Left Calculation
+  const getRawDaysLeft = (deadlineStr: string): number => {
+    if (!deadlineStr) return 0;
+    const target = new Date(deadlineStr);
+    target.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const diffTime = target.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const rawDaysLeft = getRawDaysLeft(goal.deadline);
 
   const getTimelineLabel = (timeline: string) => {
     switch (timeline) {
@@ -46,22 +70,48 @@ export const GoalCard = React.memo<GoalCardProps>(({
   const timelineLabel = getTimelineLabel(goal.timeline);
   const metaText = `${timelineLabel} · Due ${deadlineFormatted}`;
 
-  // Pace calculation: remaining tasks / remaining days
-  const remainingTasks = goal.totalTasks - goal.doneTasks;
+  // Combined Progress Calculation (Tasks + Milestones)
+  const totalMilestones = goal.milestones.length;
+  const doneMilestones = goal.milestones.filter((m) => m.status === 'completed').length;
+  const totalItems = goal.totalTasks + totalMilestones;
+  const doneItems = goal.doneTasks + doneMilestones;
+
+  const progressRatio =
+    goal.status === 'achieved'
+      ? 1
+      : totalItems > 0
+      ? doneItems / totalItems
+      : 0;
+
+  // Pace calculation: remaining items / remaining days
+  const remainingItems = totalItems - doneItems;
   const dailyNeeded =
-    remainingTasks > 0 && daysLeft > 0
-      ? (remainingTasks / daysLeft).toFixed(2)
+    remainingItems > 0 && rawDaysLeft > 0
+      ? (remainingItems / rawDaysLeft).toFixed(2)
       : '0.00';
 
-  // Status calculation
-  const status = calculateOnTrackStatus(
-    goal.created_at || new Date().toISOString(),
-    goal.deadline,
-    goal.doneTasks,
-    goal.totalTasks
-  );
+  // Dynamic Status Badge Calculation
+  const getDynamicStatusTheme = () => {
+    if (goal.status === 'achieved') {
+      return { bg: 'rgba(0, 184, 148, 0.15)', text: '#00B894', label: 'Achieved' };
+    }
 
-  const getStatusStyles = (statusType: 'on_track' | 'at_risk' | 'behind') => {
+    if (rawDaysLeft < 0) {
+      const absDays = Math.abs(rawDaysLeft);
+      return { bg: 'rgba(232, 88, 88, 0.15)', text: '#E85858', label: `Expired (${absDays}d overdue)` };
+    }
+
+    if (rawDaysLeft === 0) {
+      return { bg: 'rgba(232, 160, 32, 0.18)', text: '#E8A020', label: 'Due Today' };
+    }
+
+    const statusType = calculateOnTrackStatus(
+      goal.created_at || new Date().toISOString(),
+      goal.deadline,
+      goal.doneTasks,
+      goal.totalTasks
+    );
+
     switch (statusType) {
       case 'on_track':
         return { bg: '#D4F5EE', text: '#00B894', label: 'On track' };
@@ -73,8 +123,14 @@ export const GoalCard = React.memo<GoalCardProps>(({
     }
   };
 
-  const statusTheme = getStatusStyles(status);
-  const progressRatio = goal.totalTasks > 0 ? goal.doneTasks / goal.totalTasks : 0;
+  const statusTheme = getDynamicStatusTheme();
+
+  const renderDaysLeftText = () => {
+    if (goal.status === 'achieved') return 'Achieved';
+    if (rawDaysLeft < 0) return `${Math.abs(rawDaysLeft)}d overdue`;
+    if (rawDaysLeft === 0) return 'Due Today';
+    return `${rawDaysLeft}d`;
+  };
 
   const handlePress = () => {
     setIsExpanded(!isExpanded);
@@ -143,15 +199,21 @@ export const GoalCard = React.memo<GoalCardProps>(({
 
         <View style={styles.statsColumn}>
           <View style={styles.statRow}>
-            <Text style={styles.statLabel}>Topics done</Text>
+            <Text style={styles.statLabel}>Tasks done</Text>
             <Text style={[styles.statValue, isPrimary ? styles.statValPrimary : styles.statValNormal]}>
-              {`${goal.doneTasks}/${goal.totalTasks}`}
+              {`${doneItems}/${totalItems}`}
             </Text>
           </View>
           <View style={styles.statRow}>
             <Text style={styles.statLabel}>Days left</Text>
-            <Text style={[styles.statValue, isPrimary ? styles.statValPrimary : styles.statValNormal]}>
-              {`${daysLeft}d`}
+            <Text
+              style={[
+                styles.statValue,
+                isPrimary ? styles.statValPrimary : styles.statValNormal,
+                rawDaysLeft < 0 && goal.status !== 'achieved' && { color: '#E85858' },
+              ]}
+            >
+              {renderDaysLeftText()}
             </Text>
           </View>
           <View style={styles.statRow}>
@@ -191,26 +253,70 @@ export const GoalCard = React.memo<GoalCardProps>(({
               </View>
             ))
           )}
-          {onAddMilestone && (
-            <TouchableOpacity
-              style={styles.addMilestoneRow}
-              onPress={() => onAddMilestone(goal.id)}
-              activeOpacity={0.7}
-              accessibilityLabel="Add Milestone"
-              accessibilityRole="button"
-              accessibilityHint="Add a new milestone to this goal"
-            >
-              <Text style={styles.addMilestoneText}>+ Add Milestone</Text>
-            </TouchableOpacity>
-          )}
+
+          <View style={styles.expandedActionsRow}>
+            {onAddMilestone && (
+              <TouchableOpacity
+                style={styles.addMilestoneRow}
+                onPress={() => onAddMilestone(goal.id)}
+                activeOpacity={0.7}
+                accessibilityLabel="Add Milestone"
+                accessibilityRole="button"
+                accessibilityHint="Add a new milestone to this goal"
+              >
+                <Text style={styles.addMilestoneText}>+ Add Milestone</Text>
+              </TouchableOpacity>
+            )}
+
+            {onDeleteGoal && (
+              <TouchableOpacity
+                style={styles.deleteGoalRow}
+                onPress={() => onDeleteGoal(goal.id, goal.title)}
+                activeOpacity={0.7}
+                accessibilityLabel="Delete Goal"
+                accessibilityRole="button"
+              >
+                <Trash2 size={13} color="#E85858" />
+                <Text style={styles.deleteGoalText}>Delete Goal</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       )}
 
-      {/* Status Badge */}
-      <View style={[styles.statusBadge, { backgroundColor: statusTheme.bg }]}>
-        <Text style={[styles.statusBadgeText, { color: statusTheme.text }]}>
-          {statusTheme.label}
-        </Text>
+      {/* Status Badge & Actions Row */}
+      <View style={styles.statusActionRow}>
+        <View style={[styles.statusBadge, { backgroundColor: statusTheme.bg }]}>
+          <Text style={[styles.statusBadgeText, { color: statusTheme.text }]}>
+            {statusTheme.label}
+          </Text>
+        </View>
+
+        {onToggleStatus && (
+          <TouchableOpacity
+            style={[
+              styles.achieveActionBtn,
+              goal.status === 'achieved' && styles.achieveActionBtnActive,
+            ]}
+            onPress={(e) => {
+              e.stopPropagation();
+              onToggleStatus(goal.id, goal.status as 'active' | 'achieved', goal.title, remainingItems);
+            }}
+            activeOpacity={0.8}
+          >
+            {goal.status === 'achieved' ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <RotateCcw size={12} color="#5B4FE8" />
+                <Text style={[styles.achieveActionText, { color: '#5B4FE8' }]}>Re-activate</Text>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <CheckCircle2 size={12} color="#00B894" />
+                <Text style={styles.achieveActionText}>Mark Achieved</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -319,18 +425,44 @@ const styles = StyleSheet.create({
   statValNormal: {
     color: '#17172A',
   },
+  deleteIconBtn: {
+    padding: 4,
+  },
+  statusActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+  },
   statusBadge: {
     alignSelf: 'flex-start',
     borderRadius: 10,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginTop: 14,
+    paddingVertical: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
   statusBadgeText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 11,
+    fontWeight: '600',
+  },
+  achieveActionBtn: {
+    backgroundColor: 'rgba(0, 184, 148, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 184, 148, 0.3)',
+  },
+  achieveActionBtnActive: {
+    backgroundColor: 'rgba(91, 79, 232, 0.12)',
+    borderColor: 'rgba(91, 79, 232, 0.3)',
+  },
+  achieveActionText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#00B894',
     fontWeight: '600',
   },
   expandedSection: {
@@ -398,7 +530,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   addMilestoneRow: {
-    marginTop: 8,
     paddingVertical: 6,
     alignItems: 'flex-start',
   },
@@ -407,5 +538,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#5B4FE8',
+  },
+  expandedActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  deleteGoalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(232, 88, 88, 0.08)',
+  },
+  deleteGoalText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#E85858',
   },
 });

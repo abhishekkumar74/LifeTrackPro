@@ -3,7 +3,7 @@
     "name": "LifeTrack Pro",
     "slug": "lifetrack-pro",
     "version": "1.0.3",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "lifetrackpro",
     "userInterfaceStyle": "automatic",

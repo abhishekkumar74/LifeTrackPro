@@ -25,6 +25,7 @@ import {
   useHabitStreak,
   useUpdateHabit,
   useArchiveHabit,
+  useDeleteHabit,
   HabitWithStatus,
 } from '@/lib/hooks/use-habits';
 import { useToggleHabit } from '@/lib/hooks/use-toggle-habit';
@@ -64,6 +65,7 @@ export default function HabitDetailScreen() {
   // Mutations
   const updateHabit = useUpdateHabit();
   const archiveHabit = useArchiveHabit();
+  const deleteHabit = useDeleteHabit();
 
   // Calendar Helpers
   const generateMonthGrid = () => {
@@ -186,6 +188,31 @@ export default function HabitDetailScreen() {
           style: 'destructive',
           onPress: () => {
             archiveHabit.mutate(habit.id, {
+              onSuccess: () => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                queryClient.invalidateQueries({ queryKey: ['habits'] });
+                router.back();
+              },
+            });
+          },
+        },
+      ]
+    );
+  };
+
+  // Permanent Delete Trigger
+  const handleDeletePermanently = () => {
+    if (!habit) return;
+    Alert.alert(
+      'Delete Habit Permanently',
+      `Are you sure you want to permanently delete "${habit.title}"? All streak history and logs will be deleted forever. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Permanently',
+          style: 'destructive',
+          onPress: () => {
+            deleteHabit.mutate(habit.id, {
               onSuccess: () => {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
                 queryClient.invalidateQueries({ queryKey: ['habits'] });
@@ -545,6 +572,13 @@ export default function HabitDetailScreen() {
             activeOpacity={0.7}
           >
             <Text style={styles.archiveText}>Archive habit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.archiveRow, { marginTop: 8, borderColor: '#FEE2E2', backgroundColor: '#FEF2F2' }]}
+            onPress={handleDeletePermanently}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.archiveText, { color: '#E85858' }]}>Delete habit permanently</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

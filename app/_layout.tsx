@@ -334,26 +334,42 @@ function RootLayout() {
   // Font errors are caught and handled gracefully in the loading useEffect
 
   useEffect(() => {
+    let isMounted = true;
+
     // 1. Resolve initial Supabase user session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!isMounted) return;
       if (session) {
+        setSession(session);
         setSentryUser(session.user.id);
-        fetchProfile(session.user.id);
+        await fetchProfile(session.user.id);
       } else {
-        setProfile(null);
-        setLoading(false);
+        // Only clear if no saved session was found in persisted store
+        const existingSession = useAuthStore.getState().session;
+        if (!existingSession) {
+          setSession(null);
+          setProfile(null);
+          setLoading(false);
+        } else {
+          // Verify saved session user profile
+          if (useAuthStore.getState().user?.id) {
+            await fetchProfile(useAuthStore.getState().user!.id);
+          } else {
+            setLoading(false);
+          }
+        }
       }
       setAuthInitialized(true);
     }).catch(() => {
-      setSession(null);
-      setProfile(null);
-      setLoading(false);
+      if (!isMounted) return;
       setAuthInitialized(true);
+      setLoading(false);
     });
 
     // 2. Track authentication session state mutations
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
       if (event === 'PASSWORD_RECOVERY') {
         setSession(session);
         setAuthInitialized(true);
@@ -363,21 +379,25 @@ function RootLayout() {
         useAuthStore.getState().clearAuth();
         queryClient.clear();
         router.replace('/login');
-      } else {
+      } else if (session) {
         setSession(session);
-        if (session) {
-          setSentryUser(session.user.id);
-          fetchProfile(session.user.id);
-        } else {
-          clearSentryUser();
+        setSentryUser(session.user.id);
+        await fetchProfile(session.user.id);
+        setAuthInitialized(true);
+      } else if (event === 'INITIAL_SESSION') {
+        // Don't wipe session on initial null event if store already rehydrated session
+        const currentSession = useAuthStore.getState().session;
+        if (!currentSession) {
+          setSession(null);
           setProfile(null);
           setLoading(false);
         }
+        setAuthInitialized(true);
       }
-      setAuthInitialized(true);
     });
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, []);
