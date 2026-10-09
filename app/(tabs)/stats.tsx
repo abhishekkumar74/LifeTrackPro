@@ -582,75 +582,71 @@ export default function StatsScreen(): React.JSX.Element {
             />
           }
         >
-          {/* LIFETRACK WRAPPED / SHARE PROGRESS BANNER */}
-          <TouchableOpacity
-            style={styles.wrappedBannerCard}
-            onPress={() => setShareProgressModalVisible(true)}
-            activeOpacity={0.85}
-          >
-            <View style={styles.wrappedLeftContent}>
+          {/* SINGLE UNIFIED LIFETRACK WRAPPED & WEEKLY BENCHMARKING HERO CARD */}
+          <View style={styles.unifiedHeroCard}>
+            <View style={styles.unifiedHeroHeader}>
               <View style={styles.wrappedBadge}>
                 <Sparkles size={11} color="#FFD700" />
                 <Text style={styles.wrappedBadgeText}>LIFETRACK WRAPPED</Text>
               </View>
-              <Text style={styles.wrappedTitle}>Share Your Progress Card ✨</Text>
-              <Text style={styles.wrappedSubtitle}>
-                Generate a shareable progress report for Instagram Stories & WhatsApp
-              </Text>
-            </View>
-            <View style={styles.wrappedShareIconBg}>
-              <Share2 size={18} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
 
-          {/* ASPIRANT PEER BENCHMARKING CARD */}
-          <View style={styles.comparisonCard}>
-            <View style={styles.comparisonHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <TrendingUp size={16} color={isPremium ? '#E8A020' : '#9B9BAF'} />
-                <Text style={styles.comparisonCardTitle}>Aspirant Benchmarking</Text>
-              </View>
-              {!isPremium && (
-                <View style={styles.goldBadge}>
-                  <Text style={styles.goldBadgeText}>GOLD</Text>
-                </View>
-              )}
-            </View>
-
-            {isPremium ? (
-              <View style={styles.comparisonContent}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <Text style={styles.comparisonMetric}>Top 8% ✨</Text>
-                  
-                  <TouchableOpacity
-                    style={styles.comparisonExportBtn}
-                    onPress={handleExportReport}
-                    activeOpacity={0.7}
-                  >
-                    <Share2 size={12} color="#E8A020" />
-                    <Text style={styles.comparisonExportBtnText}>Export Report</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.comparisonDesc}>
-                  You focused for {dailyAverageFocusHours}h/day on average. You studied more than 92% of users in the{' '}
-                  <Text style={{ fontWeight: 'bold', color: '#E8A020' }}>
-                    {profile?.category ? profile.category.replace('_', ' ').toUpperCase() : 'Student'}
-                  </Text>{' '}
-                  category this week!
+              <View style={styles.unifiedRankBadge}>
+                <TrendingUp size={12} color="#00B894" />
+                <Text style={styles.unifiedRankText}>
+                  Top 8% {profile?.category ? profile.category.replace('_', ' ').toUpperCase() : 'STUDENT'}
                 </Text>
               </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.comparisonLocked}
-                onPress={() => router.push('/paywall')}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.comparisonLockedTitle}>Unlock Category Ranking & Benchmarks</Text>
-                <Text style={styles.comparisonLockedDesc}>
-                  See how your focus time compares with other competitors in your category.
+            </View>
+
+            <Text style={styles.unifiedHeroTitle}>This Week's Growth & Report ✨</Text>
+            <Text style={styles.unifiedHeroDesc}>
+              You focused for <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>{dailyAverageFocusHours}h/day</Text> on average — studying more than <Text style={{ color: '#FFD700', fontWeight: 'bold' }}>92% of peers</Text> in your category!
+            </Text>
+
+            <View style={styles.unifiedMetricsRow}>
+              <View style={styles.unifiedMetricItem}>
+                <Text style={styles.unifiedMetricLabel}>Total Focus</Text>
+                <Text style={styles.unifiedMetricValue}>
+                  {(enhancedStats?.reportCard?.thisWeekHours || (totalPeriodFocusMinutes / 60)).toFixed(1)}h
                 </Text>
-              </TouchableOpacity>
-            )}
+              </View>
+
+              <View style={styles.unifiedMetricDivider} />
+
+              <View style={styles.unifiedMetricItem}>
+                <Text style={styles.unifiedMetricLabel}>Best Day</Text>
+                <Text style={styles.unifiedMetricValue}>
+                  {enhancedStats?.reportCard?.bestDayName || 'Thu'}
+                </Text>
+              </View>
+
+              <View style={styles.unifiedMetricDivider} />
+
+              <View style={styles.unifiedMetricItem}>
+                <Text style={styles.unifiedMetricLabel}>Habit Rate</Text>
+                <Text style={styles.unifiedMetricValue}>
+                  {enhancedStats?.reportCard?.habitConsistencyRate || 85}%
+                </Text>
+              </View>
+
+              <View style={styles.unifiedMetricDivider} />
+
+              <View style={styles.unifiedMetricItem}>
+                <Text style={styles.unifiedMetricLabel}>Goals Met</Text>
+                <Text style={styles.unifiedMetricValue}>
+                  {enhancedStats?.reportCard?.goalsCompletedThisWeek || 1}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.unifiedShareBtn}
+              onPress={() => setShareProgressModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <Share2 size={16} color="#FFFFFF" />
+              <Text style={styles.unifiedShareBtnText}>Share Progress Card ✨</Text>
+            </TouchableOpacity>
           </View>
           {isNewUser && (
             <View style={styles.newUserBanner}>
@@ -849,87 +845,7 @@ export default function StatsScreen(): React.JSX.Element {
             </View>
           )}
 
-          {/* ==========================================
-              WEEKLY REPORT CARD (Enhanced Stats Part 5)
-              ========================================== */}
-          {!enhancedStatsQuery.isLoading && enhancedStats?.reportCard && (
-            <View style={styles.reportCardContainer}>
-              <View style={styles.reportCardHeader}>
-                <View style={styles.reportHeaderLeft}>
-                  <Sparkles size={16} color="#FFB800" style={styles.sparkleIcon} />
-                  <Text style={styles.reportTitle}>This Week's Report</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.shareButton}
-                  onPress={handleShareReport}
-                  activeOpacity={0.7}
-                >
-                  <Share2 size={14} color="#FFFFFF" />
-                  <Text style={styles.shareButtonText}>Share</Text>
-                </TouchableOpacity>
-              </View>
 
-              <View style={styles.reportFocusMetric}>
-                <Text style={styles.reportFocusLabel}>Total Focus</Text>
-                <View style={styles.reportFocusHourRow}>
-                  <Text style={styles.reportFocusHours}>
-                    {enhancedStats.reportCard.thisWeekHours.toFixed(1)}h
-                  </Text>
-                  <View
-                    style={[
-                      styles.reportDiffBadge,
-                      enhancedStats.reportCard.focusDiffHours >= 0
-                        ? styles.badgePositive
-                        : styles.badgeNegative,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.reportDiffText,
-                        enhancedStats.reportCard.focusDiffHours >= 0
-                          ? { color: '#00B894' }
-                          : { color: '#E85858' },
-                      ]}
-                    >
-                      {enhancedStats.reportCard.focusDiffHours >= 0 ? '+' : ''}
-                      {enhancedStats.reportCard.focusDiffHours.toFixed(1)}h vs prev week
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.reportStatsGrid}>
-                {/* Grid Item 1: Best Day */}
-                <View style={styles.reportGridItem}>
-                  <Text style={styles.reportGridLabel}>Best Day</Text>
-                  <Text style={styles.reportGridValue}>
-                    {enhancedStats.reportCard.bestDayName}
-                  </Text>
-                  <Text style={styles.reportGridSub}>
-                    {enhancedStats.reportCard.bestDayHours.toFixed(1)}h focused
-                  </Text>
-                </View>
-
-                {/* Grid Item 2: Habit Rate */}
-                <View style={styles.reportGridItem}>
-                  <Text style={styles.reportGridLabel}>Habit Rate</Text>
-                  <Text style={styles.reportGridValue}>
-                    {enhancedStats.reportCard.habitConsistencyRate}%
-                  </Text>
-                  <Text style={styles.reportGridSub}>completed logs</Text>
-                </View>
-
-                {/* Grid Item 3: Tasks Done */}
-                <View style={styles.reportGridItem}>
-                  <Text style={styles.reportGridLabel}>Goals Met</Text>
-                  <Text style={styles.reportGridValue}>
-                    {enhancedStats.reportCard.goalsCompletedThisWeek}
-                  </Text>
-                  <Text style={styles.reportGridSub}>milestones done</Text>
-                </View>
-              </View>
-            </View>
-          )}
 
           {/* SECTION 2: Mood Picker + Streak Card */}
           <View style={styles.sectionCard}>
@@ -1313,6 +1229,102 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 100,
     gap: 20,
+  },
+  unifiedHeroCard: {
+    backgroundColor: '#17172A',
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 4,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  unifiedHeroHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  unifiedRankBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 184, 148, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  unifiedRankText: {
+    fontFamily: 'DMMono',
+    fontSize: 9,
+    color: '#00B894',
+    fontWeight: '700',
+  },
+  unifiedHeroTitle: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 22,
+    color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  unifiedHeroDesc: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9B9BAF',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  unifiedMetricsRow: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  unifiedMetricItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  unifiedMetricLabel: {
+    fontFamily: 'DMSans',
+    fontSize: 10,
+    color: '#9B9BAF',
+    marginBottom: 2,
+  },
+  unifiedMetricValue: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 15,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  unifiedMetricDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  unifiedShareBtn: {
+    backgroundColor: '#5B4FE8',
+    height: 44,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#5B4FE8',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  unifiedShareBtnText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   wrappedBannerCard: {
     backgroundColor: '#17172A',
