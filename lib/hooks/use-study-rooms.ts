@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase/client';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
 import { StudyRoom } from '@/types/app.types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface RoomWithHost extends StudyRoom {
   host_name: string;
@@ -17,6 +17,11 @@ export interface RoomMember {
   initials: string;
   joinedAt: string;
   currentSubject: string | null;
+  isFocusing?: boolean;
+  focusTimeLeft?: number;
+  checkinGoal?: string | null;
+  lastCheckinNote?: string | null;
+  checkinTime?: string | null;
 }
 
 export interface ChatMessage {
@@ -79,6 +84,8 @@ export function useActiveRooms() {
 export function useRoomPresence(roomId: string) {
   const [members, setMembers] = useState<RoomMember[]>([]);
   const { profile } = useAuthStore();
+  const channelRef = useRef<any>(null);
+  const currentPresenceData = useRef<Partial<RoomMember>>({});
 
   useEffect(() => {
     if (!profile) return;
@@ -94,11 +101,12 @@ export function useRoomPresence(roomId: string) {
       },
     });
 
+    channelRef.current = channel;
+
     const handleSync = () => {
       const state = channel.presenceState();
       const rawList = Object.values(state).flat();
 
-      // Map to deduplicate members by userId (ensures unique active users)
       const memberMap = new Map<string, RoomMember>();
       for (const p of rawList) {
         const item = p as any;
@@ -110,6 +118,11 @@ export function useRoomPresence(roomId: string) {
             initials: item.initials || (item.name ? item.name[0].toUpperCase() : 'M'),
             joinedAt: item.joinedAt || new Date().toISOString(),
             currentSubject: item.currentSubject || null,
+            isFocusing: item.isFocusing || false,
+            focusTimeLeft: item.focusTimeLeft || 0,
+            checkinGoal: item.checkinGoal || null,
+            lastCheckinNote: item.lastCheckinNote || null,
+            checkinTime: item.checkinTime || null,
           });
         }
       }
@@ -121,14 +134,22 @@ export function useRoomPresence(roomId: string) {
       .on('presence', { event: 'sync' }, handleSync)
       .subscribe(async (status, err) => {
         if (status === 'SUBSCRIBED') {
-          await channel.track({
+          const initialPayload = {
             userId: profile.id,
             name: profile.name,
             avatarUrl: profile.avatar_url || null,
             initials: profile.name[0] ? profile.name[0].toUpperCase() : 'U',
             joinedAt: new Date().toISOString(),
             currentSubject: null,
-          });
+            isFocusing: false,
+            focusTimeLeft: 0,
+            checkinGoal: null,
+            lastCheckinNote: null,
+            checkinTime: null,
+            ...currentPresenceData.current,
+          };
+          currentPresenceData.current = initialPayload;
+          await channel.track(initialPayload);
         }
         if (status === 'CHANNEL_ERROR') {
           handleSupabaseError(err || new Error('Presence channel error'), 'room_presence_channel');
@@ -139,12 +160,31 @@ export function useRoomPresence(roomId: string) {
       supabase.removeChannel(channel).catch((e) => {
         if (__DEV__) console.warn('Presence cleanup error:', e);
       });
+      channelRef.current = null;
     };
   }, [roomId, profile]);
+
+  const updatePresenceStatus = useCallback(
+    async (updates: Partial<RoomMember>) => {
+      if (!profile || !channelRef.current) return;
+      const newPayload = {
+        ...currentPresenceData.current,
+        ...updates,
+        userId: profile.id,
+        name: profile.name,
+        avatarUrl: profile.avatar_url || null,
+        initials: profile.name[0] ? profile.name[0].toUpperCase() : 'U',
+      };
+      currentPresenceData.current = newPayload;
+      await channelRef.current.track(newPayload);
+    },
+    [profile]
+  );
 
   return {
     members,
     memberCount: members.length,
+    updatePresenceStatus,
   };
 }
 

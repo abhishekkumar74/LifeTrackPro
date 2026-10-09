@@ -38,8 +38,8 @@ function getAudioModule() {
   return AudioModule;
 }
 import { Href, router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Music, Pause, Play, Send, Share2, Smile, Volume2, VolumeX } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Music, Pause, Play, Send, Share2, Smile, Volume2, VolumeX, CheckCircle, Award, Sparkles, Target } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   Alert,
   Dimensions,
@@ -47,6 +47,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   Share,
@@ -181,10 +182,15 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   });
 
   // Hooks for Presence & Chat
-  const { members, memberCount } = useRoomPresence(id || '');
+  const { members, memberCount, updatePresenceStatus } = useRoomPresence(id || '');
   const { messages, sendMessage } = useRoomChat(id || '');
   const endRoomMutation = useEndRoom();
   const hasExpiredRef = useRef(false);
+
+  // Room Goal & Progress Check-in State
+  const [showCheckinModal, setShowCheckinModal] = useState(false);
+  const [checkinNoteInput, setCheckinNoteInput] = useState('');
+  const [roomWeeklyGoalTargetMins, setRoomWeeklyGoalTargetMins] = useState(3000); // 50 Hours
 
   // Music State
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
@@ -578,6 +584,49 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
     return () => clearInterval(interval);
   }, [focusActive, focusDuration, focusStartedAt]);
+
+  // Sync Focus session status with room presence
+  useEffect(() => {
+    updatePresenceStatus({
+      isFocusing: focusActive,
+      focusTimeLeft: focusTimeLeft,
+    });
+  }, [focusActive, focusTimeLeft, updatePresenceStatus]);
+
+  // Handle Progress Check-in Submit
+  const handleProgressCheckinSubmit = async () => {
+    if (!checkinNoteInput.trim()) return;
+    const note = checkinNoteInput.trim();
+
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+
+    // Update presence
+    updatePresenceStatus({
+      lastCheckinNote: note,
+      checkinTime: new Date().toISOString(),
+    });
+
+    // Broadcast check-in message to room chat
+    sendMessage(`🎯 [PROGRESS CHECK-IN] ${profile?.name || 'Member'}: ${note}`);
+
+    // Trigger visual celebration reaction
+    if (reactionChannelRef.current) {
+      reactionChannelRef.current.send({
+        type: 'broadcast',
+        event: 'reaction',
+        payload: { emoji: '✨' },
+      });
+    }
+
+    setCheckinNoteInput('');
+    setShowCheckinModal(false);
+  };
+
+  const totalRoomFocusMinutes = useMemo(() => {
+    const baseMins = members.length * 45;
+    const activeFocusMins = focusActive ? Math.round((focusDuration - focusTimeLeft) / 60) : 0;
+    return Math.max(120, baseMins + activeFocusMins);
+  }, [members.length, focusActive, focusDuration, focusTimeLeft]);
 
   // Synchronize DB member count from the host's client
   useEffect(() => {
@@ -977,6 +1026,57 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               </View>
             )}
 
+            {/* ROOM WEEKLY GOAL CARD */}
+            <View style={styles.roomGoalCard}>
+              <View style={styles.roomGoalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Award size={14} color="#FFD700" />
+                  <Text style={styles.roomGoalTitle}>Room Target: Weekly Focus</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.roomGoalEditBtn}
+                  onPress={() => {
+                    Alert.prompt(
+                      'Set Room Target 🎯',
+                      'Enter weekly goal target focus hours for this room:',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Set Target',
+                          onPress: (val?: string) => {
+                            const hours = parseFloat(val || '50');
+                            if (!isNaN(hours) && hours > 0) {
+                              setRoomWeeklyGoalTargetMins(hours * 60);
+                            }
+                          },
+                        },
+                      ],
+                      'plain-text',
+                      (roomWeeklyGoalTargetMins / 60).toString()
+                    );
+                  }}
+                >
+                  <Text style={styles.roomGoalEditBtnText}>Set Goal</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.roomGoalProgressRow}>
+                <View style={styles.roomGoalTrack}>
+                  <View
+                    style={[
+                      styles.roomGoalFill,
+                      {
+                        width: `${Math.min(100, Math.round((totalRoomFocusMinutes / roomWeeklyGoalTargetMins) * 100))}%`,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.roomGoalProgressText}>
+                  {(totalRoomFocusMinutes / 60).toFixed(1)}h / {(roomWeeklyGoalTargetMins / 60).toFixed(0)}h
+                </Text>
+              </View>
+            </View>
+
             {/* MEMBERS GRID */}
             <View style={styles.membersSection}>
               <View style={styles.membersHeaderRow}>
@@ -1077,7 +1177,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           <View style={{ flex: 1 }} />
         )}
 
-        {/* START FOCUS BUTTON (Only in normal view) */}
+        {/* START FOCUS & CHECK-IN BUTTONS */}
         {!isChatExpanded && (
           <View style={[
             styles.bottomContainer,
@@ -1086,31 +1186,42 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               paddingBottom: Platform.OS === 'android' ? Math.max(insets.bottom + 12, 16) : Math.max(insets.bottom, 12),
             },
           ]}>
-            <TouchableOpacity
-              style={[styles.focusButton, focusActive && styles.stopFocusButton]}
-              onPress={handleStartFocus}
-              activeOpacity={0.8}
-            >
-              <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                <Defs>
-                  <LinearGradient id="btnGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <Stop offset="0%" stopColor={focusActive ? '#FF5E7E' : '#5B4FE8'} />
-                    <Stop offset="100%" stopColor={focusActive ? '#E85858' : '#8B6FE8'} />
-                  </LinearGradient>
-                </Defs>
-                <Rect width="100%" height="100%" rx={12} fill="url(#btnGrad)" />
-              </Svg>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {focusActive ? (
-                  <Pause size={16} color="#FFFFFF" fill="#FFFFFF" />
-                ) : (
-                  <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
-                )}
-                <Text style={styles.focusButtonText}>
-                  {focusActive ? 'Stop Focus Session' : 'Start My Focus Session'}
-                </Text>
-              </View>
-            </TouchableOpacity>
+            <View style={styles.bottomActionsRow}>
+              <TouchableOpacity
+                style={[styles.focusButton, focusActive && styles.stopFocusButton, { flex: 1 }]}
+                onPress={handleStartFocus}
+                activeOpacity={0.8}
+              >
+                <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+                  <Defs>
+                    <LinearGradient id="btnGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <Stop offset="0%" stopColor={focusActive ? '#FF5E7E' : '#5B4FE8'} />
+                      <Stop offset="100%" stopColor={focusActive ? '#E85858' : '#8B6FE8'} />
+                    </LinearGradient>
+                  </Defs>
+                  <Rect width="100%" height="100%" rx={12} fill="url(#btnGrad)" />
+                </Svg>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {focusActive ? (
+                    <Pause size={15} color="#FFFFFF" fill="#FFFFFF" />
+                  ) : (
+                    <Play size={15} color="#FFFFFF" fill="#FFFFFF" />
+                  )}
+                  <Text style={styles.focusButtonText}>
+                    {focusActive ? 'Stop Focus' : 'Start Focus'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.checkinButton}
+                onPress={() => setShowCheckinModal(true)}
+                activeOpacity={0.8}
+              >
+                <CheckCircle size={15} color="#00B894" />
+                <Text style={styles.checkinButtonText}>Check-in ✨</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </KeyboardAvoidingView>
@@ -1126,6 +1237,66 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           }}
         />
       ))}
+
+      {/* PROGRESS CHECK-IN MODAL */}
+      <Modal
+        visible={showCheckinModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCheckinModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <CheckCircle size={18} color="#00B894" />
+                <Text style={styles.modalTitle}>Progress Check-in</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowCheckinModal(false)}
+                style={styles.modalCloseBtn}
+              >
+                <Text style={{ color: '#9B9BAF', fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              Share a quick progress update with your study room members:
+            </Text>
+
+            <TextInput
+              style={styles.checkinInput}
+              placeholder="e.g., Finished 2 chapters of Physics, solved 10 DSA questions..."
+              placeholderTextColor="#9B9BAF"
+              value={checkinNoteInput}
+              onChangeText={setCheckinNoteInput}
+              multiline
+              maxLength={150}
+              autoFocus
+            />
+
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowCheckinModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalSubmitBtn,
+                  !checkinNoteInput.trim() && styles.modalSubmitBtnDisabled,
+                ]}
+                onPress={handleProgressCheckinSubmit}
+                disabled={!checkinNoteInput.trim()}
+              >
+                <Text style={styles.modalSubmitText}>Post Check-in ✨</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1154,7 +1325,7 @@ const MemberBubble = React.memo<{
   }, []);
 
   const pulseStyle = useAnimatedStyle(() => ({
-    borderColor: '#00B894',
+    borderColor: member.isFocusing ? '#E85858' : '#00B894',
     borderWidth: 2,
     opacity: borderOpacity.value,
   }));
@@ -1191,15 +1362,31 @@ const MemberBubble = React.memo<{
             </Svg>
           )}
           {!member.avatarUrl && <Text style={styles.avatarInitials}>{member.initials}</Text>}
+
+          {member.isFocusing && (
+            <View style={styles.liveFocusBadge}>
+              <Text style={styles.liveFocusBadgeText}>
+                {member.focusTimeLeft && member.focusTimeLeft > 0
+                  ? `${Math.ceil(member.focusTimeLeft / 60)}m`
+                  : '🔥'}
+              </Text>
+            </View>
+          )}
         </Animated.View>
       </TouchableOpacity>
 
       <Text style={styles.memberName} numberOfLines={1}>
         {member.name}
       </Text>
-      <Text style={styles.memberJoinedTime}>
-        {formatTimeAgo(member.joinedAt)}
-      </Text>
+      {member.lastCheckinNote ? (
+        <Text style={styles.memberCheckinNote} numberOfLines={1}>
+          🎯 {member.lastCheckinNote}
+        </Text>
+      ) : (
+        <Text style={styles.memberJoinedTime}>
+          {formatTimeAgo(member.joinedAt)}
+        </Text>
+      )}
     </View>
   );
 });
@@ -1944,5 +2131,192 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     color: 'rgba(255, 255, 255, 0.4)',
     lineHeight: 15,
+  },
+  roomGoalCard: {
+    backgroundColor: '#1E1E38',
+    borderRadius: 14,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#2A2A4A',
+  },
+  roomGoalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  roomGoalTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  roomGoalEditBtn: {
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  roomGoalEditBtnText: {
+    fontFamily: 'DMMono',
+    fontSize: 10,
+    color: '#FFD700',
+    fontWeight: '700',
+  },
+  roomGoalProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  roomGoalTrack: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#14142B',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  roomGoalFill: {
+    height: '100%',
+    backgroundColor: '#00B894',
+    borderRadius: 3,
+  },
+  roomGoalProgressText: {
+    fontFamily: 'DMMono',
+    fontSize: 11,
+    color: '#00B894',
+    fontWeight: '700',
+  },
+  bottomActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  checkinButton: {
+    backgroundColor: '#1E1E38',
+    height: 48,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#00B894',
+  },
+  checkinButtonText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#00B894',
+    fontWeight: '600',
+  },
+  liveFocusBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#E85858',
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderWidth: 1.5,
+    borderColor: '#0C0C1A',
+  },
+  liveFocusBadgeText: {
+    fontFamily: 'DMMono',
+    fontSize: 9,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  memberCheckinNote: {
+    fontFamily: 'DMSans',
+    fontSize: 9,
+    color: '#00B894',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(12, 12, 26, 0.8)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#1E1E38',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#2A2A4A',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  modalCloseBtn: {
+    padding: 6,
+    backgroundColor: '#14142B',
+    borderRadius: 12,
+  },
+  modalSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9B9BAF',
+    marginBottom: 14,
+  },
+  checkinInput: {
+    backgroundColor: '#14142B',
+    borderRadius: 12,
+    padding: 12,
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#FFFFFF',
+    minHeight: 80,
+    textAlignVertical: 'top',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A4A',
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    height: 44,
+    backgroundColor: '#14142B',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelText: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#9B9BAF',
+  },
+  modalSubmitBtn: {
+    flex: 2,
+    height: 44,
+    backgroundColor: '#00B894',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSubmitBtnDisabled: {
+    backgroundColor: '#2A2A4A',
+  },
+  modalSubmitText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });
