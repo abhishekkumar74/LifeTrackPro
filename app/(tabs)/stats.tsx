@@ -63,6 +63,7 @@ import { BarChart } from '@/components/stats/BarChart';
 import { DonutChart } from '@/components/stats/DonutChart';
 import { MoodPicker } from '@/components/stats/MoodPicker';
 import { AchievementCard } from '@/components/stats/AchievementCard';
+import { ShareableProgressModal } from '@/components/stats/ShareableProgressModal';
 
 type PeriodType = 'day' | 'week' | 'month';
 
@@ -70,6 +71,7 @@ export default function StatsScreen(): React.JSX.Element {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('week');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [focusToggle, setFocusToggle] = useState<'today' | 'week'>('week');
+  const [shareProgressModalVisible, setShareProgressModalVisible] = useState(false);
   const queryClient = useQueryClient();
 
   const { profile } = useAuthStore();
@@ -599,6 +601,27 @@ Stay focused, track your goals! 🚀`;
             />
           }
         >
+          {/* LIFETRACK WRAPPED / SHARE PROGRESS BANNER */}
+          <TouchableOpacity
+            style={styles.wrappedBannerCard}
+            onPress={() => setShareProgressModalVisible(true)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.wrappedLeftContent}>
+              <View style={styles.wrappedBadge}>
+                <Sparkles size={11} color="#FFD700" />
+                <Text style={styles.wrappedBadgeText}>LIFETRACK WRAPPED</Text>
+              </View>
+              <Text style={styles.wrappedTitle}>Share Your Progress Card ✨</Text>
+              <Text style={styles.wrappedSubtitle}>
+                Generate a shareable progress report for Instagram Stories & WhatsApp
+              </Text>
+            </View>
+            <View style={styles.wrappedShareIconBg}>
+              <Share2 size={18} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+
           {/* ASPIRANT PEER BENCHMARKING CARD */}
           <View style={styles.comparisonCard}>
             <View style={styles.comparisonHeader}>
@@ -1243,6 +1266,11 @@ Stay focused, track your goals! 🚀`;
           {/* AdMob Banner */}
           <AdBanner style={{ marginTop: 16, marginBottom: 24 }} />
         </ScrollView>
+
+        <ShareableProgressModal
+          visible={shareProgressModalVisible}
+          onClose={() => setShareProgressModalVisible(false)}
+        />
       </SafeAreaView>
     </View>
   );
@@ -1303,6 +1331,61 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 100,
     gap: 20,
+  },
+  wrappedBannerCard: {
+    backgroundColor: '#17172A',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  wrappedLeftContent: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  wrappedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  wrappedBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9,
+    color: '#FFD700',
+    letterSpacing: 0.8,
+  },
+  wrappedTitle: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 20,
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  wrappedSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9B9BAF',
+    lineHeight: 16,
+  },
+  wrappedShareIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#5B4FE8',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   newUserBanner: {
     backgroundColor: '#FFFFFF',
