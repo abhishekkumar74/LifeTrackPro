@@ -49,6 +49,9 @@ LogBox.ignoreLogs([
   'hostname could not be found',
   'fetch failed',
   'AuthRetryableFetchError',
+  'AuthApiError',
+  'Invalid Refresh Token',
+  'Refresh Token Not Found',
 ]);
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -359,9 +362,11 @@ function RootLayout() {
           }
         }
       }
-      setAuthInitialized(true);
-    }).catch(() => {
+    }).catch((err: any) => {
       if (!isMounted) return;
+      if (err?.message?.includes('Refresh Token') || err?.message?.includes('refresh_token') || err?.name === 'AuthApiError') {
+        useAuthStore.getState().clearAuth();
+      }
       setAuthInitialized(true);
       setLoading(false);
     });
