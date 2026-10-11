@@ -12,13 +12,28 @@ import {
   Dimensions,
 } from 'react-native';
 import ViewShot from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
-import * as Clipboard from 'expo-clipboard';
 import { X, Share2, Copy, Flame, Clock, CheckSquare, Trophy, Sparkles, Check, ArrowRight } from 'lucide-react-native';
 import { CONFIG } from '@/constants/config';
 import { AppLogo } from '@/components/ui/AppLogo';
 import { Toast } from '@/components/shared/Toast';
+
+// Safe dynamic loaders for optional native modules
+function getSharingModule() {
+  try {
+    return require('expo-sharing');
+  } catch {
+    return null;
+  }
+}
+
+function getClipboardModule() {
+  try {
+    return require('expo-clipboard');
+  } catch {
+    return null;
+  }
+}
 
 export type CardTheme = 'obsidian' | 'parchment' | 'indigo';
 export type CardPeriod = 'week' | 'month' | 'all';
@@ -79,8 +94,14 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
   const handleCopyCaption = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const caption = generateCaption();
-    await Clipboard.setStringAsync(caption);
-    showToast('Caption & App Link copied to clipboard!');
+    const clipboard = getClipboardModule();
+    if (clipboard?.setStringAsync) {
+      await clipboard.setStringAsync(caption);
+      showToast('Caption & App Link copied to clipboard!');
+    } else {
+      await Share.share({ message: caption, title: 'LifeTrack Pro Progress' }).catch(() => {});
+      showToast('Caption shared!');
+    }
   };
 
   const handleShareImage = async () => {
@@ -88,25 +109,29 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
     setIsExporting(true);
 
     try {
-      if (viewShotRef.current?.capture) {
-        const uri = await viewShotRef.current.capture();
+      let sharedSuccessfully = false;
+      const sharing = getSharingModule();
 
-        const canShare = await Sharing.isAvailableAsync();
-        if (canShare && uri) {
-          await Sharing.shareAsync(uri, {
-            dialogTitle: 'Share your LifeTrack Pro Progress',
-            mimeType: 'image/png',
-            UTI: 'public.png',
-          });
-          showToast('Progress card shared!');
-        } else {
-          // Fallback to text Share API if native file sharing is unvailable
-          await Share.share({
-            message: generateCaption(),
-            title: 'LifeTrack Pro Progress',
-          });
+      if (viewShotRef.current?.capture && sharing) {
+        try {
+          const uri = await viewShotRef.current.capture();
+          const canShare = sharing.isAvailableAsync ? await sharing.isAvailableAsync() : true;
+          if (canShare && uri) {
+            await sharing.shareAsync(uri, {
+              dialogTitle: 'Share your LifeTrack Pro Progress',
+              mimeType: 'image/png',
+              UTI: 'public.png',
+            });
+            sharedSuccessfully = true;
+            showToast('Progress card shared!');
+          }
+        } catch (captureErr) {
+          if (__DEV__) console.warn('ViewShot capture or sharing failed:', captureErr);
         }
-      } else {
+      }
+
+      if (!sharedSuccessfully) {
+        // Fallback to text Share API if native file sharing is unavailable
         await Share.share({
           message: generateCaption(),
           title: 'LifeTrack Pro Progress',
@@ -115,7 +140,10 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
     } catch (err: any) {
       if (__DEV__) console.warn('Share progress card error:', err);
       showToast('Copied text caption as fallback');
-      await Clipboard.setStringAsync(generateCaption());
+      const clipboard = getClipboardModule();
+      if (clipboard?.setStringAsync) {
+        await clipboard.setStringAsync(generateCaption()).catch(() => {});
+      }
     } finally {
       setIsExporting(false);
     }
