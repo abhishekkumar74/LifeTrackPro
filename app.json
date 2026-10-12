@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "lifetrackpro",
     "userInterfaceStyle": "automatic",
-    "jsEngine": "hermes",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.lifetrackpro.app",
@@ -21,10 +20,6 @@
         "ITSAppUsesNonExemptEncryption": false,
         "GADApplicationIdentifier": "ca-app-pub-3940256099942544~1458002511"
       }
-    },
-    "react-native-google-mobile-ads": {
-      "android_app_id": "ca-app-pub-3940256099942544~3347511713",
-      "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
     },
     "android": {
       "package": "com.lifetrackpro.app",
@@ -85,7 +80,8 @@
           "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

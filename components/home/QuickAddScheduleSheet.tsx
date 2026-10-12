@@ -116,8 +116,6 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
         setCustomDurationStr('');
         setSelectedRepeat('today');
       }
-    } else {
-      sheetRef.current?.close();
     }
   }, [isVisible, editingBlock]);
 
@@ -271,10 +269,12 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
     []
   );
 
+  if (!isVisible) return null;
+
   return (
     <BottomSheet
       ref={sheetRef}
-      index={-1}
+      index={0}
       snapPoints={['65%']}
       enablePanDownToClose={true}
       backdropComponent={renderBackdrop}

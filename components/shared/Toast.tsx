@@ -31,7 +31,7 @@ export const Toast: React.FC = () => {
     transform: [{ translateY: translateY.value }],
   }));
 
-  if (!toast) return null;
+  if (!toast || !toast.visible) return null;
 
   const getTheme = () => {
     switch (toast.type) {
@@ -60,7 +60,10 @@ export const Toast: React.FC = () => {
   const theme = getTheme();
 
   return (
-    <Animated.View style={[styles.container, { width: width - 40 }, animatedStyle]}>
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.container, { width: width - 40 }, animatedStyle]}
+    >
       <View
         style={[
           styles.card,

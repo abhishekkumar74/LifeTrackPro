@@ -17,6 +17,7 @@ export const OfflineBanner: React.FC = () => {
     text: string;
   }>({ type: 'offline', text: 'Offline Mode | Using cached data' });
 
+  const [isVisible, setIsVisible] = useState(false);
   const translateY = useSharedValue(150); // Start hidden off-screen below
   const timeoutRef = React.useRef<any>(null);
 
@@ -31,11 +32,13 @@ export const OfflineBanner: React.FC = () => {
         : 'Back Online | Connected';
 
       setBannerState({ type, text });
+      setIsVisible(true);
       translateY.value = withTiming(0, { duration: 400 });
 
       // Automatically slide out after 3 seconds
       timeoutRef.current = setTimeout(() => {
         translateY.value = withTiming(150, { duration: 400 });
+        setTimeout(() => setIsVisible(false), 450);
       }, 3000);
     };
 
@@ -79,11 +82,14 @@ export const OfflineBanner: React.FC = () => {
     };
   });
 
+  if (!isVisible) return null;
+
   const containerBgColor = bannerState.type === 'offline' ? '#F59E0B' : '#10B981';
   const textColor = bannerState.type === 'offline' ? '#0F172A' : '#FFFFFF';
 
   return (
     <Animated.View
+      pointerEvents="none"
       style={[
         styles.container,
         animatedStyle,

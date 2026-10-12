@@ -369,8 +369,11 @@ export default function HomeDashboardScreen(): React.JSX.Element {
       {/* Scrollable Dashboard zones */}
       <ScrollView
         ref={scrollRef}
+        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled={true}
         refreshControl={
           <RefreshControl
             refreshing={stats.isLoading || syllabusQuery.isFetching}
@@ -569,6 +572,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: BG_COLOR,
+  },
+  scrollView: {
+    flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 20,

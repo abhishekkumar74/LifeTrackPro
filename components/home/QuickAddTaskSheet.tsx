@@ -54,12 +54,9 @@ export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
 
   useEffect(() => {
     if (isVisible) {
-      sheetRef.current?.expand();
       setTitle('');
       setSelectedSubject(null);
       setSelectedPriority('normal');
-    } else {
-      sheetRef.current?.close();
     }
   }, [isVisible]);
 
@@ -108,10 +105,12 @@ export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
 
   const isSaving = createTaskMutation.isPending;
 
+  if (!isVisible) return null;
+
   return (
     <BottomSheet
       ref={sheetRef}
-      index={-1}
+      index={0}
       snapPoints={['50%']}
       enablePanDownToClose={true}
       backdropComponent={renderBackdrop}

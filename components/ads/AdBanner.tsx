@@ -33,13 +33,13 @@ export const AdBanner: React.FC<AdBannerProps> = ({
 
   if (!BannerAd) return null;
 
-  const adSize = size || (BannerAdSize ? BannerAdSize.ANCHORED_ADAPTIVE_BANNER : 'ANCHORED_ADAPTIVE_BANNER');
+  const adSize = size || (BannerAdSize ? BannerAdSize.BANNER : 'BANNER');
   const unitId = getAdUnitId('banner');
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, style]} pointerEvents="box-none">
       {isTestAdEnabled && isLoaded && (
-        <View style={styles.testBadge}>
+        <View style={styles.testBadge} pointerEvents="none">
           <Text style={styles.testBadgeText}>TEST AD</Text>
         </View>
       )}
