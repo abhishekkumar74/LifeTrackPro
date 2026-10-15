@@ -39,7 +39,6 @@ import { getSubjectColor } from '@/lib/utils/subject-colors';
 import { scheduleRevisionAlert } from '@/lib/notifications';
 import {
   Settings,
-  Maximize2,
   Trophy,
   Zap,
   Shield,
@@ -55,7 +54,6 @@ import {
 } from 'lucide-react-native';
 import { trackEvent } from '@/lib/posthog';
 import { FocusLiveActivity } from '@/lib/native/live-activity';
-import * as ScreenOrientation from 'expo-screen-orientation';
 
 export const playRewardingCompletionHaptics = async () => {
   try {
@@ -101,7 +99,6 @@ import { BlockerToggle } from '@/components/focus/BlockerToggle';
 import { SessionSummary } from '@/components/focus/SessionSummary';
 import { SubjectPicker } from '@/components/shared/SubjectPicker';
 import { RatingModal, shouldPromptRating } from '@/components/shared/RatingModal';
-import { LandscapeFocusClock } from '@/components/focus/LandscapeFocusClock';
 
 const TIMER_THEMES = [
   { id: 'default', label: 'Default', color: '#5B4FE8', isPremium: false },
@@ -167,30 +164,7 @@ const HistoryItemCard = React.memo<{ session: any }>(({ session }) => {
 });
 
 export default function FocusScreen(): React.JSX.Element {
-  const { width, height } = useWindowDimensions();
-  const [isManualLandscape, setIsManualLandscape] = useState(false);
-  const isLandscape = (width > height) || isManualLandscape;
-
-  const handleOpenStandBy = useCallback(async () => {
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setIsManualLandscape(true);
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-    } catch {
-      setIsManualLandscape(true);
-    }
-  }, []);
-
-  const handleCloseStandBy = useCallback(async () => {
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setIsManualLandscape(false);
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-      await ScreenOrientation.unlockAsync();
-    } catch {
-      setIsManualLandscape(false);
-    }
-  }, []);
+  const { width } = useWindowDimensions();
 
   const queryClient = useQueryClient();
   const { data: history = [], isLoading: isLoadingHistory, refetch: refetchHistory } = useFocusSessions();
@@ -230,31 +204,6 @@ export default function FocusScreen(): React.JSX.Element {
   useEffect(() => {
     FocusLiveActivity.updateWidgetData(todayMinutes, profile?.xp_points || 0);
   }, [todayMinutes, profile?.xp_points]);
-
-  useEffect(() => {
-    if (params.standby === 'true') {
-      handleOpenStandBy();
-    }
-  }, [params.standby, handleOpenStandBy]);
-
-  useEffect(() => {
-    const sub = ScreenOrientation.addOrientationChangeListener((evt) => {
-      const o = evt.orientationInfo.orientation;
-      const isLand =
-        o === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
-        o === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
-      if (isLand) {
-        setIsManualLandscape(true);
-      } else if (!isManualLandscape) {
-        setIsManualLandscape(false);
-      }
-    });
-
-    return () => {
-      ScreenOrientation.removeOrientationChangeListener(sub);
-      ScreenOrientation.unlockAsync().catch(() => {});
-    };
-  }, [isManualLandscape]);
 
   // Store bindings
   const {
@@ -316,10 +265,7 @@ export default function FocusScreen(): React.JSX.Element {
     if (params.suggestedGoal) {
       setSessionGoal(params.suggestedGoal);
     }
-    if (params.standby === 'true') {
-      setIsManualLandscape(true);
-    }
-  }, [params.suggestedSubject, params.suggestedGoal, params.standby, setSubjectTag, setSessionGoal]);
+  }, [params.suggestedSubject, params.suggestedGoal, setSubjectTag, setSessionGoal]);
 
   // Timer loop interval
   useEffect(() => {
@@ -1035,15 +981,6 @@ export default function FocusScreen(): React.JSX.Element {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.circleGlassBtn}
-                onPress={handleOpenStandBy}
-                activeOpacity={0.7}
-                accessibilityLabel="StandBy Desk Clock"
-              >
-                <Maximize2 size={15} color="rgba(255, 255, 255, 0.85)" />
-              </TouchableOpacity>
-
               {/* Ambient Sound & Music button (Accessible anytime, running or idle) */}
               <TouchableOpacity
                 style={[styles.circleGlassBtn, activeSound ? styles.circleGlassBtnActiveSound : null]}
@@ -1601,38 +1538,6 @@ export default function FocusScreen(): React.JSX.Element {
         onClose={() => setShowRatingModal(false)}
       />
 
-      {/* iPhone StandBy / Desk Clock Landscape Overlay */}
-      <LandscapeFocusClock
-        isVisible={isLandscape}
-        secondsLeft={secondsLeft}
-        totalSeconds={totalSeconds}
-        isRunning={isRunning}
-        isPaused={isPaused}
-        sessionGoal={sessionGoal}
-        subjectTag={subjectTag}
-        activeThemeColor={TIMER_THEMES.find((t) => t.id === activeTheme)?.color || '#5B4FE8'}
-        activeSound={activeSound}
-        currentMode={currentMode}
-        todayMinutes={todayMinutes}
-        onPlayPause={() => {
-          if (isRunning && !isPaused) {
-            pause();
-          } else if (isPaused) {
-            resume();
-          } else {
-            start();
-          }
-        }}
-        onStop={() => stop()}
-        onToggleSound={() => {
-          if (activeSound) {
-            handleSoundSelect(null);
-          } else {
-            handleSoundSelect(lastActiveSoundRef.current || 'rain');
-          }
-        }}
-        onClose={handleCloseStandBy}
-      />
 
       {/* FOCUS HISTORY BOTTOM SHEET */}
       <BottomSheet
