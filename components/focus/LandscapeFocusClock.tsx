@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Modal,
   StatusBar,
   useWindowDimensions,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -20,6 +21,7 @@ import {
   Moon,
   Sun,
   Zap,
+  X,
 } from 'lucide-react-native';
 import { SoundKey } from '@/lib/store/focus.store';
 import { TimerCircle } from '@/components/focus/TimerCircle';
@@ -65,7 +67,21 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
   // Optional Apple StandBy Night Mode (crimson red phosphor tint for dark rooms)
   const [nightMode, setNightMode] = useState(false);
 
-  if (!isVisible) return null;
+  // Android hardware back button handler
+  useEffect(() => {
+    if (!isVisible || width < height) return;
+    const backAction = () => {
+      if (onClose) {
+        onClose();
+        return true;
+      }
+      return false;
+    };
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [isVisible, width, height, onClose]);
+
+  if (!isVisible || width < height) return null;
 
   const effectiveThemeColor = nightMode ? '#FF3B30' : activeThemeColor;
 
@@ -189,14 +205,14 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
               {/* Exit StandBy */}
               {onClose && (
                 <TouchableOpacity
-                  style={styles.hudCircleBtn}
+                  style={[styles.hudCircleBtn, { backgroundColor: 'rgba(255, 255, 255, 0.15)' }]}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                     onClose();
                   }}
                   accessibilityLabel="Exit StandBy"
                 >
-                  <Minimize2 size={17} color="rgba(255, 255, 255, 0.85)" />
+                  <X size={17} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
             </View>
