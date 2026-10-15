@@ -26,6 +26,7 @@ import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '@/constants/theme';
 import { UserCategory, UserProfile } from '@/types/app.types';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { requestNotificationPermission } from '@/lib/notifications';
+import { trackEvent } from '@/lib/posthog';
 
 // Step components
 import Step1Profile from '@/components/onboarding/steps/step-1-profile';
@@ -342,6 +343,12 @@ export default function OnboardingScreen(): React.JSX.Element {
       } catch (permErr) {
         if (__DEV__) console.warn('Onboarding notification request warning:', permErr);
       }
+      trackEvent('onboarding_completed', {
+        category: state.category,
+        subcategories: state.subcategories,
+        hours: state.hours,
+        peakTime: state.peakTime,
+      });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/(tabs)');
 

@@ -1,16 +1,14 @@
-import React, { useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Line, Defs, RadialGradient, Stop } from 'react-native-svg';
 import Animated, {
   useSharedValue,
-  useAnimatedProps,
+  useAnimatedStyle,
+  withRepeat,
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { Coffee, Sprout, Leaf, Sparkles, AlertTriangle, Flame } from 'lucide-react-native';
 import { useFocusStore } from '@/lib/store/focus.store';
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 interface TimerCircleProps {
   size?: number;
@@ -20,230 +18,312 @@ interface TimerCircleProps {
   currentMode: 'focus' | 'short_break' | 'long_break';
 }
 
-const THEME_COLORS = {
-  default: '#5B4FE8',
+export const THEME_ACCENTS = {
+  default: '#5B4FE8', // LifeTrack Pro signature Electric Indigo
   gold: '#E8A020',
   rose_gold: '#FDA4AF',
   sunset: '#FF5E62',
   mint: '#00B894',
   nebula: '#D946EF',
-  obsidian: '#E2E8F0',
+  obsidian: '#94A3B8',
 } as const;
 
-export const TimerCircle: React.FC<TimerCircleProps> = ({
-  size = 220,
+function hexToRgba(hex: string, alpha: number): string {
+  const cleanHex = hex.replace('#', '');
+  if (cleanHex.length === 6) {
+    const r = parseInt(cleanHex.substring(0, 2), 16);
+    const g = parseInt(cleanHex.substring(2, 4), 16);
+    const b = parseInt(cleanHex.substring(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return hex;
+}
+
+interface TickData {
+  index: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  isMajor: boolean;
+}
+
+export const TimerCircle = React.memo<TimerCircleProps>(({
+  size = 320,
   secondsLeft,
   totalSeconds,
+  isRunning,
   currentMode,
 }) => {
-  const {
-    pomodoroCount,
-    activeTheme = 'default',
-    isStrictModeActive,
-    isPlantWilted,
-  } = useFocusStore();
-  const themeColor = THEME_COLORS[activeTheme as keyof typeof THEME_COLORS] || '#5B4FE8';
+  const activeTheme = useFocusStore((state) => state.activeTheme || 'default');
+  const isPaused = useFocusStore((state) => state.isPaused);
+  const accentColor = THEME_ACCENTS[activeTheme as keyof typeof THEME_ACCENTS] || '#5B4FE8';
 
-  const strokeWidth = 8;
-  const radius = (size - strokeWidth) / 2;
   const center = size / 2;
-  const circumference = 2 * Math.PI * radius;
+  const outerRadius = (size - 32) / 2; // radius for outermost tick tips
 
-  // Calculate current progress (value from 0 to 1)
-  const progress = totalSeconds > 0 ? 1 - secondsLeft / totalSeconds : 0;
+  // Generate 60 radial ticks starting clockwise from 12 o'clock
+  const ticks = useMemo<TickData[]>(() => {
+    const list: TickData[] = [];
+    for (let i = 0; i < 60; i++) {
+      const angle = (i * 6 * Math.PI) / 180;
+      const isMajor = i % 5 === 0;
+      const length = isMajor ? 16 : 9;
+      const innerRadius = outerRadius - length;
 
-  const renderBadgeIcon = () => {
-    if (currentMode !== 'focus') return <Coffee size={13} color="#A78BFA" />;
-    if (isPlantWilted && isStrictModeActive) return <AlertTriangle size={13} color="#EF4444" />;
-    if (progress < 0.33) return <Sprout size={13} color="#10B981" />;
-    if (progress < 0.66) return <Leaf size={13} color="#10B981" />;
-    return <Sparkles size={13} color="#E8A020" />;
-  };
+      const sin = Math.sin(angle);
+      const cos = Math.cos(angle);
 
-  const getPlantStageLabel = () => {
-    if (currentMode !== 'focus') return 'Rest Time';
-    if (isPlantWilted && isStrictModeActive) return 'Wilted';
-    if (progress < 0.33) return 'Seedling';
-    if (progress < 0.66) return 'Sprouting';
-    return 'Bloomed!';
-  };
+      list.push({
+        index: i,
+        x1: center + outerRadius * sin,
+        y1: center - outerRadius * cos,
+        x2: center + innerRadius * sin,
+        y2: center - innerRadius * cos,
+        isMajor,
+      });
+    }
+    return list;
+  }, [center, outerRadius]);
 
-  // Reanimated shared value for smooth animation transitions
-  const animatedProgress = useSharedValue(0);
+  // Fraction of time remaining
+  const fractionRemaining = totalSeconds > 0 ? secondsLeft / totalSeconds : 1;
+  const activeTicksCount = Math.ceil(fractionRemaining * 60);
 
-  useEffect(() => {
-    animatedProgress.value = withTiming(progress, {
-      duration: 1000,
-      easing: Easing.linear,
-    });
-  }, [progress]);
-
-  // SVG Animated stroke offset
-  const animatedProps = useAnimatedProps(() => {
-    const strokeOffset = circumference * (1 - animatedProgress.value);
-    return {
-      strokeDashoffset: strokeOffset,
-    };
-  });
-
-  // Calculate time display string
+  // Time display strings
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
   const timeStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 
-  // Mode label display mappings
-  const getModeLabel = () => {
-    switch (currentMode) {
-      case 'focus':
-        return 'Deep Focus';
-      case 'short_break':
-        return 'Short Break';
-      case 'long_break':
-        return 'Long Break';
-      default:
-        return 'Deep Focus';
-    }
-  };
+  const modeLabel = useMemo(() => {
+    if (isPaused) return 'PAUSED';
+    if (currentMode === 'focus') return 'FOCUS';
+    if (currentMode === 'short_break') return 'REST';
+    if (currentMode === 'long_break') return 'RECHARGE';
+    return 'FOCUS';
+  }, [currentMode, isPaused]);
 
-  // Color mapping helper for Pomodoro progress dots
-  const getDotColor = (index: number) => {
-    if (currentMode === 'long_break') {
-      return themeColor; // All done on long break
+  // Subtle breathing animation for active running state
+  const pulseOpacity = useSharedValue(1);
+
+  React.useEffect(() => {
+    if (isRunning) {
+      pulseOpacity.value = withRepeat(
+        withTiming(0.68, { duration: 1100, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true
+      );
+    } else {
+      pulseOpacity.value = withTiming(1, { duration: 300 });
     }
-    const activeIndex = pomodoroCount % 4;
-    if (index < activeIndex) {
-      return themeColor; // Complete
-    }
-    if (index === activeIndex && currentMode === 'focus') {
-      return '#FFFFFF'; // Active focus cycle
-    }
-    return 'rgba(255,255,255,0.15)'; // Pending
-  };
+  }, [isRunning, pulseOpacity]);
+
+  const animatedCenterGlow = useAnimatedStyle(() => ({
+    opacity: pulseOpacity.value,
+  }));
+
+  // Position of 12 o'clock top indicator dot (below top major tick)
+  const topDotY = center - (outerRadius - 26);
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {/* Background Track Circle */}
+        <Defs>
+          {/* Main Dial Face Gradient with subtle indigo-obsidian tint */}
+          <RadialGradient id="dialGrad" cx="50%" cy="50%" rx="50%" ry="50%">
+            <Stop offset="0%" stopColor="#1E1C2C" stopOpacity="0.98" />
+            <Stop offset="70%" stopColor="#141320" stopOpacity="0.99" />
+            <Stop offset="100%" stopColor="#0C0B12" stopOpacity="1" />
+          </RadialGradient>
+
+          {/* Ambient Inner Aura in App Color */}
+          <RadialGradient id="innerAura" cx="50%" cy="50%" rx="50%" ry="50%">
+            <Stop offset="0%" stopColor={accentColor} stopOpacity="0.22" />
+            <Stop offset="65%" stopColor={accentColor} stopOpacity="0.05" />
+            <Stop offset="100%" stopColor={accentColor} stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+
+        {/* Dial Background Face */}
         <Circle
           cx={center}
           cy={center}
-          r={radius}
-          stroke="rgba(255,255,255,0.08)"
-          strokeWidth={strokeWidth}
+          r={outerRadius + 14}
+          fill="url(#dialGrad)"
+        />
+
+        {/* App Color Inner Ambient Glow Aura */}
+        <Circle
+          cx={center}
+          cy={center}
+          r={outerRadius - 22}
+          fill="url(#innerAura)"
+        />
+
+        {/* Outer Liquid Glass Bezel Ring 1 (Highlight) */}
+        <Circle
+          cx={center}
+          cy={center}
+          r={outerRadius + 14}
+          stroke="rgba(255, 255, 255, 0.09)"
+          strokeWidth={1.5}
           fill="transparent"
         />
 
-        {/* Animated Progress Circle */}
-        <AnimatedCircle
+        {/* Outer Liquid Glass Bezel Ring 2 (Beveled App Accent) */}
+        <Circle
           cx={center}
           cy={center}
-          r={radius}
-          stroke={themeColor}
-          strokeWidth={strokeWidth}
+          r={outerRadius + 8}
+          stroke={hexToRgba(accentColor, 0.20)}
+          strokeWidth={2.5}
           fill="transparent"
-          strokeDasharray={`${circumference} ${circumference}`}
-          animatedProps={animatedProps}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${center} ${center})`}
+        />
+
+        {/* Inner Dial Track Boundary */}
+        <Circle
+          cx={center}
+          cy={center}
+          r={outerRadius - 18}
+          stroke="rgba(255, 255, 255, 0.05)"
+          strokeWidth={1}
+          fill="transparent"
+        />
+
+        {/* 60 Radial Chronometer Ticks */}
+        {ticks.map((tick) => {
+          // If timer is stopped (at initial state), all ticks are lit in the faded remaining color.
+          // When running or paused, ticks up to activeTicksCount are illuminated in faded remaining color,
+          // and ticks beyond are extra faded in the other (elapsed) color.
+          const isTickRemaining = !isRunning && !isPaused && secondsLeft === totalSeconds
+            ? true
+            : tick.index < activeTicksCount;
+
+          const isLeadingTick = isRunning && tick.index === activeTicksCount - 1;
+
+          let strokeColor: string;
+          let strokeWidth: number;
+
+          if (isLeadingTick) {
+            // Bright highlight tick for the active leading edge
+            strokeColor = '#FFFFFF';
+            strokeWidth = tick.isMajor ? 3.6 : 2.6;
+          } else if (isTickRemaining) {
+            // Faded color in remaining time (app color with luminous presence)
+            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.80 : 0.60);
+            strokeWidth = tick.isMajor ? 2.8 : 1.7;
+          } else {
+            // Some extra faded color in the other time (elapsed time)
+            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.16 : 0.08);
+            strokeWidth = tick.isMajor ? 2.0 : 1.2;
+          }
+
+          return (
+            <React.Fragment key={tick.index}>
+              <Line
+                x1={tick.x1}
+                y1={tick.y1}
+                x2={tick.x2}
+                y2={tick.y2}
+                stroke={strokeColor}
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+              />
+              {isLeadingTick && (
+                <Circle
+                  cx={tick.x1}
+                  cy={tick.y1}
+                  r={2.5}
+                  fill="#FFFFFF"
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
+
+        {/* 12 o'clock Chronometer Pivot Indicator Dot */}
+        <Circle
+          cx={center}
+          cy={topDotY}
+          r={4}
+          fill={accentColor}
+        />
+        <Circle
+          cx={center}
+          cy={topDotY}
+          r={2}
+          fill="#FFFFFF"
         />
       </Svg>
 
-      {/* Centered overlays */}
+      {/* Center Readout Overlay */}
       <View style={StyleSheet.absoluteFill}>
-        <View style={styles.innerContent}>
-          {/* Seed Growth Badge */}
-          <View style={styles.seedBadge}>
-            {renderBadgeIcon()}
-            <Text style={styles.seedStageText}>{getPlantStageLabel()}</Text>
-          </View>
-
-          {/* Time Display */}
+        <View style={styles.centerReadout}>
+          {/* Main Large Digital Display */}
           <Text
-            style={[styles.timeText, { fontSize: timeStr.length > 5 ? 32 : 40 }]}
+            style={[
+              styles.timeDigits,
+              { fontSize: size < 290 ? 46 : size < 330 ? 56 : 64 },
+            ]}
             numberOfLines={1}
             adjustsFontSizeToFit
-            minimumFontScale={0.7}
+            minimumFontScale={0.75}
           >
             {timeStr}
           </Text>
 
-          {/* Mode Label */}
-          <Text style={styles.modeText}>{getModeLabel()}</Text>
-
-          {/* Pomodoro Dot Indicators */}
-          <View style={styles.dotsRow}>
-            {[0, 1, 2, 3].map((i) => (
-              <View
-                key={i}
-                style={[
-                  styles.dot,
-                  { backgroundColor: getDotColor(i) },
-                ]}
-              />
-            ))}
-          </View>
+          {/* Retro Mode Pill (e.g. • FOCUS) */}
+          <Animated.View style={[styles.modeRow, animatedCenterGlow]}>
+            <View style={[styles.modeIndicatorDot, { backgroundColor: accentColor }]} />
+            <Text style={[styles.modeText, { color: hexToRgba(accentColor, 0.95) }]}>
+              {modeLabel}
+            </Text>
+          </Animated.View>
         </View>
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.55,
+    shadowRadius: 24,
+    elevation: 12,
   },
-  innerContent: {
+  centerReadout: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 4,
+    paddingTop: 8,
   },
-  seedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  seedEmoji: {
-    fontSize: 14,
-  },
-  seedStageText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    color: '#A78BFA',
-    fontWeight: '600',
-  },
-  timeText: {
+  timeDigits: {
     fontFamily: 'DMMono',
+    fontWeight: '700',
     color: '#FFFFFF',
-    fontWeight: '600',
-    letterSpacing: -1,
-    width: '85%',
+    letterSpacing: -1.5,
     textAlign: 'center',
   },
-  modeText: {
-    fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#9B9BAF',
-    marginTop: 2,
-    letterSpacing: 0.5,
-  },
-  dotsRow: {
+  modeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
     gap: 6,
+    marginTop: 6,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  modeIndicatorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  modeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 2.5,
   },
 });

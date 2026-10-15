@@ -27,9 +27,10 @@ interface SessionSummaryProps {
   duration: number; // in minutes
   subject: string | null;
   pomodoroCount: number;
-  onSave: (mood: number, note: string, focusAccuracy?: 'fully_focused' | 'partially_distracted' | 'off_track' | null, seedsEarned?: number) => void;
+  onSave: (mood: number, note: string, focusAccuracy?: 'fully_focused' | 'partially_distracted' | 'off_track' | null, xpEarned?: number) => void;
   onDiscard: () => void;
   isStrictMode?: boolean;
+  isStrictViolated?: boolean;
   isPlantWilted?: boolean;
   selectedPlantId?: string;
 }
@@ -78,14 +79,16 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
   onSave,
   onDiscard,
   isStrictMode = false,
+  isStrictViolated = false,
   isPlantWilted = false,
-  selectedPlantId = 'sprout',
 }) => {
   const sheetRef = useRef<BottomSheet>(null);
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
   const [selectedAccuracy, setSelectedAccuracy] = useState<'fully_focused' | 'partially_distracted' | 'off_track' | null>(null);
   const [note, setNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  const hasViolation = isStrictViolated || isPlantWilted;
 
   // Open or close bottom sheet when isVisible changes
   useEffect(() => {
@@ -101,10 +104,10 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
     }
   }, [isVisible]);
 
-  // Award Seeds: Base 5 seeds + 1 seed per 5 min + strict mode bonus
-  const durationBonus = Math.floor(duration / 5);
-  const strictBonus = isStrictMode ? (isPlantWilted ? 2 : 5) : 0;
-  const calculatedSeeds = 5 + durationBonus + strictBonus;
+  // Award Focus XP: Base 20 XP + 2 XP per min + strict mode bonus
+  const durationBonus = Math.floor(duration * 2);
+  const strictBonus = isStrictMode ? (hasViolation ? 5 : 25) : 0;
+  const calculatedXP = 20 + durationBonus + strictBonus;
 
   const handleSave = async () => {
     if (isSaving) return;
@@ -120,7 +123,7 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
 
     setIsSaving(true);
     try {
-      await onSave(moodVal, note, isStrictMode ? selectedAccuracy : null, calculatedSeeds);
+      await onSave(moodVal, note, isStrictMode ? selectedAccuracy : null, calculatedXP);
       // Safely check frequency capping and trigger interstitial at natural transition point
       AdInterstitial.showAtTransitionPoint('focus_session_summary');
     } catch (e) {
@@ -177,9 +180,9 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
 
           <View style={styles.statCard}>
             <Text style={[styles.statValue, { color: '#E8A020' }]} numberOfLines={1}>
-              {`+${calculatedSeeds}`}
+              {`+${calculatedXP}`}
             </Text>
-            <Text style={[styles.statLabel, { color: '#E8A020' }]}>SEEDS EARNED</Text>
+            <Text style={[styles.statLabel, { color: '#E8A020' }]}>XP REWARD</Text>
           </View>
         </View>
 

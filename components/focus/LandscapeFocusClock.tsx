@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,20 @@ import {
   StatusBar,
   useWindowDimensions,
 } from 'react-native';
-import { Play, Pause, Square, Volume2, VolumeX, Sparkles, Minimize2 } from 'lucide-react-native';
+import {
+  Play,
+  Pause,
+  Square,
+  Volume2,
+  VolumeX,
+  Sparkles,
+  Minimize2,
+  Moon,
+  Sun,
+  Zap,
+} from 'lucide-react-native';
 import { SoundKey } from '@/lib/store/focus.store';
+import { TimerCircle } from '@/components/focus/TimerCircle';
 import * as Haptics from 'expo-haptics';
 
 interface LandscapeFocusClockProps {
@@ -22,6 +34,8 @@ interface LandscapeFocusClockProps {
   subjectTag: string | null;
   activeThemeColor?: string;
   activeSound: SoundKey | null;
+  currentMode?: 'focus' | 'short_break' | 'long_break';
+  todayMinutes?: number;
   onPlayPause: () => void;
   onStop: () => void;
   onToggleSound?: () => void;
@@ -38,136 +52,227 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
   subjectTag,
   activeThemeColor = '#5B4FE8',
   activeSound,
+  currentMode = 'focus',
+  todayMinutes = 0,
   onPlayPause,
   onStop,
   onToggleSound,
   onClose,
 }) => {
   const { width, height } = useWindowDimensions();
+  // Optional Apple StandBy Night Mode (crimson red phosphor tint for dark rooms)
+  const [nightMode, setNightMode] = useState(false);
 
   if (!isVisible) return null;
+
+  const effectiveThemeColor = nightMode ? '#FF3B30' : activeThemeColor;
 
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
   const pad = (n: number) => String(n).padStart(2, '0');
+  const timeStr = `${pad(minutes)}:${pad(seconds)}`;
 
   const progress = totalSeconds > 0 ? (totalSeconds - secondsLeft) / totalSeconds : 0;
   const progressPercent = Math.min(100, Math.max(0, Math.round(progress * 100)));
+
+  // Responsive dial size for landscape orientation (fits vertically with padding)
+  const dialSize = Math.min(Math.floor(height * 0.82), Math.floor(width * 0.44), 320);
 
   return (
     <Modal
       visible={isVisible}
       animationType="fade"
       supportedOrientations={['landscape', 'landscape-left', 'landscape-right']}
+      statusBarTranslucent
     >
       <StatusBar hidden />
-      <View style={styles.container}>
-        {/* Top Meta Bar */}
-        <View style={styles.topRow}>
-          <View style={styles.badgeContainer}>
-            {subjectTag ? (
-              <View style={[styles.subjectBadge, { borderColor: activeThemeColor }]}>
-                <Text style={[styles.subjectText, { color: activeThemeColor }]}>
-                  {subjectTag}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.standbyBadge}>
-                <Sparkles size={14} color={activeThemeColor} />
-                <Text style={[styles.standbyBadgeText, { color: activeThemeColor }]}>
-                  StandBy Focus
-                </Text>
-              </View>
-            )}
-          </View>
+      <View style={[styles.container, nightMode && styles.containerNight]}>
+        {/* Ambient background glow circles */}
+        <View
+          style={[
+            styles.ambientGlowLeft,
+            { backgroundColor: nightMode ? 'rgba(255, 59, 48, 0.08)' : 'rgba(91, 79, 232, 0.12)' },
+          ]}
+          pointerEvents="none"
+        />
+        <View
+          style={[
+            styles.ambientGlowRight,
+            { backgroundColor: nightMode ? 'rgba(255, 59, 48, 0.06)' : 'rgba(91, 79, 232, 0.08)' },
+          ]}
+          pointerEvents="none"
+        />
 
-          {sessionGoal ? (
-            <Text style={styles.goalText} numberOfLines={1}>
-              {sessionGoal}
-            </Text>
-          ) : null}
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {onToggleSound && (
-              <TouchableOpacity
-                style={styles.iconBtn}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  onToggleSound();
-                }}
-              >
-                {activeSound ? (
-                  <Volume2 size={20} color="#FFFFFF" />
-                ) : (
-                  <VolumeX size={20} color="#64748B" />
-                )}
-              </TouchableOpacity>
-            )}
-
-            {onClose && (
-              <TouchableOpacity
-                style={styles.iconBtn}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  onClose();
-                }}
-              >
-                <Minimize2 size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            )}
-          </View>
+        {/* Left Section: Retro Chronometer Dial */}
+        <View style={styles.leftSection}>
+          <TimerCircle
+            size={dialSize}
+            secondsLeft={secondsLeft}
+            totalSeconds={totalSeconds}
+            isRunning={isRunning}
+            currentMode={currentMode}
+          />
         </View>
 
-        {/* Big StandBy Clock Display */}
-        <View style={styles.clockContainer}>
-          <View style={styles.timeRow}>
-            <Text style={[styles.timeDigits, { fontSize: height * 0.42 }]}>
-              {pad(minutes)}
-            </Text>
-            <Text style={[styles.timeColon, { fontSize: height * 0.38, color: activeThemeColor }]}>
-              :
-            </Text>
-            <Text style={[styles.timeDigits, { fontSize: height * 0.42 }]}>
-              {pad(seconds)}
-            </Text>
+        {/* Right Section: StandBy HUD, Controls & Progress */}
+        <View style={styles.rightSection}>
+          {/* Top Row: StandBy Status Badge & Utility Buttons */}
+          <View style={styles.hudTopRow}>
+            <View style={styles.standbyPill}>
+              <View
+                style={[
+                  styles.standbyDot,
+                  { backgroundColor: isRunning ? '#10B981' : effectiveThemeColor },
+                ]}
+              />
+              <Sparkles size={13} color={effectiveThemeColor} />
+              <Text style={[styles.standbyPillText, { color: effectiveThemeColor }]}>
+                STANDBY FOCUS
+              </Text>
+            </View>
+
+            {subjectTag && (
+              <View style={[styles.subjectTagPill, { borderColor: effectiveThemeColor }]}>
+                <Text style={[styles.subjectTagText, { color: effectiveThemeColor }]} numberOfLines={1}>
+                  🏷 {subjectTag}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.hudActions}>
+              {/* Apple-style StandBy Night Mode Toggle */}
+              <TouchableOpacity
+                style={[styles.hudCircleBtn, nightMode && styles.hudCircleBtnActive]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setNightMode(!nightMode);
+                }}
+                accessibilityLabel="Toggle StandBy Night Mode"
+              >
+                {nightMode ? <Sun size={17} color="#FF3B30" /> : <Moon size={17} color="rgba(255, 255, 255, 0.85)" />}
+              </TouchableOpacity>
+
+              {/* Sound Toggle */}
+              {onToggleSound && (
+                <TouchableOpacity
+                  style={[styles.hudCircleBtn, activeSound ? styles.hudCircleBtnSoundOn : null]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    onToggleSound();
+                  }}
+                  accessibilityLabel="Toggle Ambient Sound"
+                >
+                  {activeSound ? (
+                    <Volume2 size={17} color={effectiveThemeColor} />
+                  ) : (
+                    <VolumeX size={17} color="rgba(255, 255, 255, 0.45)" />
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {/* Exit StandBy */}
+              {onClose && (
+                <TouchableOpacity
+                  style={styles.hudCircleBtn}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    onClose();
+                  }}
+                  accessibilityLabel="Exit StandBy"
+                >
+                  <Minimize2 size={17} color="rgba(255, 255, 255, 0.85)" />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
-          {/* Progress Bar */}
-          <View style={styles.progressTrack}>
-            <View
+          {/* Center Info: Session Name & Large Digital Time */}
+          <View style={styles.hudCenterContent}>
+            <Text
               style={[
-                styles.progressFill,
-                { width: `${progressPercent}%`, backgroundColor: activeThemeColor },
+                styles.sessionNameText,
+                nightMode && { color: '#FF8880' },
               ]}
-            />
+              numberOfLines={1}
+            >
+              {sessionGoal.trim() || 'Deep Focus Session'}
+            </Text>
+
+            {/* Giant Monospace Digits */}
+            <Text
+              style={[
+                styles.giantTimeDigits,
+                nightMode && { color: '#FF3B30' },
+              ]}
+            >
+              {timeStr}
+            </Text>
+
+            {/* Progress Capsule Track */}
+            <View style={styles.progressContainer}>
+              <View style={styles.progressTrack}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${progressPercent}%`,
+                      backgroundColor: effectiveThemeColor,
+                    },
+                  ]}
+                />
+              </View>
+              <View style={styles.progressMetaRow}>
+                <Text style={styles.progressMetaText}>
+                  {progressPercent}% COMPLETED
+                </Text>
+                <Text style={styles.progressMetaText}>
+                  TODAY: {todayMinutes}m FOCUSED
+                </Text>
+              </View>
+            </View>
           </View>
-        </View>
 
-        {/* Bottom Floating Control Bar */}
-        <View style={styles.controlsRow}>
-          <TouchableOpacity
-            style={[styles.controlBtn, styles.stopBtn]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              onStop();
-            }}
-          >
-            <Square size={20} color="#FF5858" fill="#FF5858" />
-          </TouchableOpacity>
+          {/* Bottom Action Controls */}
+          <View style={styles.hudBottomControls}>
+            {/* Primary Action Button */}
+            <TouchableOpacity
+              style={[
+                styles.primaryStandbyBtn,
+                {
+                  backgroundColor: nightMode ? 'rgba(255, 59, 48, 0.28)' : 'rgba(91, 79, 232, 0.28)',
+                  borderColor: nightMode ? 'rgba(255, 59, 48, 0.55)' : 'rgba(91, 79, 232, 0.55)',
+                },
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                onPlayPause();
+              }}
+              activeOpacity={0.8}
+            >
+              {isRunning && !isPaused ? (
+                <Pause size={20} color="#FFFFFF" fill="#FFFFFF" />
+              ) : (
+                <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+              )}
+              <Text style={styles.primaryStandbyBtnText}>
+                {isRunning && !isPaused ? 'Pause Focus' : isPaused ? 'Resume Focus' : 'Start Focus'}
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.controlBtn, styles.playBtn, { backgroundColor: activeThemeColor }]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              onPlayPause();
-            }}
-          >
-            {isRunning && !isPaused ? (
-              <Pause size={28} color="#FFFFFF" fill="#FFFFFF" />
-            ) : (
-              <Play size={28} color="#FFFFFF" fill="#FFFFFF" />
-            )}
-          </TouchableOpacity>
+            {/* End / Reset Session Button */}
+            <TouchableOpacity
+              style={styles.stopStandbyBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                onStop();
+              }}
+              activeOpacity={0.8}
+              accessibilityLabel="End Session"
+            >
+              <Square size={16} color="#FF6B6B" fill="#FF6B6B" />
+              <Text style={styles.stopStandbyBtnText}>End</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -177,119 +282,196 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#05050A',
+    flexDirection: 'row',
+    backgroundColor: '#09080D',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 32,
-    paddingVertical: 20,
+    paddingHorizontal: 28,
+    paddingVertical: 18,
   },
-  topRow: {
+  containerNight: {
+    backgroundColor: '#050002',
+  },
+  ambientGlowLeft: {
+    position: 'absolute',
+    left: -80,
+    top: -60,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+  },
+  ambientGlowRight: {
+    position: 'absolute',
+    right: -60,
+    bottom: -60,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+  },
+  leftSection: {
+    flex: 0.46,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rightSection: {
+    flex: 0.54,
+    height: '100%',
+    justifyContent: 'space-between',
+    paddingLeft: 20,
+    paddingVertical: 6,
+  },
+  hudTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
   },
-  badgeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  standbyBadge: {
+  standbyPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
   },
-  standbyBadgeText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 13,
-    fontWeight: '600',
+  standbyDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
-  subjectBadge: {
-    paddingHorizontal: 12,
+  standbyPillText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  subjectTagPill: {
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
-  subjectText: {
+  subjectTagText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
-  goalText: {
-    fontFamily: 'DMSans',
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.7)',
-    maxWidth: '50%',
-    textAlign: 'center',
-  },
-  iconBtn: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  clockContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 'auto',
-  },
-  timeRow: {
+  hudActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+  },
+  hudCircleBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  timeDigits: {
-    fontFamily: 'InstrumentSerif',
-    color: '#FFFFFF',
-    fontWeight: '400',
-    letterSpacing: -2,
-    includeFontPadding: false,
+  hudCircleBtnActive: {
+    backgroundColor: 'rgba(255, 59, 48, 0.2)',
+    borderColor: 'rgba(255, 59, 48, 0.4)',
   },
-  timeColon: {
+  hudCircleBtnSoundOn: {
+    backgroundColor: 'rgba(91, 79, 232, 0.22)',
+    borderColor: '#5B4FE8',
+  },
+  hudCenterContent: {
+    justifyContent: 'center',
+    marginVertical: 4,
+  },
+  sessionNameText: {
     fontFamily: 'InstrumentSerif',
-    fontWeight: '400',
-    marginHorizontal: 4,
-    includeFontPadding: false,
+    fontSize: 26,
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+    marginBottom: 4,
+  },
+  giantTimeDigits: {
+    fontFamily: 'DMMono',
+    fontSize: 54,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -1.5,
+    marginVertical: 2,
+  },
+  progressContainer: {
+    width: '100%',
+    marginTop: 6,
   },
   progressTrack: {
-    height: 4,
-    width: '60%',
+    height: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 2,
-    marginTop: 12,
+    borderRadius: 3,
     overflow: 'hidden',
+    width: '100%',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: 3,
   },
-  controlsRow: {
+  progressMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  progressMetaText: {
+    fontFamily: 'DMMono',
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.55)',
+    letterSpacing: 1.0,
+  },
+  hudBottomControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  primaryStandbyBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 24,
-    width: '100%',
-  },
-  controlBtn: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stopBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(255, 88, 88, 0.15)',
-  },
-  playBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    gap: 10,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1.5,
     shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+  },
+  primaryStandbyBtnText: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 20,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  stopStandbyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 88, 88, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 88, 88, 0.35)',
+  },
+  stopStandbyBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
+    color: '#FF6B6B',
+    fontWeight: '700',
   },
 });

@@ -17,6 +17,8 @@
         ],
         "NSMicrophoneUsageDescription": "LifeTrack Pro does not use the microphone.",
         "NSMotionUsageDescription": "Used for haptic feedback during focus sessions.",
+        "NSSupportsLiveActivities": true,
+        "NSSupportsLiveActivitiesFrequentUpdates": true,
         "ITSAppUsesNonExemptEncryption": false,
         "GADApplicationIdentifier": "ca-app-pub-3940256099942544~1458002511"
       }
@@ -81,7 +83,9 @@
         }
       ],
       "expo-sharing",
-      "expo-asset"
+      "expo-asset",
+      "expo-localization",
+      "posthog-react-native/expo"
     ],
     "experiments": {
       "typedRoutes": true

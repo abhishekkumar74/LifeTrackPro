@@ -5,6 +5,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { UserProfile } from '@/types/app.types';
 import { supabase } from '@/lib/supabase/client';
 import { queryClient } from '@/lib/query-client';
+import { resetUser } from '@/lib/posthog';
 
 interface AuthState {
   user: User | null;
@@ -40,6 +41,7 @@ export const useAuthStore = create<AuthState>()(
           isLoading: false,
         }),
       signOut: async () => {
+        resetUser();
         await supabase.auth.signOut();
         // CRITICAL: clear all cached data
         queryClient.clear();

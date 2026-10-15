@@ -75,6 +75,7 @@ export default function TabLayout(): React.JSX.Element {
         name="focus"
         options={{
           title: 'Focus',
+          tabBarStyle: { display: 'none' },
           tabBarIcon: ({ color, focused }) => (
             <Timer size={20} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),

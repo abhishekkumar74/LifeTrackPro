@@ -17,6 +17,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { supabase } from '@/lib/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { Sparkles, X, CheckCircle, Volume2, Palette, Users } from 'lucide-react-native';
+import { trackEvent, identifyUser } from '@/lib/posthog';
 
 const { width } = Dimensions.get('window');
 
@@ -48,6 +49,8 @@ export default function PaywallScreen(): React.JSX.Element {
 
       setProfile(data as any);
       queryClient.invalidateQueries({ queryKey: ['profile'] });
+      trackEvent('paywall_converted', { plan: 'pro_lifetime' });
+      identifyUser(session.user.id, { is_premium: true });
       setIsSuccess(true);
     } catch (e) {
       if (__DEV__) console.warn('Upgrade failed:', e);

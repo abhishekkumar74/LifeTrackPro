@@ -5,6 +5,9 @@ import * as Sentry from '@sentry/react-native';
 import { initSentry, setSentryUser, clearSentryUser } from '@/lib/sentry';
 import { checkForUpdate } from '@/lib/update-checker';
 import { useAppLifecycle } from '@/lib/hooks/use-app-lifecycle';
+import { PostHogProvider } from 'posthog-react-native';
+import { posthog, identifyUser, resetUser, trackEvent } from '@/lib/posthog';
+import { usePostHogScreenTracker } from '@/lib/hooks/use-posthog-screen-tracker';
 
 // Call immediately on module load
 initSentry();
@@ -52,6 +55,8 @@ LogBox.ignoreLogs([
   'AuthApiError',
   'Invalid Refresh Token',
   'Refresh Token Not Found',
+  'Remote config could not be loaded',
+  'PostHogFetchHttpError',
 ]);
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -146,6 +151,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 function InnerApp({ children }: { children: React.ReactNode }) {
   // Listen for lifecycle changes globally
   useAppLifecycle();
+  usePostHogScreenTracker();
+
+  useEffect(() => {
+    trackEvent('app_opened', { platform: Platform.OS });
+  }, []);
+
   return <>{children}</>;
 }
 
@@ -175,6 +186,11 @@ function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) setFontsLoaded(true);
+    }, 1500);
+
     async function loadFonts() {
       try {
         await Font.loadAsync({
@@ -207,10 +223,14 @@ function RootLayout() {
           console.warn('Font loading warning (handled gracefully):', error);
         }
       } finally {
-        setFontsLoaded(true);
+        if (isMounted) setFontsLoaded(true);
       }
     }
     loadFonts();
+    return () => {
+      isMounted = false;
+      clearTimeout(safetyTimeout);
+    };
   }, []);
 
   const { setLoading, setSession, setProfile } = useAuthStore();
@@ -276,6 +296,8 @@ function RootLayout() {
               console.log('Successfully established session from deep link');
             }
             setSession(data.session);
+            setSentryUser(data.session.user.id);
+            identifyUser(data.session.user.id, { email: data.session.user.email });
             await fetchProfile(data.session.user.id);
           }
         } catch (err) {
@@ -316,19 +338,53 @@ function RootLayout() {
         if (__DEV__) {
           console.warn('Profile fetch warning (expected if user has no profile yet):', error.message);
         }
-        setProfile(null);
-      } else {
+        // Only reset if the profile record literally does not exist (PGRST116: 0 rows)
+        // Never wipe local profile on network or transient errors
+        if (error.code === 'PGRST116') {
+          setProfile(null);
+        }
+      } else if (data) {
         const userProf = data as UserProfile;
         if (userProf && (userProf.category as string) === 'student' && userProf.sub_category?.includes('cse_student')) {
           userProf.category = 'cse_student';
         }
+
+        // Safety: If local cached profile has higher XP (e.g. from offline sessions),
+        // preserve the user's progress and sync it back to Supabase
+        const cachedProfile = useAuthStore.getState().profile;
+        if (cachedProfile && cachedProfile.id === userProf.id) {
+          const cachedXp = Number(cachedProfile.xp_points || 0);
+          const remoteXp = Number(userProf.xp_points || 0);
+          if (cachedXp > remoteXp) {
+            userProf.xp_points = cachedXp;
+            userProf.level = Math.max(Number(userProf.level || 1), Number(cachedProfile.level || 1));
+            // Sync higher XP to Supabase in the background
+            supabase
+              .from('profiles')
+              .update({ xp_points: cachedXp, level: userProf.level, focus_seeds: cachedXp })
+              .eq('id', userProf.id)
+              .then(() => {}, () => {});
+          }
+        }
+
         setProfile(userProf);
+        if (userProf) {
+          identifyUser(userProf.id, {
+            category: userProf.category,
+            sub_category: userProf.sub_category,
+            is_premium: userProf.is_premium,
+            daily_hours: userProf.daily_hours,
+            peak_time: userProf.peak_time,
+            level: userProf.level,
+            xp_points: userProf.xp_points,
+          });
+        }
       }
     } catch (err) {
       if (__DEV__) {
         console.error('Unexpected error fetching user profile:', err);
       }
-      setProfile(null);
+      // Never wipe profile on unexpected network exceptions
     } finally {
       setLoading(false);
     }
@@ -342,24 +398,31 @@ function RootLayout() {
     // 1. Resolve initial Supabase user session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!isMounted) return;
-      if (session) {
-        setSession(session);
-        setSentryUser(session.user.id);
-        await fetchProfile(session.user.id);
-      } else {
-        // Only clear if no saved session was found in persisted store
-        const existingSession = useAuthStore.getState().session;
-        if (!existingSession) {
-          setSession(null);
-          setProfile(null);
-          setLoading(false);
+      try {
+        if (session) {
+          setSession(session);
+          setSentryUser(session.user.id);
+          identifyUser(session.user.id, { email: session.user.email });
+          await fetchProfile(session.user.id);
         } else {
-          // Verify saved session user profile
-          if (useAuthStore.getState().user?.id) {
-            await fetchProfile(useAuthStore.getState().user!.id);
-          } else {
+          // Only clear if no saved session was found in persisted store
+          const existingSession = useAuthStore.getState().session;
+          if (!existingSession) {
+            setSession(null);
+            setProfile(null);
             setLoading(false);
+          } else {
+            // Verify saved session user profile
+            if (useAuthStore.getState().user?.id) {
+              await fetchProfile(useAuthStore.getState().user!.id);
+            } else {
+              setLoading(false);
+            }
           }
+        }
+      } finally {
+        if (isMounted) {
+          setAuthInitialized(true);
         }
       }
     }).catch((err: any) => {
@@ -381,12 +444,14 @@ function RootLayout() {
         router.replace('/(auth)/reset-password');
       } else if (event === 'SIGNED_OUT') {
         clearSentryUser();
+        resetUser();
         useAuthStore.getState().clearAuth();
         queryClient.clear();
         router.replace('/login');
       } else if (session) {
         setSession(session);
         setSentryUser(session.user.id);
+        identifyUser(session.user.id, { email: session.user.email });
         await fetchProfile(session.user.id);
         setAuthInitialized(true);
       } else if (event === 'INITIAL_SESSION') {
@@ -410,9 +475,16 @@ function RootLayout() {
   // Dismiss splash screen once typography has loaded and session is checked
   useEffect(() => {
     if (fontsLoaded && authInitialized) {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => {});
       markEnd('app_boot');
     }
+
+    // Safety fallback: ensure splash screen always hides within 2.5s
+    const timer = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 2500);
+
+    return () => clearTimeout(timer);
   }, [fontsLoaded, authInitialized]);
 
   if (!fontsLoaded || !authInitialized) {
@@ -421,32 +493,40 @@ function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
-        <InnerApp>
-          <SafeAreaProvider>
-            <AuthGuard>
-              <ErrorBoundary>
-                <OfflineBanner />
-                <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen name="(auth)/login" options={{ gestureEnabled: false }} />
-                  <Stack.Screen name="(auth)/onboarding/index" options={{ gestureEnabled: false }} />
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                  <Stack.Screen name="rooms/index" options={{ headerShown: false }} />
-                  <Stack.Screen name="rooms/[id]" options={{ headerShown: false }} />
-                  <Stack.Screen name="notifications" options={{ headerShown: false }} />
-                  <Stack.Screen name="profile" options={{ headerShown: false }} />
-                  <Stack.Screen name="paywall" options={{ presentation: 'modal', headerShown: false }} />
-                  <Stack.Screen name="habit/[id]" options={{ headerShown: false }} />
-                  <Stack.Screen name="habits/index" options={{ headerShown: false }} />
-                  <Stack.Screen name="routine_analytics" options={{ headerShown: false }} />
-                  <Stack.Screen name="routine_detail" options={{ headerShown: false }} />
-                </Stack>
-                <Toast />
-              </ErrorBoundary>
-            </AuthGuard>
-          </SafeAreaProvider>
-        </InnerApp>
-      </QueryClientProvider>
+      <PostHogProvider
+        client={posthog}
+        autocapture={{
+          captureScreens: false,
+          captureTouches: true,
+        }}
+      >
+        <QueryClientProvider client={queryClient}>
+          <InnerApp>
+            <SafeAreaProvider>
+              <AuthGuard>
+                <ErrorBoundary>
+                  <OfflineBanner />
+                  <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="(auth)/login" options={{ gestureEnabled: false }} />
+                    <Stack.Screen name="(auth)/onboarding/index" options={{ gestureEnabled: false }} />
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen name="rooms/index" options={{ headerShown: false }} />
+                    <Stack.Screen name="rooms/[id]" options={{ headerShown: false }} />
+                    <Stack.Screen name="notifications" options={{ headerShown: false }} />
+                    <Stack.Screen name="profile" options={{ headerShown: false }} />
+                    <Stack.Screen name="paywall" options={{ presentation: 'modal', headerShown: false }} />
+                    <Stack.Screen name="habit/[id]" options={{ headerShown: false }} />
+                    <Stack.Screen name="habits/index" options={{ headerShown: false }} />
+                    <Stack.Screen name="routine_analytics" options={{ headerShown: false }} />
+                    <Stack.Screen name="routine_detail" options={{ headerShown: false }} />
+                  </Stack>
+                  <Toast />
+                </ErrorBoundary>
+              </AuthGuard>
+            </SafeAreaProvider>
+          </InnerApp>
+        </QueryClientProvider>
+      </PostHogProvider>
     </GestureHandlerRootView>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import BottomSheet, {
   BottomSheetView,
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
+  BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { supabase } from '@/lib/supabase/client';
@@ -36,7 +37,61 @@ import { useAmbientSound } from '@/lib/hooks/use-ambient-sound';
 import { useFocusSessions } from '@/lib/hooks/use-focus-sessions';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
 import { scheduleRevisionAlert } from '@/lib/notifications';
-import { Settings, Maximize2 } from 'lucide-react-native';
+import {
+  Settings,
+  Maximize2,
+  Trophy,
+  Zap,
+  Shield,
+  Target,
+  Check,
+  Lock,
+  Award,
+  Power,
+  FileText,
+  Volume2,
+  VolumeX,
+  Volume1,
+} from 'lucide-react-native';
+import { trackEvent } from '@/lib/posthog';
+import { FocusLiveActivity } from '@/lib/native/live-activity';
+
+export const playRewardingCompletionHaptics = async () => {
+  try {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setTimeout(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }, 100);
+    setTimeout(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+    }, 240);
+    setTimeout(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }, 380);
+  } catch {
+    // fallback
+  }
+};
+
+export const calculateFocusLevel = (xp: number) => {
+  if (xp >= 2000) return { level: 7, title: 'Grandmaster', nextXp: null, prevXp: 2000 };
+  if (xp >= 1400) return { level: 6, title: 'Focus Virtuoso', nextXp: 2000, prevXp: 1400 };
+  if (xp >= 900) return { level: 5, title: 'Master of Flow', nextXp: 1400, prevXp: 900 };
+  if (xp >= 500) return { level: 4, title: 'Deep Worker', nextXp: 900, prevXp: 500 };
+  if (xp >= 250) return { level: 3, title: 'Flow Specialist', nextXp: 500, prevXp: 250 };
+  if (xp >= 100) return { level: 2, title: 'Steady Achiever', nextXp: 250, prevXp: 100 };
+  return { level: 1, title: 'Focus Novice', nextXp: 100, prevXp: 0 };
+};
+
+const REWARD_THEMES = [
+  { id: 'default', name: 'Indigo Core', color: '#5B4FE8', requiredLevel: 1, requiredXp: 0, desc: 'Clean default indigo focus theme' },
+  { id: 'mint', name: 'Emerald Calm', color: '#00B894', requiredLevel: 2, requiredXp: 100, desc: 'Soothing mint green for calm focus' },
+  { id: 'sunset', name: 'Warm Ember', color: '#FF5E62', requiredLevel: 3, requiredXp: 250, desc: 'Energizing sunset gradient vibe' },
+  { id: 'rose_gold', name: 'Rose Elegance', color: '#FDA4AF', requiredLevel: 4, requiredXp: 500, desc: 'Sophisticated aesthetic rose-gold hue' },
+  { id: 'gold', name: 'Golden Prestige', color: '#E8A020', requiredLevel: 5, requiredXp: 900, desc: 'Elite gold theme for master focusers' },
+  { id: 'nebula', name: 'Cosmic Nebula', color: '#D946EF', requiredLevel: 6, requiredXp: 1400, desc: 'Deep ultraviolet nebula glow' },
+  { id: 'obsidian', name: 'Stealth Obsidian', color: '#475569', requiredLevel: 7, requiredXp: 2000, desc: 'Ultimate monochrome deep focus theme' },
+] as const;
 
 // Custom Components
 import { TimerCircle } from '@/components/focus/TimerCircle';
@@ -57,6 +112,59 @@ const TIMER_THEMES = [
   { id: 'obsidian', label: 'Obsidian', color: '#475569', isPremium: true },
 ] as const;
 
+const formatDate = (isoString: string) => {
+  const date = new Date(isoString);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const formatTimeRange = (startedAt: string, endedAt: string) => {
+  const start = new Date(startedAt);
+  const end = new Date(endedAt);
+  const formatTime = (d: Date) => {
+    let hours = d.getHours();
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    return `${hours}:${minutes} ${ampm}`;
+  };
+  return `${formatTime(start)} - ${formatTime(end)}`;
+};
+
+const HistoryItemCard = React.memo<{ session: any }>(({ session }) => {
+  const accentColor = getSubjectColor(session.subject);
+  return (
+    <View style={styles.historyCard}>
+      <View style={[styles.historyAccentBar, { backgroundColor: accentColor }]} />
+      <View style={styles.historyCardBody}>
+        <View style={styles.historyCardHeader}>
+          <Text style={styles.historyCardGoal} numberOfLines={1}>
+            {session.session_goal}
+          </Text>
+          <View style={styles.historyDurationBadge}>
+            <Text style={styles.historyDurationText}>
+              {session.duration_min}m
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.historyCardFooter}>
+          <View style={styles.historySubjectBadge}>
+            <Text style={[styles.historySubjectText, { color: accentColor }]}>
+              {session.subject || 'General'}
+            </Text>
+          </View>
+          <Text style={styles.historyTimeText}>
+            {formatDate(session.started_at)} • {formatTimeRange(session.started_at, session.ended_at)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+});
+
 export default function FocusScreen(): React.JSX.Element {
   const { width, height } = useWindowDimensions();
   const [isManualLandscape, setIsManualLandscape] = useState(false);
@@ -76,35 +184,30 @@ export default function FocusScreen(): React.JSX.Element {
     routineBlockId?: string;
     routineStartTime?: string;
     routineEndTime?: string;
+    standby?: string;
   }>();
   const { profile, setProfile } = useAuthStore();
   const isCse = profile?.category === 'cse_student';
 
   const topicSheetRef = useRef<BottomSheet>(null);
+  const historySheetRef = useRef<BottomSheet>(null);
+  const [historySheetOpen, setHistorySheetOpen] = useState(false);
   const [cseIncompleteTopics, setCseIncompleteTopics] = useState<any[]>([]);
   const [topicSelectionActive, setTopicSelectionActive] = useState(false);
-  
-  // ... rest of the setup
-  const formatDate = (isoString: string) => {
-    const date = new Date(isoString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
-  };
 
-  const formatTimeRange = (startedAt: string, endedAt: string) => {
-    const start = new Date(startedAt);
-    const end = new Date(endedAt);
-    const formatTime = (d: Date) => {
-      let hours = d.getHours();
-      const minutes = d.getMinutes().toString().padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12 || 12;
-      return `${hours}:${minutes} ${ampm}`;
-    };
-    return `${formatTime(start)} - ${formatTime(end)}`;
-  };
+  const dialSize = Math.min(340, Math.max(285, Math.floor(width * 0.84)));
+
+  const todayMinutes = useMemo(() => {
+    if (!history || history.length === 0) return 0;
+    const todayStr = new Date().toDateString();
+    return history
+      .filter((s) => s.status === 'completed' && s.started_at && new Date(s.started_at).toDateString() === todayStr)
+      .reduce((acc, curr) => acc + (curr.duration_min || 0), 0);
+  }, [history]);
+
+  useEffect(() => {
+    FocusLiveActivity.updateWidgetData(todayMinutes, profile?.xp_points || 0);
+  }, [todayMinutes, profile?.xp_points]);
 
   // Store bindings
   const {
@@ -140,11 +243,10 @@ export default function FocusScreen(): React.JSX.Element {
     toggleBlocker,
     resetSession,
     isStrictModeActive,
+    isStrictViolated,
     isPlantWilted,
-    selectedPlantId,
     toggleStrictMode,
-    setPlantWilted,
-    setSelectedPlant,
+    setStrictViolated,
   } = useFocusStore();
 
   // Ambient sound hook
@@ -159,7 +261,7 @@ export default function FocusScreen(): React.JSX.Element {
     setTempGoal(sessionGoal);
   }, [sessionGoal]);
 
-  // Sync parameters from dashboard
+  // Sync parameters from dashboard or StandBy deep link
   useEffect(() => {
     if (params.suggestedSubject) {
       setSubjectTag(params.suggestedSubject);
@@ -167,7 +269,10 @@ export default function FocusScreen(): React.JSX.Element {
     if (params.suggestedGoal) {
       setSessionGoal(params.suggestedGoal);
     }
-  }, [params.suggestedSubject, params.suggestedGoal, setSubjectTag, setSessionGoal]);
+    if (params.standby === 'true') {
+      setIsManualLandscape(true);
+    }
+  }, [params.suggestedSubject, params.suggestedGoal, params.standby, setSubjectTag, setSessionGoal]);
 
   // Timer loop interval
   useEffect(() => {
@@ -187,13 +292,16 @@ export default function FocusScreen(): React.JSX.Element {
     AdManager.setFocusSessionActive(isRunning);
   }, [isRunning]);
 
-  const gardenShopSheetRef = useRef<BottomSheet>(null);
+  const rewardsSheetRef = useRef<BottomSheet>(null);
   const settingsSheetRef = useRef<BottomSheet>(null);
-  const [gardenShopOpen, setGardenShopOpen] = useState(false);
+  const soundSheetRef = useRef<BottomSheet>(null);
+  const [rewardsModalOpen, setRewardsModalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [soundSheetOpen, setSoundSheetOpen] = useState(false);
+  const lastActiveSoundRef = useRef<SoundKey>('rain');
   const backgroundStartTimestampRef = useRef<number | null>(null);
 
-  // AppState listener for Strict focus mode wilting
+  // AppState listener for Strict focus mode accountability
   useEffect(() => {
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
@@ -202,8 +310,8 @@ export default function FocusScreen(): React.JSX.Element {
         if (backgroundStartTimestampRef.current) {
           const secondsOut = (Date.now() - backgroundStartTimestampRef.current) / 1000;
           if (secondsOut > 10 && isStrictModeActive && isRunning) {
-            setPlantWilted(true);
-            useUiStore.getState().showToast('Your plant wilted! Return to study.', 'error');
+            setStrictViolated(true);
+            useUiStore.getState().showToast('Strict mode interrupted! Bonus reward forfeited.', 'error');
           }
           backgroundStartTimestampRef.current = null;
         }
@@ -214,7 +322,7 @@ export default function FocusScreen(): React.JSX.Element {
     return () => {
       subscription.remove();
     };
-  }, [isStrictModeActive, isRunning, setPlantWilted]);
+  }, [isStrictModeActive, isRunning, setStrictViolated]);
 
   // Synchronize pomodoroCount in store based on actual database completions today
   useEffect(() => {
@@ -261,9 +369,24 @@ export default function FocusScreen(): React.JSX.Element {
       if (!error) {
         // Clear queue on successful upload
         await AsyncStorage.removeItem('offline_focus_sessions');
+
+        // Ensure the latest total XP and Level are pushed to Supabase profiles
+        const curProf = useAuthStore.getState().profile;
+        if (curProf) {
+          await supabase
+            .from('profiles')
+            .update({
+              xp_points: curProf.xp_points,
+              level: curProf.level,
+              focus_seeds: curProf.xp_points,
+            })
+            .eq('id', authSession.user.id);
+        }
+
         useUiStore.getState().showToast('Offline focus sessions synced successfully! 📶', 'success');
         refetchHistory();
         queryClient.invalidateQueries({ queryKey: ['stats'] });
+        queryClient.invalidateQueries({ queryKey: ['profile'] });
       }
     } catch (e) {
       if (__DEV__) console.warn('Failed to sync offline sessions:', e);
@@ -275,49 +398,50 @@ export default function FocusScreen(): React.JSX.Element {
     syncOfflineSessions();
   }, [syncOfflineSessions]);
 
-  // Handle purchases in Garden Shop
-  const handleBuyPlant = async (plantId: string, cost: number) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+  // Ensure latest profile and XP are verified on mount
+  useEffect(() => {
+    const refreshProfile = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
 
-      const currentSeeds = profile?.focus_seeds || 0;
-      const currentUnlocked = profile?.unlocked_plants || ['sprout'];
-
-      if (currentSeeds < cost) return;
-
-      const newSeeds = currentSeeds - cost;
-      const newUnlocked = [...currentUnlocked, plantId];
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          focus_seeds: newSeeds,
-          unlocked_plants: newUnlocked,
-        })
-        .eq('id', session.user.id);
-
-      if (!error && profile) {
-        setProfile({
-          ...profile,
-          focus_seeds: newSeeds,
-          unlocked_plants: newUnlocked,
-        });
-        useUiStore.getState().showToast(`Unlocked ${plantId}! 🌻`, 'success');
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        if (data && !error) {
+          const cached = useAuthStore.getState().profile;
+          const remoteXp = Number(data.xp_points || 0);
+          const cachedXp = Number(cached?.xp_points || 0);
+          if (cachedXp > remoteXp) {
+            // Local has higher XP (e.g. from session finished offline), sync to Supabase
+            await supabase
+              .from('profiles')
+              .update({ xp_points: cachedXp, level: cached?.level || 1, focus_seeds: cachedXp })
+              .eq('id', session.user.id);
+          } else {
+            setProfile(data as any);
+          }
+        }
+      } catch (e) {
+        // Safe ignore
       }
-    } catch (e) {
-      if (__DEV__) console.warn('Failed to purchase plant:', e);
-    }
-  };
+    };
+    refreshProfile();
+  }, [setProfile]);
 
-  const PLANT_LIST = [
-    { id: 'sprout', name: 'Focus Sprout', emoji: '🌱', cost: 0, preview: '🌸', desc: 'Standard seedling flower' },
-    { id: 'sunflower', name: 'Golden Sunflower', emoji: '🌻', cost: 10, preview: '🌻', desc: 'Unlocks a shiny golden sunflower' },
-    { id: 'rose', name: 'Crimson Rose', emoji: '🌹', cost: 25, preview: '🌹', desc: 'Unlocks a beautiful crimson rose' },
-    { id: 'cactus', name: 'Desert Cactus', emoji: '🌵', cost: 35, preview: '🌵', desc: 'Unlocks a robust desert cactus' },
-    { id: 'tree', name: 'Sacred Banyan', emoji: '🌳', cost: 50, preview: '🌳', desc: 'Unlocks a massive banyan tree' },
-  ] as const;
+  // Handle equipping timer theme rewards
+  const handleEquipTheme = (themeId: any, requiredXp: number) => {
+    const userXp = profile?.xp_points || 0;
+    if (userXp < requiredXp && !isPremium) {
+      useUiStore.getState().showToast(`Requires ${requiredXp} XP to unlock!`, 'info');
+      return;
+    }
+    setTheme(themeId);
+    useUiStore.getState().showToast('Theme equipped! ✨', 'success');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  };
 
   // Detect session completion transitions (focus -> break)
   useEffect(() => {
@@ -327,7 +451,8 @@ export default function FocusScreen(): React.JSX.Element {
     ) {
       // Trigger completion summary modal
       setShowSummary(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      playRewardingCompletionHaptics().catch(() => {});
+      FocusLiveActivity.endSession().catch(() => {});
     }
     prevModeRef.current = currentMode;
   }, [currentMode]);
@@ -432,28 +557,58 @@ export default function FocusScreen(): React.JSX.Element {
 
       if (error) throw error;
 
-      // Award seeds for any completed focus session
-      // Award seeds for any completed focus session
+      // Award Focus XP for completed focus session
       if (status === 'completed') {
         const earned = seedsEarned && seedsEarned > 0
           ? seedsEarned
-          : Math.max(5, 5 + Math.floor(dbDuration / 5) + (isStrictModeActive ? 5 : 0));
+          : Math.max(20, 20 + dbDuration * 2 + (isStrictModeActive && !isStrictViolated ? 25 : 0));
 
-        const currentSeeds = Number(profile?.focus_seeds || 0);
-        const newSeeds = currentSeeds + earned;
-        const { data: updatedProfData, error: seedError } = await supabase
+        const currentXp = Number(profile?.xp_points || 0);
+        const newXp = currentXp + earned;
+        const currentLevel = Number(profile?.level || 1);
+        const newLevelInfo = calculateFocusLevel(newXp);
+        const newLevel = Math.max(currentLevel, newLevelInfo.level);
+
+        // 1. Immediately update local state so rewards are saved to AsyncStorage instantly
+        const optimisticProfile = profile ? { ...profile, xp_points: newXp, level: newLevel, focus_seeds: newXp } : null;
+        if (optimisticProfile) {
+          setProfile(optimisticProfile);
+        }
+
+        const updatePayload: Record<string, any> = {
+          xp_points: newXp,
+          level: newLevel,
+          focus_seeds: newXp, // keep in sync as backwards-compatible fallback
+        };
+
+        // 2. Persist to Supabase
+        const { data: updatedProfData, error: profError } = await supabase
           .from('profiles')
-          .update({ focus_seeds: newSeeds })
+          .update(updatePayload)
           .eq('id', session.user.id)
           .select()
           .maybeSingle();
-        
-        const nextProfile = updatedProfData ? (updatedProfData as any) : (profile ? { ...profile, focus_seeds: newSeeds } : null);
-        if (nextProfile) {
-          setProfile(nextProfile);
+
+        if (updatedProfData) {
+          setProfile(updatedProfData as any);
+        } else if (profError && __DEV__) {
+          console.warn('Profiles update error:', profError);
         }
         queryClient.invalidateQueries({ queryKey: ['profile'] });
-        useUiStore.getState().showToast(`+${earned} Focus Seeds Earned! 🌱`, 'success');
+
+        if (newLevel > currentLevel) {
+          useUiStore.getState().showToast(`🎉 Level Up! You reached Level ${newLevel}: ${newLevelInfo.title}!`, 'success');
+        } else {
+          useUiStore.getState().showToast(`+${earned} Focus XP Earned! ⚡`, 'success');
+        }
+
+        trackEvent('focus_reward_earned', {
+          xp_earned: earned,
+          total_xp: newXp,
+          level: newLevel,
+          rank_title: newLevelInfo.title,
+          duration_min: dbDuration,
+        });
       }
 
       // Schedule spaced-repetition reminders
@@ -466,8 +621,9 @@ export default function FocusScreen(): React.JSX.Element {
       refetchHistory();
       queryClient.invalidateQueries({ queryKey: ['stats'] });
 
-      // Trigger success haptics
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Trigger satisfying multi-stage completion haptics
+      await playRewardingCompletionHaptics();
+      FocusLiveActivity.endSession().catch(() => {});
 
       // Check if we should mark a linked routine block as done
       if (status === 'completed' && params.routineBlockId && params.routineStartTime && params.routineEndTime) {
@@ -583,6 +739,26 @@ export default function FocusScreen(): React.JSX.Element {
 
       if (isNetworkError) {
         try {
+          // Award XP locally so user never loses their reward even when offline
+          if (status === 'completed') {
+            const earned = seedsEarned && seedsEarned > 0
+              ? seedsEarned
+              : Math.max(20, 20 + dbDuration * 2 + (isStrictModeActive && !isStrictViolated ? 25 : 0));
+            const currentXp = Number(profile?.xp_points || 0);
+            const newXp = currentXp + earned;
+            const currentLevel = Number(profile?.level || 1);
+            const newLevelInfo = calculateFocusLevel(newXp);
+            const newLevel = Math.max(currentLevel, newLevelInfo.level);
+
+            const offlineProfile = profile
+              ? { ...profile, xp_points: newXp, level: newLevel, focus_seeds: newXp }
+              : null;
+            if (offlineProfile) {
+              setProfile(offlineProfile);
+            }
+            useUiStore.getState().showToast(`+${earned} Focus XP Saved! ⚡`, 'success');
+          }
+
           const localSession = {
             session_goal: sessionGoal.trim() || 'Deep Focus Session',
             duration_min: dbDuration,
@@ -607,7 +783,7 @@ export default function FocusScreen(): React.JSX.Element {
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           Alert.alert(
             'Offline Mode 📶',
-            'Focus session saved locally! It will sync automatically when your internet connection is restored.',
+            'Focus session and rewards saved locally! They will sync with the cloud automatically when connection is restored.',
             [{ text: 'OK' }]
           );
           return;
@@ -630,18 +806,27 @@ export default function FocusScreen(): React.JSX.Element {
     setShowSummary(false);
     resetSession();
     ambient.stop().catch(() => {});
+    FocusLiveActivity.endSession().catch(() => {});
   }, [resetSession, ambient]);
 
   const handlePlayPause = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isRunning) {
       pause();
+      FocusLiveActivity.updateSession(true, secondsLeft, sessionGoal).catch(() => {});
     } else if (isPaused) {
       resume();
+      FocusLiveActivity.updateSession(false, secondsLeft, sessionGoal).catch(() => {});
     } else {
       start();
+      FocusLiveActivity.startSession({
+        sessionName: sessionGoal.trim() || 'Deep Focus',
+        durationSeconds: secondsLeft,
+        sessionGoal: sessionGoal.trim() || 'Focus Session',
+        accentHex: TIMER_THEMES.find((t) => t.id === activeTheme)?.color || '#5B4FE8',
+      }).catch(() => {});
     }
-  }, [isRunning, isPaused, pause, resume, start]);
+  }, [isRunning, isPaused, pause, resume, start, secondsLeft, sessionGoal]);
 
   const handleReset = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -673,6 +858,7 @@ export default function FocusScreen(): React.JSX.Element {
             style: 'destructive',
             onPress: () => {
               stop();
+              FocusLiveActivity.endSession().catch(() => {});
             }
           },
           {
@@ -731,6 +917,7 @@ export default function FocusScreen(): React.JSX.Element {
 
     setSound(key);
     if (key) {
+      lastActiveSoundRef.current = key;
       await ambient.play(key, soundVolume);
     } else {
       await ambient.stop();
@@ -759,9 +946,9 @@ export default function FocusScreen(): React.JSX.Element {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#17172A" translucent={false} />
+      <StatusBar barStyle="light-content" backgroundColor="#111013" translucent={false} />
 
-      {/* Background circles */}
+      {/* Ambient background glows */}
       <View style={styles.circle1} pointerEvents="none" />
       <View style={styles.circle2} pointerEvents="none" />
 
@@ -770,152 +957,122 @@ export default function FocusScreen(): React.JSX.Element {
         style={{ flex: 1 }}
       >
         <SafeAreaView style={styles.safeArea} edges={['top']}>
+          {/* Top bar with back button, centered TODAY 0 min, and action buttons */}
+          <View style={styles.topBar}>
+            <TouchableOpacity
+              style={styles.circleGlassBtn}
+              onPress={() => router.replace('/')}
+              activeOpacity={0.7}
+              accessibilityLabel="Back to Home"
+            >
+              <Text style={styles.closeIconText}>✕</Text>
+            </TouchableOpacity>
+
+            <View style={styles.topCenterContainer}>
+              <Text style={styles.topTodayText}>TODAY  {todayMinutes} min</Text>
+            </View>
+
+            <View style={styles.topRightActions}>
+              <TouchableOpacity
+                style={styles.rewardsBalanceCleanChip}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setRewardsModalOpen(true);
+                  rewardsSheetRef.current?.expand();
+                }}
+                activeOpacity={0.7}
+              >
+                <Trophy size={11} color="#E8A020" />
+                <Text style={styles.rewardsBalanceCleanText}>
+                  {profile?.xp_points || 0} XP
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.circleGlassBtn}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setIsManualLandscape(true);
+                }}
+                activeOpacity={0.7}
+                accessibilityLabel="StandBy Desk Clock"
+              >
+                <Maximize2 size={15} color="rgba(255, 255, 255, 0.85)" />
+              </TouchableOpacity>
+
+              {/* Ambient Sound & Music button (Accessible anytime, running or idle) */}
+              <TouchableOpacity
+                style={[styles.circleGlassBtn, activeSound ? styles.circleGlassBtnActiveSound : null]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setSoundSheetOpen(true);
+                  soundSheetRef.current?.expand();
+                }}
+                activeOpacity={0.7}
+                accessibilityLabel="Ambient Sound & Music"
+              >
+                {activeSound ? (
+                  <Volume2 size={15} color="#5B4FE8" />
+                ) : (
+                  <VolumeX size={15} color="rgba(255, 255, 255, 0.7)" />
+                )}
+              </TouchableOpacity>
+
+              {!isRunning && (
+                <TouchableOpacity
+                  style={styles.circleGlassBtn}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    setSettingsOpen(true);
+                    settingsSheetRef.current?.expand();
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Timer Settings"
+                >
+                  <Settings size={15} color="rgba(255, 255, 255, 0.7)" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Routine Link Banner if linked from schedule */}
+          {params.routineBlockId && (
+            <View style={styles.routineLinkBanner}>
+              <Text style={styles.routineLinkText}>
+                Linked Routine: {params.suggestedGoal || 'Study Routine'}
+              </Text>
+              <Text style={styles.routineLinkSubtext}>
+                Requires 25m+ focus between {params.routineStartTime} and {params.routineEndTime} to mark done.
+              </Text>
+            </View>
+          )}
+
           <ScrollView
             scrollEnabled={scrollEnabled}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContainer}
           >
-            {/* Top bar (Section A) */}
-            <View style={styles.topBar}>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => router.replace('/')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.closeText}>✕</Text>
-              </TouchableOpacity>
+            {/* Header: What are you focusing on? */}
+            <Text style={styles.mainHeading}>What are you focusing on?</Text>
 
-              <Text style={styles.modeHeading}>
-                {currentMode === 'focus' ? 'Deep Focus' : 'Break Time'}
-              </Text>
-
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <TouchableOpacity
-                  style={styles.seedsBalanceCleanChip}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    setGardenShopOpen(true);
-                    gardenShopSheetRef.current?.expand();
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.seedsBalanceCleanText}>✨ {profile?.focus_seeds || 0} Seeds</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.settingsHeaderBtn}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    setIsManualLandscape(true);
-                  }}
-                  activeOpacity={0.7}
-                  accessibilityLabel="StandBy Desk Clock"
-                >
-                  <Maximize2 size={16} color="rgba(255, 255, 255, 0.9)" />
-                </TouchableOpacity>
-
-                {!isRunning && (
-                  <TouchableOpacity
-                    style={styles.settingsHeaderBtn}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                      setSettingsOpen(true);
-                      settingsSheetRef.current?.expand();
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Settings size={16} color="rgba(255, 255, 255, 0.7)" />
-                  </TouchableOpacity>
-                )}
-              </View>
+            {/* Frosted Liquid Glass Pill Capsule Input */}
+            <View style={styles.sessionPillCapsule}>
+              <TextInput
+                style={styles.sessionPillInput}
+                value={sessionGoal}
+                onChangeText={setSessionGoal}
+                placeholder="Name this session"
+                placeholderTextColor="rgba(255, 255, 255, 0.45)"
+                maxLength={60}
+                returnKeyType="done"
+                editable={!isRunning}
+              />
             </View>
 
-            {params.routineBlockId && (
-              <View style={styles.routineLinkBanner}>
-                <Text style={styles.routineLinkText}>
-                  Linked Routine: {params.suggestedGoal || 'Study Routine'}
-                </Text>
-                <Text style={styles.routineLinkSubtext}>
-                  Requires 25m+ focus between {params.routineStartTime} and {params.routineEndTime} to mark done.
-                </Text>
-              </View>
-            )}
-
-            {/* Session goal (Section B) */}
-            <View style={styles.goalCleanContainer}>
-              {isEditingGoal ? (
-                <TextInput
-                  style={styles.goalCleanInput}
-                  value={tempGoal}
-                  onChangeText={setTempGoal}
-                  placeholder="What is your focus goal today?"
-                  placeholderTextColor="rgba(255,255,255,0.35)"
-                  onSubmitEditing={handleSaveGoal}
-                  onBlur={handleSaveGoal}
-                  autoFocus
-                  maxLength={80}
-                />
-              ) : (
-                <TouchableOpacity
-                  onPress={() => setIsEditingGoal(true)}
-                  activeOpacity={0.8}
-                  style={styles.goalTouchArea}
-                >
-                  <Text style={styles.goalCleanText} numberOfLines={1}>
-                    {sessionGoal.trim() || 'What is your focus goal today? 🎯'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Preset Selector (Section C) */}
-            <View style={styles.presetsRow}>
-              {(['25/5', '50/10', '90/20', 'custom'] as FocusPreset[]).map((preset) => {
-                const active = selectedPreset === preset;
-                let displayLabel: string = preset;
-                if (preset === 'custom') displayLabel = 'Custom';
-
-                return (
-                  <TouchableOpacity
-                    key={preset}
-                    style={[styles.presetChip, active && styles.presetChipActive]}
-                    onPress={() => setPreset(preset)}
-                    disabled={isRunning}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.presetText, active && styles.presetTextActive]}>
-                      {displayLabel}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Stepper adjustment for Custom Preset */}
-            {selectedPreset === 'custom' && !isRunning && (
-              <View style={styles.stepperContainer}>
-                <TouchableOpacity
-                  onPress={() => setCustomMinutes(Math.max(1, customMinutes - 5))}
-                  style={styles.stepperButton}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.stepperButtonText}>-</Text>
-                </TouchableOpacity>
-                <Text style={styles.stepperValueText}>{customMinutes} min</Text>
-                <TouchableOpacity
-                  onPress={() => setCustomMinutes(customMinutes + 5)}
-                  style={styles.stepperButton}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.stepperButtonText}>+</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Timer Ring (Section D) */}
-            <View style={styles.timerWrapper}>
+            {/* Retro Chronometer Dial */}
+            <View style={styles.dialContainer}>
               <TimerCircle
-                size={190}
+                size={dialSize}
                 secondsLeft={secondsLeft}
                 totalSeconds={totalSeconds}
                 isRunning={isRunning}
@@ -923,142 +1080,214 @@ export default function FocusScreen(): React.JSX.Element {
               />
             </View>
 
-            {/* Controls Row (Section E) */}
-            <View style={styles.controlsRow}>
-              {/* Left Reset Button */}
-              <TouchableOpacity
-                style={styles.controlCircleSmall}
-                onPress={handleReset}
-                activeOpacity={0.8}
-                accessibilityLabel="Reset timer"
-                accessibilityRole="button"
-                accessibilityHint="Resets the focus timer duration"
-              >
-                <Text style={styles.controlIconSmall}>↺</Text>
-              </TouchableOpacity>
+            {/* When Running or Paused: Active Session Music / Sound HUD */}
+            {(isRunning || isPaused) && (
+              <View style={styles.activeSessionControlRow}>
+                {/* Sound / Music Capsule: Tap to open soundscape sheet and change sound */}
+                <TouchableOpacity
+                  style={[styles.activeSoundPill, activeSound ? styles.activeSoundPillPlaying : null]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    setSoundSheetOpen(true);
+                    soundSheetRef.current?.expand();
+                  }}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Change ambient music"
+                >
+                  {activeSound ? (
+                    <Volume2 size={14} color="#5B4FE8" />
+                  ) : (
+                    <VolumeX size={14} color="rgba(255, 255, 255, 0.5)" />
+                  )}
+                  <Text style={[styles.activeSoundText, activeSound ? styles.activeSoundTextPlaying : null]}>
+                    {activeSound ? activeSound.replace('_', ' ').toUpperCase() : 'SOUND OFF'}
+                  </Text>
+                  <View style={styles.activeSoundChangeTag}>
+                    <Text style={styles.activeSoundChangeTagText}>CHANGE</Text>
+                  </View>
+                </TouchableOpacity>
 
-              {/* Center Play/Pause Button */}
+                {/* Instant Mute / Unmute Toggle Button */}
+                <TouchableOpacity
+                  style={[styles.activeMuteToggleBtn, activeSound ? styles.activeMuteToggleBtnPlaying : null]}
+                  onPress={async () => {
+                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    if (activeSound) {
+                      handleSoundSelect(null);
+                    } else {
+                      handleSoundSelect(lastActiveSoundRef.current || 'rain');
+                    }
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityLabel={activeSound ? 'Mute audio' : 'Play ambient audio'}
+                >
+                  {activeSound ? (
+                    <VolumeX size={15} color="#FDA4AF" />
+                  ) : (
+                    <Volume2 size={15} color="#5B4FE8" />
+                  )}
+                </TouchableOpacity>
+
+                {/* Subject Tag Pill if present */}
+                {subjectTag && (
+                  <View style={styles.activeSubjectPill}>
+                    <Text style={styles.activeSubjectText} numberOfLines={1}>
+                      🏷  {subjectTag}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Duration Presets & Secondary options (when idle) */}
+            {!isRunning && !isPaused && (
+              <View style={styles.presetsSection}>
+                <View style={styles.presetsRow}>
+                  {(['25/5', '50/10', '90/20', 'custom'] as FocusPreset[]).map((preset) => {
+                    const active = selectedPreset === preset;
+                    let displayLabel = preset === 'custom' ? 'Custom' : `${preset.split('/')[0]} min`;
+                    return (
+                      <TouchableOpacity
+                        key={preset}
+                        style={[styles.presetPill, active && styles.presetPillActive]}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                          setPreset(preset);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.presetPillText, active && styles.presetPillTextActive]}>
+                          {displayLabel}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Custom Stepper */}
+                {selectedPreset === 'custom' && (
+                  <View style={styles.stepperContainer}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                        setCustomMinutes(Math.max(1, customMinutes - 5));
+                      }}
+                      style={styles.stepperButton}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.stepperButtonText}>-</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.stepperValueText}>{customMinutes} min</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                        setCustomMinutes(customMinutes + 5);
+                      }}
+                      style={styles.stepperButton}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.stepperButtonText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Secondary Pill row: Subject & Ambient Sound */}
+                <View style={styles.secondaryPillsRow}>
+                  <SubjectPicker
+                    selectedSubject={subjectTag}
+                    onSelect={setSubjectTag}
+                    isDark
+                    customTrigger={(open) => (
+                      <TouchableOpacity
+                        style={styles.optionGlassPill}
+                        onPress={async () => {
+                          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          open();
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.optionGlassPillText} numberOfLines={1}>
+                          🏷  {subjectTag || 'General'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  />
+
+                  {/* Sound Trigger Pill (Opens Soundscape sheet) */}
+                  <TouchableOpacity
+                    style={[styles.optionGlassPill, activeSound ? styles.optionGlassPillActive : null]}
+                    onPress={async () => {
+                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setSoundSheetOpen(true);
+                      soundSheetRef.current?.expand();
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.optionGlassPillText, activeSound ? styles.optionGlassPillTextActive : null]}>
+                      🎧  {activeSound ? activeSound.replace('_', ' ') : 'Sound off'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* ONE OBVIOUS PRIMARY ACTION BUTTON */}
+            <View style={styles.primaryActionWrapper}>
               <TouchableOpacity
-                style={styles.controlCircleMain}
+                style={styles.prominentLiquidGlassBtn}
                 onPress={handlePlayPause}
-                activeOpacity={0.8}
-                accessibilityLabel={isRunning ? 'Pause timer' : 'Start timer'}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isRunning }}
-                accessibilityHint="Start or pause the focus session"
+                activeOpacity={0.85}
+                accessibilityLabel={
+                  isRunning ? 'Pause Focus' : isPaused ? 'Resume Focus' : 'Start Focus'
+                }
               >
-                <Text style={styles.controlIconMain}>
-                  {isRunning ? '⏸' : '▶'}
+                <Text style={styles.prominentActionText}>
+                  {isRunning ? '⏸  Pause Focus' : isPaused ? '▶  Resume Focus' : '▶  Start Focus'}
                 </Text>
               </TouchableOpacity>
 
-              {/* Right Skip Break OR Subject Selector */}
-              {currentMode !== 'focus' ? (
-                <TouchableOpacity
-                  style={styles.controlCircleSmall}
-                  onPress={handleSkipBreak}
-                  activeOpacity={0.8}
-                  accessibilityLabel="Skip break"
-                  accessibilityRole="button"
-                  accessibilityHint="Skips the current break interval and returns to focus"
-                >
-                  <Text style={styles.controlIconSmall}>⏭</Text>
-                </TouchableOpacity>
-              ) : (
-                <SubjectPicker
-                  selectedSubject={subjectTag}
-                  onSelect={setSubjectTag}
-                  isDark
-                  customTrigger={(open) => (
-                    <TouchableOpacity
-                      style={[styles.subjectPill, styles.controlCircleSmall]}
-                      onPress={async () => {
-                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        open();
-                      }}
-                      activeOpacity={0.8}
-                      accessibilityLabel={`Subject: ${subjectTag || 'General'}`}
-                      accessibilityRole="button"
-                      accessibilityHint="Double tap to open subject picker"
-                    >
-                      <Text style={styles.subjectTextChip} numberOfLines={1}>
-                        {subjectTag || 'General'}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                />
-              )}
-            </View>
-
-            {/* Sound Selector (Section F) - BELOW Controls */}
-            <View style={styles.pickerSection}>
-              <SoundPicker
-                activeSound={activeSound}
-                onSelect={handleSoundSelect}
-                volume={soundVolume}
-                onVolumeChange={handleVolumeChange}
-                onScrollStateChange={setScrollEnabled}
-                isPremium={isPremium}
-                onPremiumTrigger={() => router.push('/paywall')}
-              />
-            </View>
-
-            {/* App Blocker (Section G) */}
-            <View style={styles.blockerSection}>
-              <BlockerToggle
-                isActive={isBlockerActive}
-                onToggle={handleBlockerToggle}
-                blockedCount={blockedAppsCount}
-              />
-            </View>
-
-            {/* History Section (Section H) */}
-            <View style={styles.historyContainer}>
-              <Text style={styles.historyHeading}>Focus History</Text>
-              {isLoadingHistory ? (
-                <ActivityIndicator color="#5B4FE8" style={{ marginVertical: 24 }} />
-              ) : history.length === 0 ? (
-                <View style={styles.emptyHistoryCard}>
-                  <Text style={styles.emptyHistoryText}>No focus sessions logged yet.</Text>
+              {/* Running/Paused secondary actions */}
+              {(isRunning || isPaused) && (
+                <View style={styles.activeSecondaryRow}>
+                  <TouchableOpacity
+                    style={styles.endSessionBtn}
+                    onPress={handleReset}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.endSessionText}>⏹  End Session</Text>
+                  </TouchableOpacity>
                 </View>
-              ) : (
-                history.map((session) => {
-                  const accentColor = getSubjectColor(session.subject);
-                  return (
-                    <View key={session.id} style={styles.historyCard}>
-                      {/* Left Accent Bar */}
-                      <View style={[styles.historyAccentBar, { backgroundColor: accentColor }]} />
-                      
-                      {/* Card Content */}
-                      <View style={styles.historyCardBody}>
-                        <View style={styles.historyCardHeader}>
-                          <Text style={styles.historyCardGoal} numberOfLines={1}>
-                            {session.session_goal}
-                          </Text>
-                          <View style={styles.historyDurationBadge}>
-                            <Text style={styles.historyDurationText}>
-                              {session.duration_min}m
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View style={styles.historyCardFooter}>
-                          <View style={styles.historySubjectBadge}>
-                            <Text style={[styles.historySubjectText, { color: accentColor }]}>
-                              {session.subject || 'General'}
-                            </Text>
-                          </View>
-                          <Text style={styles.historyTimeText}>
-                            {formatDate(session.started_at)} • {formatTimeRange(session.started_at, session.ended_at)}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                })
               )}
             </View>
           </ScrollView>
+
+          {/* Floating Bottom Segmented Pill Bar: [ Focus | History ] */}
+          <View style={styles.bottomFloatingNav}>
+            <View style={styles.bottomNavCapsule}>
+              {/* Focus Tab (Active) */}
+              <TouchableOpacity
+                style={styles.bottomNavSegmentActive}
+                activeOpacity={0.9}
+              >
+                <Power size={16} color="#5B4FE8" strokeWidth={2.6} />
+                <Text style={styles.bottomNavTextActive}>Focus</Text>
+              </TouchableOpacity>
+
+              {/* History Tab */}
+              <TouchableOpacity
+                style={styles.bottomNavSegmentInactive}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setHistorySheetOpen(true);
+                  historySheetRef.current?.expand();
+                }}
+                activeOpacity={0.7}
+              >
+                <FileText size={16} color="rgba(255, 255, 255, 0.7)" strokeWidth={2} />
+                <Text style={styles.bottomNavTextInactive}>History</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </SafeAreaView>
       </KeyboardAvoidingView>
 
@@ -1072,75 +1301,141 @@ export default function FocusScreen(): React.JSX.Element {
         }
         subject={subjectTag}
         pomodoroCount={pomodoroCount}
-        onSave={(mood, note, accuracy, seeds) => handleSaveSession(mood, note, 'completed', accuracy, seeds)}
+        onSave={(mood, note, accuracy, xp) => handleSaveSession(mood, note, 'completed', accuracy, xp)}
         onDiscard={handleDiscardSession}
         isStrictMode={isStrictModeActive}
-        isPlantWilted={isPlantWilted}
-        selectedPlantId={selectedPlantId}
+        isStrictViolated={isStrictViolated}
       />
 
-      {/* GARDEN SHOP SHEET */}
+      {/* FOCUS REWARDS & ACHIEVEMENTS SHEET */}
       <BottomSheet
-        ref={gardenShopSheetRef}
+        ref={rewardsSheetRef}
         index={-1}
-        snapPoints={['65%']}
+        snapPoints={['75%', '92%']}
         enablePanDownToClose={true}
         backdropComponent={renderTopicBackdrop}
+        backgroundStyle={styles.bottomSheetDarkBackground}
+        handleIndicatorStyle={styles.bottomSheetDarkIndicator}
         onChange={(idx) => {
-          if (idx === -1) setGardenShopOpen(false);
+          setRewardsModalOpen(idx !== -1);
         }}
       >
-        <BottomSheetView style={styles.shopContentContainer}>
-          <Text style={styles.shopTitle}>Garden Shop 🌻</Text>
-          <Text style={styles.shopSubtitle}>Spend earned focus seeds to unlock new plant types for strict mode.</Text>
-
-          <ScrollView style={styles.shopList} showsVerticalScrollIndicator={false}>
-            {PLANT_LIST.map((plant) => {
-              const unlocked = (profile?.unlocked_plants || ['sprout']).includes(plant.id);
-              const canAfford = (profile?.focus_seeds || 0) >= plant.cost;
+        <BottomSheetScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.rewardsContentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.rewardsTitle}>Focus Rewards 🏆</Text>
+          <Text style={styles.rewardsSubtitle}>Complete focus sessions to earn XP, level up, and unlock sleek timer themes.</Text>
+            {/* Level & XP Progress Card */}
+            {(() => {
+              const currentXp = profile?.xp_points || 0;
+              const levelInfo = calculateFocusLevel(currentXp);
+              const prev = levelInfo.prevXp;
+              const next = levelInfo.nextXp;
+              const progressRatio = next
+                ? Math.min(1, Math.max(0, (currentXp - prev) / (next - prev)))
+                : 1;
 
               return (
-                <View key={plant.id} style={styles.shopItem}>
-                  <Text style={styles.shopItemEmoji}>{plant.emoji}</Text>
-                  <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={styles.shopItemName}>{plant.name}</Text>
-                    <Text style={styles.shopItemDesc}>{plant.desc}</Text>
+                <View style={styles.levelProgressCard}>
+                  <View style={styles.levelHeaderRow}>
+                    <View style={styles.levelBadge}>
+                      <Text style={styles.levelBadgeText}>LEVEL {levelInfo.level}</Text>
+                    </View>
+                    <Text style={styles.levelTitleText}>{levelInfo.title}</Text>
                   </View>
-                  
-                  {unlocked ? (
-                    selectedPlantId === plant.id ? (
-                      <View style={[styles.shopUnlockedBadge, { backgroundColor: '#5B4FE815', borderColor: '#5B4FE8' }]}>
-                        <Text style={[styles.shopUnlockedText, { color: '#5B4FE8' }]}>Equipped 🌱</Text>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={[styles.shopUnlockBtn, { backgroundColor: '#5B4FE8' }]}
-                        onPress={() => {
-                          setSelectedPlant(plant.id);
-                          useUiStore.getState().showToast(`Equipped ${plant.name}! 🌱`, 'success');
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                        }}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.shopUnlockBtnText}>Equip</Text>
-                      </TouchableOpacity>
-                    )
-                  ) : (
+
+                  <View style={styles.xpProgressTrack}>
+                    <View style={[styles.xpProgressFill, { width: `${Math.round(progressRatio * 100)}%` }]} />
+                  </View>
+
+                  <View style={styles.xpInfoRow}>
+                    <Text style={styles.xpCurrentText}>{currentXp} XP Total</Text>
+                    <Text style={styles.xpNextText}>
+                      {next ? `${next - currentXp} XP to Level ${levelInfo.level + 1}` : 'Max Rank Achieved!'}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* Section: Unlockable Themes */}
+            <Text style={styles.rewardsSectionHeading}>TIMER THEMES</Text>
+            {REWARD_THEMES.map((t) => {
+              const currentXp = profile?.xp_points || 0;
+              const isUnlocked = isPremium || currentXp >= t.requiredXp;
+              const isEquipped = activeTheme === t.id;
+
+              return (
+                <View key={t.id} style={styles.rewardThemeItem}>
+                  <View style={[styles.rewardThemeColorDot, { backgroundColor: t.color }]} />
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.rewardThemeName}>{t.name}</Text>
+                    <Text style={styles.rewardThemeDesc}>
+                      {isUnlocked ? t.desc : `Unlocks at ${t.requiredXp} XP (Level ${t.requiredLevel})`}
+                    </Text>
+                  </View>
+
+                  {isEquipped ? (
+                    <View style={styles.equippedBadge}>
+                      <Check size={12} color="#5B4FE8" />
+                      <Text style={styles.equippedBadgeText}>Active</Text>
+                    </View>
+                  ) : isUnlocked ? (
                     <TouchableOpacity
-                      style={[styles.shopUnlockBtn, !canAfford && styles.shopUnlockBtnDisabled]}
-                      disabled={!canAfford}
-                      onPress={() => handleBuyPlant(plant.id, plant.cost)}
+                      style={styles.equipThemeBtn}
+                      onPress={() => handleEquipTheme(t.id, t.requiredXp)}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.shopUnlockBtnText}>🌱 {plant.cost}</Text>
+                      <Text style={styles.equipThemeBtnText}>Equip</Text>
                     </TouchableOpacity>
+                  ) : (
+                    <View style={styles.lockedThemeBadge}>
+                      <Lock size={12} color="#9B9BAF" />
+                      <Text style={styles.lockedThemeText}>{t.requiredXp} XP</Text>
+                    </View>
                   )}
                 </View>
               );
             })}
-          </ScrollView>
-        </BottomSheetView>
-      </BottomSheet>
+
+            {/* Section: Focus Milestones */}
+            <Text style={styles.rewardsSectionHeading}>XP REWARD BREAKDOWN</Text>
+            <View style={styles.milestoneItem}>
+              <View style={styles.milestoneIconWrap}>
+                <Zap size={16} color="#10B981" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.milestoneTitle}>Focus Session Completion</Text>
+                <Text style={styles.milestoneDesc}>Base +20 XP + 2 XP for each focused minute</Text>
+              </View>
+              <Text style={styles.milestoneXpTag}>+20+ XP</Text>
+            </View>
+
+            <View style={styles.milestoneItem}>
+              <View style={styles.milestoneIconWrap}>
+                <Shield size={16} color="#E8A020" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.milestoneTitle}>Strict Focus Mode Bonus</Text>
+                <Text style={styles.milestoneDesc}>Complete without leaving the app</Text>
+              </View>
+              <Text style={styles.milestoneXpTag}>+25 XP</Text>
+            </View>
+
+            <View style={styles.milestoneItem}>
+              <View style={styles.milestoneIconWrap}>
+                <Target size={16} color="#5B4FE8" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.milestoneTitle}>Deep Flow State</Text>
+                <Text style={styles.milestoneDesc}>Reflect as Fully Focused in session summary</Text>
+              </View>
+              <Text style={styles.milestoneXpTag}>+15 XP</Text>
+            </View>
+          </BottomSheetScrollView>
+        </BottomSheet>
 
       {/* TIMER SETTINGS SHEET */}
       <BottomSheet
@@ -1160,48 +1455,21 @@ export default function FocusScreen(): React.JSX.Element {
           <View style={styles.settingsRow}>
             <View style={{ flex: 1, marginRight: 12 }}>
               <Text style={styles.settingsLabel}>Strict Focus Mode</Text>
-              <Text style={styles.settingsDesc}>Grow a virtual plant. Leaving the app wilts it.</Text>
+              <Text style={styles.settingsDesc}>High-accountability mode. Leaving the app forfeits bonus rewards.</Text>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              {isStrictModeActive && (
-                <TouchableOpacity
-                  style={styles.selectPlantCleanBtn}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    const unlocked = profile?.unlocked_plants || ['sprout'];
-                    const choices = PLANT_LIST.filter(p => unlocked.includes(p.id));
-                    
-                    Alert.alert(
-                      'Select Sprout',
-                      'Choose a seed to grow in strict mode:',
-                      choices.map(c => ({
-                        text: `${c.emoji} ${c.name}`,
-                        onPress: () => setSelectedPlant(c.id),
-                      })),
-                      { cancelable: true }
-                    );
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.selectPlantCleanText}>
-                    {PLANT_LIST.find(p => p.id === selectedPlantId)?.emoji || '🌱'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              <Switch
-                value={isStrictModeActive}
-                onValueChange={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  if (!isPremium) {
-                    router.push('/paywall');
-                  } else {
-                    toggleStrictMode();
-                  }
-                }}
-                trackColor={{ false: '#E8E7E3', true: '#EAE8FD' }}
-                thumbColor={isStrictModeActive ? '#5B4FE8' : '#F4F3F0'}
-              />
-            </View>
+            <Switch
+              value={isStrictModeActive}
+              onValueChange={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                if (!isPremium) {
+                  router.push('/paywall');
+                } else {
+                  toggleStrictMode();
+                }
+              }}
+              trackColor={{ false: '#E8E7E3', true: '#EAE8FD' }}
+              thumbColor={isStrictModeActive ? '#5B4FE8' : '#F4F3F0'}
+            />
           </View>
 
           {/* Theme Selector inside Settings */}
@@ -1300,6 +1568,8 @@ export default function FocusScreen(): React.JSX.Element {
         subjectTag={subjectTag}
         activeThemeColor={TIMER_THEMES.find((t) => t.id === activeTheme)?.color || '#5B4FE8'}
         activeSound={activeSound}
+        currentMode={currentMode}
+        todayMinutes={todayMinutes}
         onPlayPause={() => {
           if (isRunning && !isPaused) {
             pause();
@@ -1312,16 +1582,95 @@ export default function FocusScreen(): React.JSX.Element {
         onStop={() => stop()}
         onToggleSound={() => {
           if (activeSound) {
-            setSound(null);
-            ambient.stop();
+            handleSoundSelect(null);
           } else {
-            const nextSound: SoundKey = 'rain';
-            setSound(nextSound);
-            ambient.play(nextSound, soundVolume);
+            handleSoundSelect(lastActiveSoundRef.current || 'rain');
           }
         }}
         onClose={() => setIsManualLandscape(false)}
       />
+
+      {/* FOCUS HISTORY BOTTOM SHEET */}
+      <BottomSheet
+        ref={historySheetRef}
+        index={-1}
+        snapPoints={['75%', '92%']}
+        enablePanDownToClose={true}
+        backdropComponent={renderTopicBackdrop}
+        backgroundStyle={styles.bottomSheetDarkBackground}
+        handleIndicatorStyle={styles.bottomSheetDarkIndicator}
+        onChange={(idx) => {
+          setHistorySheetOpen(idx !== -1);
+        }}
+      >
+        <BottomSheetScrollView
+          style={styles.historySheetScrollView}
+          contentContainerStyle={styles.historySheetContent}
+          showsVerticalScrollIndicator={true}
+        >
+          <Text style={styles.historySheetTitle}>Focus History</Text>
+          <Text style={styles.historySheetSubtitle}>
+            Today: {todayMinutes}m focused across {history.filter(s => s.status === 'completed').length} completed sessions.
+          </Text>
+
+          {isLoadingHistory ? (
+            <ActivityIndicator color="#5B4FE8" style={{ marginVertical: 32 }} />
+          ) : history.length === 0 ? (
+            <View style={styles.emptyHistoryCard}>
+              <Text style={styles.emptyHistoryText}>No focus sessions logged yet.</Text>
+            </View>
+          ) : (
+            history.map((session) => (
+              <HistoryItemCard key={session.id} session={session} />
+            ))
+          )}
+        </BottomSheetScrollView>
+      </BottomSheet>
+
+      {/* AMBIENT SOUNDSCAPES & MUSIC BOTTOM SHEET */}
+      <BottomSheet
+        ref={soundSheetRef}
+        index={-1}
+        snapPoints={['55%']}
+        enablePanDownToClose={true}
+        backdropComponent={renderTopicBackdrop}
+        backgroundStyle={styles.bottomSheetDarkBackground}
+        handleIndicatorStyle={styles.bottomSheetDarkIndicator}
+        onChange={(idx) => {
+          setSoundSheetOpen(idx !== -1);
+        }}
+      >
+        <BottomSheetView style={styles.soundSheetContent}>
+          <Text style={styles.soundSheetTitle}>Ambient Soundscapes 🎧</Text>
+          <Text style={styles.soundSheetSubtitle}>
+            Choose soothing background soundscapes to deepen your focus and block distractions.
+          </Text>
+
+          <SoundPicker
+            activeSound={activeSound}
+            onSelect={(sound) => handleSoundSelect(sound)}
+            volume={soundVolume}
+            onVolumeChange={handleVolumeChange}
+            isPremium={isPremium}
+            onPremiumTrigger={() => router.push('/paywall')}
+          />
+
+          {/* Quick Mute Action Button */}
+          <TouchableOpacity
+            style={[styles.muteAllButton, !activeSound && styles.muteAllButtonActive]}
+            onPress={async () => {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              handleSoundSelect(null);
+            }}
+            activeOpacity={0.7}
+          >
+            <VolumeX size={15} color={!activeSound ? '#5B4FE8' : 'rgba(255, 255, 255, 0.5)'} />
+            <Text style={[styles.muteAllText, !activeSound && styles.muteAllTextActive]}>
+              {!activeSound ? 'Audio Muted' : 'Turn Off Sound'}
+            </Text>
+          </TouchableOpacity>
+        </BottomSheetView>
+      </BottomSheet>
     </View>
   );
 }
@@ -1329,140 +1678,308 @@ export default function FocusScreen(): React.JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#17172A',
+    backgroundColor: '#111013',
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: 24,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 16,
-  },
-  headerTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 32,
-    color: '#FFFFFF',
+    paddingHorizontal: 20,
   },
   scrollContainer: {
-    paddingBottom: 40,
+    paddingBottom: 90,
+    alignItems: 'center',
   },
   circle1: {
     position: 'absolute',
-    top: -80,
-    left: -80,
+    top: -90,
+    left: -70,
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: '#5B4FE8',
-    opacity: 0.07,
+    backgroundColor: 'rgba(91, 79, 232, 0.08)',
   },
   circle2: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 80,
     right: -60,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: '#8B6FE8',
-    opacity: 0.05,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(91, 79, 232, 0.05)',
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 52,
+    height: 48,
+    marginBottom: 8,
   },
-  closeButton: {
-    width: 40,
-    height: 40,
+  circleGlassBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  circleGlassBtnActiveSound: {
+    backgroundColor: 'rgba(91, 79, 232, 0.18)',
+    borderColor: 'rgba(91, 79, 232, 0.5)',
+  },
+  closeIconText: {
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontWeight: '600',
+  },
+  topCenterContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topTodayText: {
+    fontFamily: 'DMMono',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 2.2,
+    color: 'rgba(255, 255, 255, 0.75)',
+    textTransform: 'uppercase',
+  },
+  topRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mainHeading: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 32,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginTop: 12,
+    marginBottom: 14,
+    letterSpacing: -0.4,
+  },
+  sessionPillCapsule: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    borderWidth: 1.2,
+    borderRadius: 9999,
+    height: 50,
+    paddingHorizontal: 20,
+    width: '88%',
+    maxWidth: 380,
+    alignSelf: 'center',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
-  closeText: {
-    fontFamily: 'DMSans',
-    fontSize: 20,
-    color: 'rgba(255, 255, 255, 0.5)',
-  },
-  modeHeading: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '600',
-  },
-  badgeContainer: {
-    backgroundColor: 'rgba(91, 79, 232, 0.3)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  badgeText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    color: '#A89EF8',
-    fontWeight: '600',
-  },
-  goalContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginVertical: 12,
-  },
-  goalHeaderLabel: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 10,
-    color: '#9B9BAF',
-    letterSpacing: 1.2,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  goalText: {
-    fontFamily: 'DMSans',
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.7)',
-  },
-  goalInput: {
-    fontFamily: 'DMSans',
-    fontSize: 13,
+  sessionPillInput: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 18,
     color: '#FFFFFF',
-    padding: 0,
-    height: 18,
+    textAlign: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  dialContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 6,
+  },
+  presetsSection: {
+    alignItems: 'center',
+    marginVertical: 8,
+    width: '100%',
   },
   presetsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
-    marginVertical: 8,
   },
-  presetChip: {
+  presetPill: {
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
-  presetChipActive: {
-    backgroundColor: 'rgba(91, 79, 232, 0.4)',
+  presetPillActive: {
+    backgroundColor: 'rgba(91, 79, 232, 0.20)',
+    borderColor: '#5B4FE8',
   },
-  presetText: {
+  presetPillText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.55)',
+  },
+  presetPillTextActive: {
+    color: '#A89EF8',
+    fontWeight: '700',
+  },
+  secondaryPillsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionGlassPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  optionGlassPillActive: {
+    backgroundColor: 'rgba(91, 79, 232, 0.20)',
+    borderColor: '#5B4FE8',
+  },
+  optionGlassPillText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  optionGlassPillTextActive: {
+    color: '#A89EF8',
+    fontWeight: '700',
+  },
+  primaryActionWrapper: {
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 12,
+    width: '100%',
+  },
+  prominentLiquidGlassBtn: {
+    width: '88%',
+    maxWidth: 380,
+    height: 60,
+    borderRadius: 9999,
+    backgroundColor: 'rgba(255, 255, 255, 0.26)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.42)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  prominentActionText: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 22,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  activeSecondaryRow: {
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  endSessionBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(232, 88, 88, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(232, 88, 88, 0.3)',
+  },
+  endSessionText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#FF7070',
+    fontWeight: '600',
+  },
+  bottomFloatingNav: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  bottomNavCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.10)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    padding: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  bottomNavSegmentActive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#1F1D23',
+    height: 46,
+    borderRadius: 23,
+    paddingHorizontal: 20,
+  },
+  bottomNavTextActive: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12,
+    color: '#5B4FE8',
+    fontWeight: '800',
+  },
+  bottomNavSegmentInactive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 46,
+    borderRadius: 23,
+    paddingHorizontal: 20,
+  },
+  bottomNavTextInactive: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontWeight: '600',
+  },
+  bottomSheetDarkBackground: {
+    backgroundColor: '#16151A',
+  },
+  bottomSheetDarkIndicator: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  historySheetScrollView: {
+    flex: 1,
+  },
+  historySheetContent: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 60,
+  },
+  historySheetTitle: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 26,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  historySheetSubtitle: {
     fontFamily: 'DMSans',
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.3)',
-  },
-  presetTextActive: {
-    color: '#A89EF8',
-    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.55)',
+    textAlign: 'center',
+    marginBottom: 16,
   },
   stepperContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 12,
+    marginTop: 10,
     gap: 16,
   },
   stepperButton: {
@@ -1483,69 +2000,6 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans-Medium',
     fontSize: 14,
     fontWeight: '600',
-  },
-  timerWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 16,
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 20,
-    marginVertical: 16,
-  },
-  controlCircleSmall: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  controlIconSmall: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 20,
-  },
-  controlCircleMain: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#5B4FE8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#5B4FE8',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  controlIconMain: {
-    color: '#FFFFFF',
-    fontSize: 28,
-  },
-  focusSubjectPicker: {
-    width: 90,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  subjectPill: {
-    paddingHorizontal: 8,
-  },
-  subjectTextChip: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontWeight: '600',
-    textAlign: 'center',
   },
   pickerSection: {
     marginTop: 0,
@@ -1773,19 +2227,20 @@ const styles = StyleSheet.create({
     color: '#A89EF8',
     fontWeight: '600',
   },
-  seedsBalanceCleanChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: 'rgba(232, 160, 32, 0.1)',
-    borderColor: 'rgba(232, 160, 32, 0.25)',
-    borderWidth: 1,
+  rewardsBalanceCleanChip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(232, 160, 32, 0.12)',
+    borderColor: 'rgba(232, 160, 32, 0.3)',
+    borderWidth: 1,
   },
-  seedsBalanceCleanText: {
+  rewardsBalanceCleanText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: '#E8A020',
   },
@@ -1933,77 +2388,322 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 8,
   },
-  shopContentContainer: {
-    paddingHorizontal: 24,
+  rewardsContentContainer: {
+    paddingHorizontal: 22,
     paddingTop: 10,
-    paddingBottom: 40,
-    flex: 1,
+    paddingBottom: 60,
   },
-  shopTitle: {
+  rewardsTitle: {
     fontFamily: 'InstrumentSerif',
     fontSize: 26,
     color: '#17172A',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  shopSubtitle: {
+  rewardsSubtitle: {
     fontFamily: 'DMSans',
     fontSize: 12,
     color: '#9B9BAF',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
+    lineHeight: 18,
   },
-  shopList: {
+  rewardsList: {
     flex: 1,
   },
-  shopItem: {
+  levelProgressCard: {
+    backgroundColor: '#F8F8FC',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#ECECF4',
+    marginBottom: 20,
+  },
+  levelHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  levelBadge: {
+    backgroundColor: '#5B4FE8',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  levelBadgeText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  levelTitleText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#17172A',
+  },
+  xpProgressTrack: {
+    height: 8,
+    backgroundColor: '#E4E4EE',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  xpProgressFill: {
+    height: '100%',
+    backgroundColor: '#E8A020',
+    borderRadius: 4,
+  },
+  xpInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  xpCurrentText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5B4FE8',
+  },
+  xpNextText: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9B9BAF',
+  },
+  rewardsSectionHeading: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9B9BAF',
+    letterSpacing: 1,
+    marginTop: 12,
+    marginBottom: 10,
+  },
+  rewardThemeItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F0EFFB',
   },
-  shopItemEmoji: {
-    fontSize: 28,
+  rewardThemeColorDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'rgba(0,0,0,0.06)',
   },
-  shopItemName: {
+  rewardThemeName: {
     fontFamily: 'DMSans-Medium',
     fontSize: 14,
     fontWeight: '600',
     color: '#17172A',
   },
-  shopItemDesc: {
+  rewardThemeDesc: {
     fontFamily: 'DMSans',
     fontSize: 11,
     color: '#9B9BAF',
     marginTop: 2,
   },
-  shopUnlockedBadge: {
-    backgroundColor: '#EAE8FD',
+  equippedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(91, 79, 232, 0.1)',
+    borderColor: '#5B4FE8',
+    borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 10,
+    borderRadius: 8,
   },
-  shopUnlockedText: {
+  equippedBadgeText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#5B4FE8',
   },
-  shopUnlockBtn: {
-    backgroundColor: '#E8A020',
-    paddingHorizontal: 12,
+  equipThemeBtn: {
+    backgroundColor: '#5B4FE8',
+    paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 10,
+    borderRadius: 8,
   },
-  shopUnlockBtnDisabled: {
-    backgroundColor: '#9B9BAF',
-    opacity: 0.6,
-  },
-  shopUnlockBtnText: {
+  equipThemeBtnText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  lockedThemeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F0EFFB',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  lockedThemeText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#9B9BAF',
+    fontWeight: '600',
+  },
+  milestoneItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0EFFB',
+  },
+  milestoneIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#F4F3FB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  milestoneTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#17172A',
+  },
+  milestoneDesc: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9B9BAF',
+    marginTop: 1,
+  },
+  milestoneXpTag: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#E8A020',
+    backgroundColor: 'rgba(232, 160, 32, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  activeSessionControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginVertical: 14,
+    width: '100%',
+  },
+  activeSoundPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    borderRadius: 9999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  activeSoundPillPlaying: {
+    backgroundColor: 'rgba(91, 79, 232, 0.18)',
+    borderColor: 'rgba(91, 79, 232, 0.5)',
+  },
+  activeSoundText: {
+    fontFamily: 'DMMono',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  activeSoundTextPlaying: {
+    color: '#A89EF8',
+  },
+  activeSoundChangeTag: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  activeSoundChangeTagText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9,
+    letterSpacing: 0.8,
+    color: 'rgba(255, 255, 255, 0.75)',
+  },
+  activeMuteToggleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeMuteToggleBtnPlaying: {
+    borderColor: 'rgba(91, 79, 232, 0.5)',
+    backgroundColor: 'rgba(91, 79, 232, 0.15)',
+  },
+  activeSubjectPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 9999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxWidth: 140,
+  },
+  activeSubjectText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.75)',
+  },
+  soundSheetContent: {
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  soundSheetTitle: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 26,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  soundSheetSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.55)',
+    textAlign: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  muteAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  muteAllButtonActive: {
+    borderColor: 'rgba(91, 79, 232, 0.4)',
+    backgroundColor: 'rgba(91, 79, 232, 0.12)',
+  },
+  muteAllText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  muteAllTextActive: {
+    color: '#A89EF8',
+    fontWeight: '700',
   },
 });

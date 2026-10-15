@@ -36,6 +36,12 @@ export const CONFIG = {
     anonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
   },
 
+  // PostHog analytics configuration
+  posthog: {
+    apiKey: process.env.EXPO_PUBLIC_POSTHOG_API_KEY || '',
+    host: process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
+  },
+
   // Default fallbacks for application layouts
   defaults: {
     pomodoroTime: 25, // minutes

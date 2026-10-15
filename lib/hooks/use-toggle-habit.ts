@@ -2,6 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase/client';
 import { getTodayLocal } from '@/lib/utils/date';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
+import { trackEvent } from '@/lib/posthog';
 
 export async function toggleHabit(
   habitId: string,
@@ -48,6 +49,12 @@ export async function toggleHabit(
   if (error) {
     onOptimisticUpdate(currentlyDone); // revert
     handleSupabaseError(error, 'habit_toggle');
+  } else {
+    trackEvent('habit_toggled', {
+      habit_id: habitId,
+      done: newDone,
+      date: targetDate,
+    });
   }
 }
 

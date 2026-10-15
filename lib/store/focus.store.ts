@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../supabase/client';
 import { queryClient } from '../query-client';
 import { Alert } from 'react-native';
+import { trackEvent } from '../posthog';
 
 export type SoundKey = 'rain' | 'cafe' | 'ocean' | 'lofi' | 'brown_noise';
 export type FocusPreset = '25/5' | '50/10' | '90/20' | 'custom';
@@ -39,10 +40,11 @@ export interface FocusState {
   // Theme
   activeTheme: 'default' | 'gold' | 'rose_gold' | 'sunset' | 'mint' | 'nebula' | 'obsidian';
 
-  // Strict Mode Plant Gamification
+  // Strict Mode Accountability
   isStrictModeActive: boolean;
-  isPlantWilted: boolean;
-  selectedPlantId: string;
+  isStrictViolated: boolean;
+  isPlantWilted: boolean; // Backwards-compatible alias
+  selectedPlantId: string; // Backwards-compatible
 
   // Actions
   setPreset: (preset: FocusPreset) => void;
@@ -60,6 +62,7 @@ export interface FocusState {
   toggleBlocker: () => void;
   setTheme: (theme: 'default' | 'gold' | 'rose_gold' | 'sunset' | 'mint' | 'nebula' | 'obsidian') => void;
   toggleStrictMode: () => void;
+  setStrictViolated: (violated: boolean) => void;
   setPlantWilted: (wilted: boolean) => void;
   setSelectedPlant: (plantId: string) => void;
   resetSession: (resetCount?: boolean) => void;
@@ -173,6 +176,7 @@ export const useFocusStore = create<FocusState>()(
 
   // Initial Strict Mode States
   isStrictModeActive: false,
+  isStrictViolated: false,
   isPlantWilted: false,
   selectedPlantId: 'sprout',
 
@@ -212,6 +216,13 @@ export const useFocusStore = create<FocusState>()(
   setLinkedTaskId: (id) => set({ linkedTaskId: id }),
 
   start: () => {
+    const { selectedPreset, currentMode, sessionGoal, subjectTag } = get();
+    trackEvent('focus_timer_started', {
+      preset: selectedPreset,
+      mode: currentMode,
+      goal: sessionGoal || undefined,
+      subject: subjectTag || undefined,
+    });
     set({ 
       isRunning: true, 
       isPaused: false, 
@@ -279,6 +290,12 @@ export const useFocusStore = create<FocusState>()(
         duration = getFocusDuration(selectedPreset, customMinutes);
       }
 
+      trackEvent('focus_timer_completed', {
+        completed_mode: currentMode,
+        next_mode: nextMode,
+        pomodoro_count: nextCount,
+      });
+
       set({
         currentMode: nextMode,
         pomodoroCount: nextCount,
@@ -309,7 +326,8 @@ export const useFocusStore = create<FocusState>()(
   setTheme: (theme) => set({ activeTheme: theme }),
 
   toggleStrictMode: () => set((state) => ({ isStrictModeActive: !state.isStrictModeActive })),
-  setPlantWilted: (wilted) => set({ isPlantWilted: wilted }),
+  setStrictViolated: (violated) => set({ isStrictViolated: violated, isPlantWilted: violated }),
+  setPlantWilted: (wilted) => set({ isPlantWilted: wilted, isStrictViolated: wilted }),
   setSelectedPlant: (plantId) => set({ selectedPlantId: plantId }),
 
   resetSession: (resetCount = false) => {
@@ -328,6 +346,7 @@ export const useFocusStore = create<FocusState>()(
       currentMode: 'focus',
       isBlockerActive: false,
       blockedAppsCount: 0,
+      isStrictViolated: false,
       isPlantWilted: false,
       sessionStartTimestamp: null,
     });
