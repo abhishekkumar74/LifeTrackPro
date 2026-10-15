@@ -16,7 +16,7 @@ interface TimerCircleProps {
   totalSeconds: number;
   isRunning: boolean;
   currentMode: 'focus' | 'short_break' | 'long_break';
-  accentColorOverride?: string;
+  themeColorOverride?: string;
   isNightMode?: boolean;
 }
 
@@ -56,12 +56,13 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
   totalSeconds,
   isRunning,
   currentMode,
-  accentColorOverride,
+  themeColorOverride,
   isNightMode = false,
 }) => {
   const activeTheme = useFocusStore((state) => state.activeTheme || 'default');
   const isPaused = useFocusStore((state) => state.isPaused);
-  const accentColor = accentColorOverride || THEME_ACCENTS[activeTheme as keyof typeof THEME_ACCENTS] || '#5B4FE8';
+  const baseAccent = THEME_ACCENTS[activeTheme as keyof typeof THEME_ACCENTS] || '#5B4FE8';
+  const accentColor = themeColorOverride || (isNightMode ? '#FF3B30' : baseAccent);
 
   const center = size / 2;
   const outerRadius = (size - 32) / 2; // radius for outermost tick tips
@@ -128,22 +129,24 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
 
   // Position of 12 o'clock top indicator dot (below top major tick)
   const topDotY = center - (outerRadius - 26);
+  const dialGradId = `dialGrad_${isNightMode ? 'night' : 'day'}_${accentColor.replace('#', '')}`;
+  const auraGradId = `innerAura_${isNightMode ? 'night' : 'day'}_${accentColor.replace('#', '')}`;
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <Defs>
-          {/* Main Dial Face Gradient with subtle indigo-obsidian or crimson-obsidian tint */}
-          <RadialGradient id="dialGrad" cx="50%" cy="50%" rx="50%" ry="50%">
-            <Stop offset="0%" stopColor={isNightMode ? '#220406' : '#1E1C2C'} stopOpacity="0.98" />
-            <Stop offset="70%" stopColor={isNightMode ? '#130204' : '#141320'} stopOpacity="0.99" />
-            <Stop offset="100%" stopColor={isNightMode ? '#070001' : '#0C0B12'} stopOpacity="1" />
+          {/* Main Dial Face Gradient with subtle indigo-obsidian tint or StandBy deep night phosphor */}
+          <RadialGradient id={dialGradId} cx="50%" cy="50%" rx="50%" ry="50%">
+            <Stop offset="0%" stopColor={isNightMode ? '#1C0407' : '#1E1C2C'} stopOpacity="0.98" />
+            <Stop offset="70%" stopColor={isNightMode ? '#100103' : '#141320'} stopOpacity="0.99" />
+            <Stop offset="100%" stopColor={isNightMode ? '#050002' : '#0C0B12'} stopOpacity="1" />
           </RadialGradient>
 
-          {/* Ambient Inner Aura in App Color */}
-          <RadialGradient id="innerAura" cx="50%" cy="50%" rx="50%" ry="50%">
-            <Stop offset="0%" stopColor={accentColor} stopOpacity={isNightMode ? 0.28 : 0.22} />
-            <Stop offset="65%" stopColor={accentColor} stopOpacity={0.05} />
+          {/* Ambient Inner Aura in App Color or Night Mode Crimson Red */}
+          <RadialGradient id={auraGradId} cx="50%" cy="50%" rx="50%" ry="50%">
+            <Stop offset="0%" stopColor={accentColor} stopOpacity={isNightMode ? 0.35 : 0.22} />
+            <Stop offset="65%" stopColor={accentColor} stopOpacity={isNightMode ? 0.10 : 0.05} />
             <Stop offset="100%" stopColor={accentColor} stopOpacity="0" />
           </RadialGradient>
         </Defs>
@@ -153,7 +156,7 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           cx={center}
           cy={center}
           r={outerRadius + 14}
-          fill="url(#dialGrad)"
+          fill={`url(#${dialGradId})`}
         />
 
         {/* App Color Inner Ambient Glow Aura */}
@@ -161,7 +164,7 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           cx={center}
           cy={center}
           r={outerRadius - 22}
-          fill="url(#innerAura)"
+          fill={`url(#${auraGradId})`}
         />
 
         {/* Outer Liquid Glass Bezel Ring 1 (Highlight) */}
@@ -169,7 +172,7 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           cx={center}
           cy={center}
           r={outerRadius + 14}
-          stroke="rgba(255, 255, 255, 0.09)"
+          stroke={isNightMode ? 'rgba(255, 59, 48, 0.22)' : 'rgba(255, 255, 255, 0.09)'}
           strokeWidth={1.5}
           fill="transparent"
         />
@@ -179,7 +182,7 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           cx={center}
           cy={center}
           r={outerRadius + 8}
-          stroke={hexToRgba(accentColor, 0.20)}
+          stroke={hexToRgba(accentColor, isNightMode ? 0.35 : 0.20)}
           strokeWidth={2.5}
           fill="transparent"
         />
@@ -189,7 +192,7 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           cx={center}
           cy={center}
           r={outerRadius - 18}
-          stroke="rgba(255, 255, 255, 0.05)"
+          stroke={isNightMode ? 'rgba(255, 59, 48, 0.18)' : 'rgba(255, 255, 255, 0.05)'}
           strokeWidth={1}
           fill="transparent"
         />
@@ -210,11 +213,11 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
 
           if (isLeadingTick) {
             // Bright highlight tick for the active leading edge
-            strokeColor = isNightMode ? '#FFD4D0' : '#FFFFFF';
+            strokeColor = isNightMode ? '#FFA39E' : '#FFFFFF';
             strokeWidth = tick.isMajor ? 3.6 : 2.6;
           } else if (isTickRemaining) {
-            // Faded color in remaining time (app color with luminous presence)
-            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.80 : 0.60);
+            // Faded color in remaining time (app color with luminous presence or night mode red)
+            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.85 : 0.65);
             strokeWidth = tick.isMajor ? 2.8 : 1.7;
           } else {
             // Some extra faded color in the other time (elapsed time)
@@ -238,7 +241,7 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
                   cx={tick.x1}
                   cy={tick.y1}
                   r={2.5}
-                  fill={isNightMode ? '#FFD4D0' : '#FFFFFF'}
+                  fill={isNightMode ? '#FFA39E' : '#FFFFFF'}
                 />
               )}
             </React.Fragment>
@@ -256,7 +259,7 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           cx={center}
           cy={topDotY}
           r={2}
-          fill="#FFFFFF"
+          fill={isNightMode ? '#FF8880' : '#FFFFFF'}
         />
       </Svg>
 
@@ -267,8 +270,8 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           <Text
             style={[
               styles.timeDigits,
+              isNightMode && { color: '#FF453A' },
               { fontSize: size < 290 ? 46 : size < 330 ? 56 : 64 },
-              isNightMode && { color: '#FFA09B' },
             ]}
             numberOfLines={1}
             adjustsFontSizeToFit
