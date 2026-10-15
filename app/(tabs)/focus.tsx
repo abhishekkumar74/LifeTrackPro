@@ -55,6 +55,7 @@ import {
 } from 'lucide-react-native';
 import { trackEvent } from '@/lib/posthog';
 import { FocusLiveActivity } from '@/lib/native/live-activity';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 export const playRewardingCompletionHaptics = async () => {
   try {
@@ -170,6 +171,27 @@ export default function FocusScreen(): React.JSX.Element {
   const [isManualLandscape, setIsManualLandscape] = useState(false);
   const isLandscape = (width > height) || isManualLandscape;
 
+  const handleOpenStandBy = useCallback(async () => {
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setIsManualLandscape(true);
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+    } catch {
+      setIsManualLandscape(true);
+    }
+  }, []);
+
+  const handleCloseStandBy = useCallback(async () => {
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setIsManualLandscape(false);
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      await ScreenOrientation.unlockAsync();
+    } catch {
+      setIsManualLandscape(false);
+    }
+  }, []);
+
   const queryClient = useQueryClient();
   const { data: history = [], isLoading: isLoadingHistory, refetch: refetchHistory } = useFocusSessions();
   const [showSummary, setShowSummary] = useState(false);
@@ -208,6 +230,31 @@ export default function FocusScreen(): React.JSX.Element {
   useEffect(() => {
     FocusLiveActivity.updateWidgetData(todayMinutes, profile?.xp_points || 0);
   }, [todayMinutes, profile?.xp_points]);
+
+  useEffect(() => {
+    if (params.standby === 'true') {
+      handleOpenStandBy();
+    }
+  }, [params.standby, handleOpenStandBy]);
+
+  useEffect(() => {
+    const sub = ScreenOrientation.addOrientationChangeListener((evt) => {
+      const o = evt.orientationInfo.orientation;
+      const isLand =
+        o === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+        o === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+      if (isLand) {
+        setIsManualLandscape(true);
+      } else if (!isManualLandscape) {
+        setIsManualLandscape(false);
+      }
+    });
+
+    return () => {
+      ScreenOrientation.removeOrientationChangeListener(sub);
+      ScreenOrientation.unlockAsync().catch(() => {});
+    };
+  }, [isManualLandscape]);
 
   // Store bindings
   const {
@@ -990,10 +1037,7 @@ export default function FocusScreen(): React.JSX.Element {
 
               <TouchableOpacity
                 style={styles.circleGlassBtn}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  setIsManualLandscape(true);
-                }}
+                onPress={handleOpenStandBy}
                 activeOpacity={0.7}
                 accessibilityLabel="StandBy Desk Clock"
               >
@@ -1587,7 +1631,7 @@ export default function FocusScreen(): React.JSX.Element {
             handleSoundSelect(lastActiveSoundRef.current || 'rain');
           }
         }}
-        onClose={() => setIsManualLandscape(false)}
+        onClose={handleCloseStandBy}
       />
 
       {/* FOCUS HISTORY BOTTOM SHEET */}

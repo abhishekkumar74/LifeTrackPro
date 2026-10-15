@@ -31,6 +31,9 @@ AuthKey_*.p8
 # Google Play key (NEVER commit this)
 google-play-key.json
 service-account*.json
+lifetrack-pro-*.json
+*-*.json
+*.keystore
 
 # Native
 .kotlin/

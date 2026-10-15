@@ -8,6 +8,7 @@ import {
   StatusBar,
   useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Play,
   Pause,
@@ -60,6 +61,7 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
   onClose,
 }) => {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   // Optional Apple StandBy Night Mode (crimson red phosphor tint for dark rooms)
   const [nightMode, setNightMode] = useState(false);
 
@@ -84,9 +86,21 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
       animationType="fade"
       supportedOrientations={['landscape', 'landscape-left', 'landscape-right']}
       statusBarTranslucent
+      onRequestClose={onClose}
     >
       <StatusBar hidden />
-      <View style={[styles.container, nightMode && styles.containerNight]}>
+      <View
+        style={[
+          styles.container,
+          nightMode && styles.containerNight,
+          {
+            paddingLeft: Math.max(24, insets.left),
+            paddingRight: Math.max(24, insets.right),
+            paddingTop: Math.max(12, insets.top),
+            paddingBottom: Math.max(12, insets.bottom),
+          },
+        ]}
+      >
         {/* Ambient background glow circles */}
         <View
           style={[
