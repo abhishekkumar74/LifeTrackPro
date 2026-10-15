@@ -6,7 +6,6 @@ import Animated, {
   useAnimatedStyle,
   withRepeat,
   withTiming,
-  cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
 import { useFocusStore } from '@/lib/store/focus.store';
@@ -66,21 +65,6 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
 
   const center = size / 2;
   const outerRadius = (size - 32) / 2; // radius for outermost tick tips
-  const pieRadius = outerRadius - 9;
-  const pieCircumference = 2 * Math.PI * pieRadius;
-
-  // Fraction remaining (1.0 = full, 0.0 = depleted)
-  const fractionRemaining = totalSeconds > 0 ? Math.max(0, Math.min(1, secondsLeft / totalSeconds)) : 1;
-  const activeTicksCount = Math.ceil(fractionRemaining * 60);
-
-  // Pie chart stroke offset: starts at 12 o'clock (-90deg) and depletes clockwise as time decreases
-  const pieStrokeOffset = pieCircumference * (1 - fractionRemaining);
-
-  // Dynamic fade based on remaining time ("jitna kam hoga use sath wo bhi fade hote jayega"):
-  // At 100% time: 1.0 (vibrant, rich); at 0% time: gracefully fades down to 0.35
-  const dynamicFade = Math.max(0.35, 0.25 + 0.75 * fractionRemaining);
-  const activePieColor = hexToRgba(accentColor, dynamicFade);
-  const pieTrackColor = hexToRgba(accentColor, isNightMode ? 0.09 : 0.06);
 
   // Generate 60 radial ticks starting clockwise from 12 o'clock
   const ticks = useMemo<TickData[]>(() => {
@@ -106,6 +90,10 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
     return list;
   }, [center, outerRadius]);
 
+  // Fraction of time remaining
+  const fractionRemaining = totalSeconds > 0 ? secondsLeft / totalSeconds : 1;
+  const activeTicksCount = Math.ceil(fractionRemaining * 60);
+
   // Time display strings
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
@@ -118,37 +106,6 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
     if (currentMode === 'long_break') return 'RECHARGE';
     return 'FOCUS';
   }, [currentMode, isPaused]);
-
-  // Continuous smooth sweeping second needle (like an analog clock second hand)
-  const sweepAngle = useSharedValue(0);
-
-  React.useEffect(() => {
-    if (isRunning && !isPaused) {
-      // Synchronize angle with elapsed seconds in the current minute (6 deg per second)
-      const elapsedInMin = (totalSeconds - secondsLeft) % 60;
-      const startAngle = elapsedInMin * 6;
-      sweepAngle.value = startAngle;
-
-      // Continuously sweep 360 degrees over 60,000ms with smooth linear motion
-      sweepAngle.value = withRepeat(
-        withTiming(startAngle + 360, {
-          duration: 60000,
-          easing: Easing.linear,
-        }),
-        -1, // infinite loop
-        false
-      );
-    } else if (isPaused) {
-      cancelAnimation(sweepAngle);
-    } else {
-      cancelAnimation(sweepAngle);
-      sweepAngle.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) });
-    }
-  }, [isRunning, isPaused, totalSeconds]);
-
-  const animatedSecondHandStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${sweepAngle.value}deg` }],
-  }));
 
   // Subtle breathing animation for active running state
   const pulseOpacity = useSharedValue(1);
@@ -183,10 +140,10 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
             <Stop offset="100%" stopColor={isNightMode ? '#070001' : '#0C0B12'} stopOpacity="1" />
           </RadialGradient>
 
-          {/* Ambient Inner Aura in App / Night Color */}
+          {/* Ambient Inner Aura in App Color */}
           <RadialGradient id="innerAura" cx="50%" cy="50%" rx="50%" ry="50%">
-            <Stop offset="0%" stopColor={accentColor} stopOpacity={0.06 + 0.20 * dynamicFade} />
-            <Stop offset="65%" stopColor={accentColor} stopOpacity={0.02 + 0.06 * dynamicFade} />
+            <Stop offset="0%" stopColor={accentColor} stopOpacity={isNightMode ? 0.28 : 0.22} />
+            <Stop offset="65%" stopColor={accentColor} stopOpacity={0.05} />
             <Stop offset="100%" stopColor={accentColor} stopOpacity="0" />
           </RadialGradient>
         </Defs>
@@ -237,30 +194,6 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           fill="transparent"
         />
 
-        {/* Pie Chart Donut Track (Subtle Faded Background Ring) */}
-        <Circle
-          cx={center}
-          cy={center}
-          r={pieRadius}
-          stroke={pieTrackColor}
-          strokeWidth={13}
-          fill="transparent"
-        />
-
-        {/* Pie Chart Active Donut Arc (Depletes and Fades in Unison with Time) */}
-        <Circle
-          cx={center}
-          cy={center}
-          r={pieRadius}
-          stroke={activePieColor}
-          strokeWidth={13}
-          strokeDasharray={pieCircumference}
-          strokeDashoffset={pieStrokeOffset}
-          strokeLinecap="round"
-          fill="transparent"
-          transform={`rotate(-90 ${center} ${center})`}
-        />
-
         {/* 60 Radial Chronometer Ticks */}
         {ticks.map((tick) => {
           // If timer is stopped (at initial state), all ticks are lit in the faded remaining color.
@@ -280,12 +213,12 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
             strokeColor = isNightMode ? '#FFD4D0' : '#FFFFFF';
             strokeWidth = tick.isMajor ? 3.6 : 2.6;
           } else if (isTickRemaining) {
-            // Faded color in remaining time (app color with luminous presence fading with time)
-            strokeColor = hexToRgba(accentColor, Math.max(0.40, (tick.isMajor ? 0.95 : 0.70) * dynamicFade));
+            // Faded color in remaining time (app color with luminous presence)
+            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.80 : 0.60);
             strokeWidth = tick.isMajor ? 2.8 : 1.7;
           } else {
             // Some extra faded color in the other time (elapsed time)
-            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.14 : 0.06);
+            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.16 : 0.08);
             strokeWidth = tick.isMajor ? 2.0 : 1.2;
           }
 
@@ -327,70 +260,8 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
         />
       </Svg>
 
-      {/* Sweeping Clock Second Needle (Continuously and smoothly moves like an analog clock) */}
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFill,
-          animatedSecondHandStyle,
-          { justifyContent: 'center', alignItems: 'center' },
-        ]}
-      >
-        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          {/* Needle Counterweight Tail */}
-          <Line
-            x1={center}
-            y1={center}
-            x2={center}
-            y2={center + 18}
-            stroke={isNightMode ? '#FF3B30' : hexToRgba(accentColor, 0.85)}
-            strokeWidth={2.4}
-            strokeLinecap="round"
-          />
-          {/* Main Sweeping Needle Shaft */}
-          <Line
-            x1={center}
-            y1={center}
-            x2={center}
-            y2={center - outerRadius + 6}
-            stroke={isNightMode ? '#FF5E55' : '#FFFFFF'}
-            strokeWidth={1.8}
-            strokeLinecap="round"
-          />
-          {/* Outer Pip Halo Ring on Outer Tick Track */}
-          <Circle
-            cx={center}
-            cy={center - outerRadius + 6}
-            r={5.5}
-            fill="transparent"
-            stroke={accentColor}
-            strokeWidth={1.5}
-          />
-          {/* Glowing Luminous Pip on Needle Tip */}
-          <Circle
-            cx={center}
-            cy={center - outerRadius + 6}
-            r={3}
-            fill="#FFFFFF"
-          />
-          {/* Center Pivot Jewel Cap */}
-          <Circle
-            cx={center}
-            cy={center}
-            r={5}
-            fill={accentColor}
-          />
-          <Circle
-            cx={center}
-            cy={center}
-            r={2.2}
-            fill="#FFFFFF"
-          />
-        </Svg>
-      </Animated.View>
-
       {/* Center Readout Overlay */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={StyleSheet.absoluteFill}>
         <View style={styles.centerReadout}>
           {/* Main Large Digital Display */}
           <Text
