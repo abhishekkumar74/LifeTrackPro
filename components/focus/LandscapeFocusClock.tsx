@@ -125,6 +125,8 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
             totalSeconds={totalSeconds}
             isRunning={isRunning}
             currentMode={currentMode}
+            accentColorOverride={effectiveThemeColor}
+            isNightMode={nightMode}
           />
         </View>
 
