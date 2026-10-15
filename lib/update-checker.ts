@@ -6,6 +6,8 @@ export async function checkForUpdate() {
   if (__DEV__) return;
   
   try {
+    if (!Updates.isEnabled) return;
+    
     const update = await Updates.checkForUpdateAsync();
     
     if (update.isAvailable) {
