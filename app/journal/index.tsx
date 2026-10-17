@@ -1,12 +1,15 @@
 import { JournalEntry, useDeleteJournalEntry, useJournalEntries, useVaultPin } from '@/lib/hooks/use-journal';
 import { supabase } from '@/lib/supabase/client';
+import { useAuthStore } from '@/lib/store/auth.store';
 import * as Haptics from 'expo-haptics';
-import { Href, router, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Calendar, ChevronRight, KeyRound, Lock, Plus, ShieldCheck, Sparkles, Trash2, Unlock, Flame, Trophy } from 'lucide-react-native';
-import React, { useState, useCallback } from 'react';
+import { Href, router } from 'expo-router';
+import { ArrowLeft, Calendar, ChevronRight, KeyRound, Lock, Plus, ShieldCheck, Sparkles, Trash2, Unlock, Flame, Trophy, Crown } from 'lucide-react-native';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
+  BackHandler,
   FlatList,
   Modal,
   Platform,
@@ -20,18 +23,65 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function CozyJournalVaultScreen(): React.JSX.Element {
+  const { profile } = useAuthStore();
+  const isPremium = profile?.is_premium || false;
+
   const { hasPin, isUnlocked, loading: pinLoading, savePin, verifyPin, lockVault, resetPin } = useVaultPin();
   const { data: entries = [], isLoading: entriesLoading } = useJournalEntries();
   const deleteMutation = useDeleteJournalEntry();
 
-  // Re-lock vault immediately on losing focus (navigating away, back button, tab switch)
-  useFocusEffect(
-    useCallback(() => {
-      return () => {
+  // Premium Barrier: Prompt non-premium users to upgrade
+  useEffect(() => {
+    if (profile && !isPremium) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      Alert.alert(
+        'Secret Journal Vault 👑',
+        'The Secret Journal Vault is an exclusive Gold Member feature. Upgrade to LifeTrack Pro Gold to unlock your private encrypted diary, PIN security, and custom handwriting fonts.',
+        [
+          {
+            text: 'Upgrade to Gold 👑',
+            onPress: () => router.replace('/paywall'),
+          },
+          {
+            text: 'Go Back',
+            style: 'cancel',
+            onPress: () => {
+              if (router.canGoBack()) router.back();
+              else router.replace('/profile');
+            },
+          },
+        ]
+      );
+    }
+  }, [profile, isPremium]);
+
+  // Lock vault when app goes to background or screen turns off
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'inactive' || nextAppState === 'background') {
         lockVault();
-      };
-    }, [lockVault])
-  );
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [lockVault]);
+
+  // Lock vault when user leaves the journal section via Android hardware back button
+  useEffect(() => {
+    const onBackPress = () => {
+      lockVault();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/profile');
+      }
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandler.remove();
+  }, [lockVault]);
 
   // PIN Keypad State
   const [inputPin, setInputPin] = useState<string>('');
@@ -206,6 +256,50 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
     );
   }
 
+  // GOLD MEMBER PREMIUM GATE
+  if (profile && !isPremium) {
+    return (
+      <SafeAreaView style={styles.stageContainer} edges={['top', 'left', 'right', 'bottom']}>
+        <StatusBar barStyle="dark-content" backgroundColor="#EFE6CE" />
+
+        <View style={styles.paperTopBar}>
+          <TouchableOpacity
+            style={styles.paperBackButton}
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/profile');
+              }
+            }}
+          >
+            <ArrowLeft size={16} color="#6B6154" />
+          </TouchableOpacity>
+          <Text style={styles.paperTopBarTitle}>Secret Vault</Text>
+          <View style={{ width: 34 }} />
+        </View>
+
+        <View style={styles.goldBarrierContainer}>
+          <View style={styles.goldLockIconBubble}>
+            <Crown size={34} color="#D97706" />
+          </View>
+          <Text style={styles.goldLockTitle}>Gold Member Exclusive 👑</Text>
+          <Text style={styles.goldLockSub}>
+            The Secret Journal Vault is reserved exclusively for LifeTrack Pro Gold members. Keep your daily thoughts, reflections, and personal growth private and encrypted with PIN security and vintage handwriting fonts.
+          </Text>
+          <TouchableOpacity
+            style={styles.goldUpgradeBtn}
+            onPress={() => router.push('/paywall')}
+            activeOpacity={0.85}
+          >
+            <Crown size={16} color="#FFFFFF" />
+            <Text style={styles.goldUpgradeBtnText}>Upgrade to Gold 👑</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // PIN LOCK SCREEN (PARCHMENT PHYSICAL DESK THEME MATCHING REFERENCE IMAGE)
   if (!isUnlocked) {
     return (
@@ -220,7 +314,7 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
               if (router.canGoBack()) {
                 router.back();
               } else {
-                router.replace('/(tabs)');
+                router.replace('/profile');
               }
             }}
           >
@@ -393,7 +487,7 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
             if (router.canGoBack()) {
               router.back();
             } else {
-              router.replace('/(tabs)');
+              router.replace('/profile');
             }
           }}
         >
@@ -1098,5 +1192,62 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
+  },
+  goldBarrierContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+  },
+  goldLockIconBubble: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 2,
+    borderColor: '#FDE68A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#D97706',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  goldLockTitle: {
+    fontFamily: 'InstrumentSerif',
+    fontSize: 26,
+    color: '#302920',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  goldLockSub: {
+    fontFamily: 'DMSans',
+    fontSize: 14,
+    color: '#6B6154',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 26,
+  },
+  goldUpgradeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#D97706',
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 24,
+    shadowColor: '#D97706',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  goldUpgradeBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 15,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });

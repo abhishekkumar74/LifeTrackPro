@@ -1,4 +1,11 @@
-import { useJournalEntry, useCreateJournalEntry, useUpdateJournalEntry, useDeleteJournalEntry } from '@/lib/hooks/use-journal';
+import {
+  useJournalEntry,
+  useCreateJournalEntry,
+  useUpdateJournalEntry,
+  useDeleteJournalEntry,
+  useVaultPin,
+} from '@/lib/hooks/use-journal';
+import { useAuthStore } from '@/lib/store/auth.store';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,11 +16,13 @@ import {
   Tag as TagIcon,
   Palette,
   X,
+  Lock,
 } from 'lucide-react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -156,6 +165,37 @@ const FONT_OPTIONS: FontOption[] = [
 export default function CozyJournalDetailPage(): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = id === 'new';
+
+  const { profile } = useAuthStore();
+  const isPremium = profile?.is_premium || false;
+  const { isUnlocked, lockVault } = useVaultPin();
+
+  // Premium Barrier: Only Gold members can access the diary editor
+  useEffect(() => {
+    if (profile && !isPremium) {
+      router.replace('/paywall');
+    }
+  }, [profile, isPremium]);
+
+  // Vault Lock Protection: If vault is locked, return to the PIN screen
+  useEffect(() => {
+    if (!isUnlocked) {
+      router.replace('/journal');
+    }
+  }, [isUnlocked]);
+
+  // Lock vault when app goes to background or screen turns off
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'inactive' || nextAppState === 'background') {
+        lockVault();
+        router.replace('/journal');
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [lockVault]);
 
   const { data: existingEntry, isLoading: entryLoading } = useJournalEntry(id as string);
   const createMutation = useCreateJournalEntry();
@@ -422,6 +462,18 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                     activeOpacity={0.7}
                   >
                     <Palette size={14} color="#3F5A44" />
+                  </TouchableOpacity>
+
+                  {/* LOCK VAULT BUTTON */}
+                  <TouchableOpacity
+                    style={styles.paperLockButton}
+                    onPress={() => {
+                      lockVault();
+                      router.replace('/journal');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Lock size={14} color="#9C4A3C" />
                   </TouchableOpacity>
 
                   {!isNew && (
@@ -845,6 +897,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   paperDeleteButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: 'rgba(156,74,60,0.3)',
+    backgroundColor: 'rgba(156,74,60,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paperLockButton: {
     width: 34,
     height: 34,
     borderRadius: 17,

@@ -25,11 +25,13 @@ import * as Linking from 'expo-linking';
 import { router, Href } from 'expo-router';
 import { CONFIG } from '@/constants/config';
 import { resetUser } from '@/lib/posthog';
+import * as Haptics from 'expo-haptics';
 import {
   ArrowLeft,
   Bell,
   Check,
   ChevronRight,
+  Crown,
   FileText,
   Info,
   KeyRound,
@@ -1034,24 +1036,52 @@ export default function ProfileScreen(): React.JSX.Element {
 
           <TouchableOpacity
             style={styles.journalVaultCard}
-            onPress={() => router.push('/journal' as any)}
+            onPress={() => {
+              if (profile?.is_premium) {
+                router.push('/journal' as any);
+              } else {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+                Alert.alert(
+                  'Secret Journal Vault 👑',
+                  'The Secret Journal Vault is an exclusive Gold Member feature. Upgrade to LifeTrack Pro Gold to unlock your private encrypted diary, PIN security, and custom handwriting fonts.',
+                  [
+                    {
+                      text: 'Upgrade to Gold 👑',
+                      onPress: () => router.push('/paywall'),
+                    },
+                    {
+                      text: 'Cancel',
+                      style: 'cancel',
+                    },
+                  ]
+                );
+              }
+            }}
             activeOpacity={0.85}
           >
             <View style={styles.journalVaultIconCol}>
-              <Lock size={18} color="#E5A93C" />
+              {profile?.is_premium ? (
+                <Lock size={18} color="#E5A93C" />
+              ) : (
+                <Crown size={18} color="#D97706" />
+              )}
             </View>
             <View style={styles.journalVaultTextCol}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={styles.journalVaultTitle}>Secret Journal Vault</Text>
-                <View style={styles.journalVaultBadge}>
-                  <Text style={styles.journalVaultBadgeText}>PIN VAULT</Text>
+                <View style={profile?.is_premium ? styles.journalVaultBadge : styles.journalVaultGoldBadge}>
+                  <Text style={profile?.is_premium ? styles.journalVaultBadgeText : styles.journalVaultGoldBadgeText}>
+                    {profile?.is_premium ? 'PIN VAULT' : 'GOLD 👑'}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.journalVaultSub} numberOfLines={1}>
-                Private daily reflections & growth logs
+                {profile?.is_premium
+                  ? 'Private daily reflections & growth logs'
+                  : 'Exclusive private encrypted diary for Gold members'}
               </Text>
             </View>
-            <ChevronRight size={16} color="#E5A93C" />
+            <ChevronRight size={16} color={profile?.is_premium ? '#E5A93C' : '#D97706'} />
           </TouchableOpacity>
         </View>
 
@@ -2569,6 +2599,21 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: 'bold',
     color: '#E5A93C',
+    letterSpacing: 0.5,
+  },
+  journalVaultGoldBadge: {
+    backgroundColor: 'rgba(217, 119, 6, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#D97706',
+  },
+  journalVaultGoldBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#F59E0B',
     letterSpacing: 0.5,
   },
   journalVaultSub: {
