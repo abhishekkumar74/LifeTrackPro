@@ -255,8 +255,11 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
   const dayNum = displayDate.getDate();
   const yearNum = displayDate.getFullYear();
 
-  const stampText = `${monthAbbr}  ·  ${String(dayNum).padStart(2, '0')}  ·  ${yearNum}`;
-  const fullDateText = `${displayDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}  ·  Entry 224`;
+  const fullDateText = displayDate.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
   useEffect(() => {
     if (existingEntry) {
@@ -425,67 +428,65 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
             </View>
 
             {/* SILK RIBBON BOOKMARK */}
-            <View style={styles.silkRibbon}>
-              <Svg width="18" height="70" viewBox="0 0 18 70">
+            <View style={styles.silkRibbon} pointerEvents="none">
+              <Svg width="16" height="54" viewBox="0 0 18 70">
                 <Polygon points="0,0 18,0 18,58 9,70 0,58" fill="#9C4A3C" />
               </Svg>
             </View>
 
-            {/* VINTAGE EMBOSSED GOLD DATE STAMP */}
-            <View style={styles.cornerStamp}>
-              <View style={styles.cornerStampInner}>
-                <Text style={styles.cornerStampText}>{stampText}</Text>
-              </View>
-            </View>
-
             {/* PAGE INNER CONTENT */}
             <View style={styles.pageInner}>
-              {/* TOP HEADER CONTROLS (Zero collision with date stamp) */}
+              {/* TOP HEADER CONTROLS (Balanced & spacious) */}
               <View style={styles.topBar}>
-                <View style={styles.leftControlsGroup}>
-                  <TouchableOpacity
-                    style={styles.paperBackButton}
-                    onPress={() => {
-                      if (router.canGoBack()) {
-                        router.back();
-                      } else {
-                        router.replace('/journal');
-                      }
-                    }}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <ChevronLeft size={18} color="#3F5A44" />
-                  </TouchableOpacity>
+                {/* LEFT: BACK BUTTON */}
+                <TouchableOpacity
+                  style={styles.paperBackButton}
+                  onPress={() => {
+                    if (router.canGoBack()) {
+                      router.back();
+                    } else {
+                      router.replace('/journal');
+                    }
+                  }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <ChevronLeft size={19} color="#263729" />
+                </TouchableOpacity>
 
+                {/* RIGHT: CLEAN GROUPED TOOLBAR ACTIONS */}
+                <View style={styles.rightActionsGroup}>
                   {/* FONT THEME SELECTOR BUTTON */}
                   <TouchableOpacity
-                    style={styles.paperFontButton}
+                    style={styles.paperActionButton}
                     onPress={() => setShowFontModal(true)}
                     activeOpacity={0.7}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
-                    <Palette size={14} color="#3F5A44" />
+                    <Palette size={15} color="#263729" />
                   </TouchableOpacity>
 
                   {/* LOCK VAULT BUTTON */}
                   <TouchableOpacity
-                    style={styles.paperLockButton}
+                    style={styles.paperActionButton}
                     onPress={() => {
                       lockVault();
                       router.replace('/journal');
                     }}
                     activeOpacity={0.7}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
-                    <Lock size={14} color="#9C4A3C" />
+                    <Lock size={15} color="#8A6D3B" />
                   </TouchableOpacity>
 
                   {!isNew && (
                     <TouchableOpacity
-                      style={styles.paperDeleteButton}
+                      style={[styles.paperActionButton, styles.paperDeleteButton]}
                       onPress={handleDelete}
                       activeOpacity={0.7}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-                      <Trash2 size={14} color="#9C4A3C" />
+                      <Trash2 size={15} color="#9C4A3C" />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -494,14 +495,19 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
               {/* DATE BLOCK */}
               <View style={styles.dateBlock}>
                 <TextInput
-                  style={[styles.weekdayInput, { fontFamily: Platform.OS === 'ios' ? 'Fraunces' : 'InstrumentSerif' }]}
+                  style={[
+                    styles.weekdayInput,
+                    { fontFamily: Platform.OS === 'ios' ? 'Fraunces' : 'InstrumentSerif' },
+                  ]}
                   value={title}
                   onChangeText={setTitle}
                   placeholder="Monday"
-                  placeholderTextColor="#9C9382"
+                  placeholderTextColor="#A89E8D"
                   editable={isToday}
                 />
-                <Text style={styles.fullDateText}>{fullDateText}</Text>
+                <View style={styles.dateBadgeRow}>
+                  <Text style={styles.fullDateText}>{fullDateText}</Text>
+                </View>
               </View>
 
               {/* DEAR DIARY GREETING */}
@@ -834,149 +840,96 @@ const styles = StyleSheet.create({
   },
   silkRibbon: {
     position: 'absolute',
-    right: 28,
+    right: 18,
     top: 0,
-    zIndex: 4,
+    zIndex: 1,
     shadowColor: '#000',
     shadowOffset: { width: 1, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.15,
     shadowRadius: 2,
   },
-  cornerStamp: {
-    position: 'absolute',
-    right: 34,
-    top: 10,
-    zIndex: 3,
-    borderWidth: 1.5,
-    borderColor: 'rgba(173, 138, 84, 0.65)',
-    paddingHorizontal: 2,
-    paddingVertical: 2,
-    borderRadius: 5,
-    backgroundColor: '#F3ECDA',
-    transform: [{ rotate: '2.5deg' }],
-    shadowColor: '#18120A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-  },
-  cornerStampInner: {
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(173, 138, 84, 0.5)',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 3,
-  },
-  cornerStampText: {
-    fontFamily: 'SpaceMono',
-    fontSize: 9.5,
-    color: '#AD8A54',
-    letterSpacing: 1.2,
-    fontWeight: 'bold',
-  },
   pageInner: {
-    paddingLeft: 34,
-    paddingRight: 18,
-    paddingTop: 16,
-    paddingBottom: 28,
+    paddingLeft: 40,
+    paddingRight: 20,
+    paddingTop: 18,
+    paddingBottom: 32,
+    zIndex: 2,
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  leftControlsGroup: {
+  paperBackButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(173, 138, 84, 0.35)',
+    backgroundColor: '#FAF5E8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#AD8A54',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  rightActionsGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  paperBackButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    backgroundColor: '#FAF5E8',
     borderWidth: 1,
-    borderColor: '#E2D3AC',
-    backgroundColor: '#EFE6CE',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: 'rgba(173, 138, 84, 0.35)',
+    borderRadius: 20,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    shadowColor: '#AD8A54',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  paperFontButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: '#E2D3AC',
-    backgroundColor: 'rgba(63,90,68,0.08)',
+  paperActionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   paperDeleteButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: 'rgba(156,74,60,0.3)',
     backgroundColor: 'rgba(156,74,60,0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  paperLockButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: 'rgba(156,74,60,0.3)',
-    backgroundColor: 'rgba(156,74,60,0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  saveStatusGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#EFE6CE',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2D3AC',
-    marginRight: 110,
-  },
-  saveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  saveStateText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 10,
-    color: '#3F5A44',
-    letterSpacing: 0.4,
   },
   dateBlock: {
-    marginBottom: 8,
+    marginBottom: 16,
   },
   weekdayInput: {
-    fontSize: 32,
-    color: '#2B2620',
+    fontSize: 30,
+    color: '#241D17',
     fontWeight: 'bold',
     padding: 0,
     margin: 0,
+    letterSpacing: -0.4,
+  },
+  dateBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
   },
   fullDateText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 12,
-    color: '#7D7160',
+    color: '#8A7A64',
     letterSpacing: 0.3,
-    marginTop: 2,
   },
   dearDiary: {
     fontFamily: 'Caveat',
-    fontSize: 26,
-    color: '#3F5A44',
-    marginVertical: 10,
-    transform: [{ rotate: '-0.6deg' }],
+    fontSize: 24,
+    color: '#263729',
+    marginBottom: 12,
+    transform: [{ rotate: '-0.5deg' }],
   },
   writingArea: {
     position: 'relative',
