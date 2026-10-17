@@ -2,7 +2,7 @@
   "expo": {
     "name": "LifeTrack Pro",
     "slug": "lifetrack-pro",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "lifetrackpro",
@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.lifetrackpro.app",
-      "buildNumber": "6",
+      "buildNumber": "7",
       "infoPlist": {
         "UIBackgroundModes": [
           "fetch"
@@ -25,7 +25,7 @@
     },
     "android": {
       "package": "com.lifetrackpro.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.VIBRATE",

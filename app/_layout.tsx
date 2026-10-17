@@ -72,20 +72,6 @@ SplashScreen.setOptions({
 });
 
 
-import { AppLogo } from '@/components/ui/AppLogo';
-
-function BrandedLoadingScreen() {
-  return (
-    <View style={{ flex: 1, backgroundColor: '#0F172A', justifyContent: 'center', alignItems: 'center' }}>
-      <AppLogo size={64} variant="dark" />
-      <Text style={{ fontFamily: 'Georgia', fontSize: 30, fontWeight: '700', color: '#FFFFFF', marginTop: 16, letterSpacing: -0.5 }}>
-        Life<Text style={{ color: '#5B5CF0' }}>Track</Text> PRO
-      </Text>
-      <ActivityIndicator color="#5B5CF0" style={{ marginTop: 24 }} />
-    </View>
-  );
-}
-
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, profile, isLoading } = useAuthStore();
   const segments = useSegments();
@@ -137,7 +123,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [session, profile, segments]);
 
   if (isLoading) {
-    return <BrandedLoadingScreen />;
+    return null;
   }
 
   return <>{children}</>;
@@ -542,7 +528,7 @@ function RootLayout() {
   }, [fontsLoaded, authInitialized]);
 
   if (!fontsLoaded || !authInitialized) {
-    return <BrandedLoadingScreen />;
+    return null;
   }
 
   return (
