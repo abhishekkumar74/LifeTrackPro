@@ -52,6 +52,7 @@ import {
   Volume2,
   VolumeX,
   Volume1,
+  Sparkles,
 } from 'lucide-react-native';
 import { trackEvent } from '@/lib/posthog';
 import { FocusLiveActivity } from '@/lib/native/live-activity';
@@ -1375,117 +1376,213 @@ export default function FocusScreen(): React.JSX.Element {
           contentContainerStyle={styles.rewardsContentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.rewardsTitle}>Focus Rewards 🏆</Text>
-          <Text style={styles.rewardsSubtitle}>Complete focus sessions to earn XP, level up, and unlock sleek timer themes.</Text>
-            {/* Level & XP Progress Card */}
-            {(() => {
-              const currentXp = profile?.xp_points || 0;
-              const levelInfo = calculateFocusLevel(currentXp);
-              const prev = levelInfo.prevXp;
-              const next = levelInfo.nextXp;
-              const progressRatio = next
-                ? Math.min(1, Math.max(0, (currentXp - prev) / (next - prev)))
-                : 1;
+          {/* Header pill & Title */}
+          <View style={styles.rewardsHeaderSection}>
+            <View style={styles.rewardsHeaderBadge}>
+              <Trophy size={13} color="#FBBF24" />
+              <Text style={styles.rewardsHeaderBadgeText}>FOCUS MASTERY & REWARDS</Text>
+            </View>
+            <Text style={styles.rewardsTitle}>Focus Rewards</Text>
+            <Text style={styles.rewardsSubtitle}>
+              Earn XP for every minute of deep work. Level up your rank and unlock custom timer ring themes.
+            </Text>
+          </View>
 
-              return (
+          {/* Level & XP Hero Card (VIP Cyber Rank Pass) */}
+          {(() => {
+            const currentXp = profile?.xp_points || 0;
+            const levelInfo = calculateFocusLevel(currentXp);
+            const prev = levelInfo.prevXp;
+            const next = levelInfo.nextXp;
+            const progressRatio = next
+              ? Math.min(1, Math.max(0, (currentXp - prev) / (next - prev)))
+              : 1;
+            const progressPercent = Math.round(progressRatio * 100);
+            const unlockedCount = REWARD_THEMES.filter(
+              (t) => isPremium || currentXp >= t.requiredXp
+            ).length;
+
+            return (
+              <View style={styles.rewardsHeroWrapper}>
                 <View style={styles.levelProgressCard}>
+                  {/* Card Top: Level Pill + Title + Rank Trophy */}
                   <View style={styles.levelHeaderRow}>
-                    <View style={styles.levelBadge}>
-                      <Text style={styles.levelBadgeText}>LEVEL {levelInfo.level}</Text>
+                    <View style={styles.levelHeaderLeft}>
+                      <View style={styles.levelBadge}>
+                        <Sparkles size={11} color="#FFFFFF" />
+                        <Text style={styles.levelBadgeText}>LEVEL {levelInfo.level}</Text>
+                      </View>
+                      <Text style={styles.levelTitleText}>{levelInfo.title}</Text>
                     </View>
-                    <Text style={styles.levelTitleText}>{levelInfo.title}</Text>
+                    <View style={styles.rankIconCircle}>
+                      <Award size={20} color="#FBBF24" />
+                    </View>
                   </View>
 
+                  {/* Progress Bar */}
                   <View style={styles.xpProgressTrack}>
-                    <View style={[styles.xpProgressFill, { width: `${Math.round(progressRatio * 100)}%` }]} />
+                    <View
+                      style={[
+                        styles.xpProgressFill,
+                        { width: `${progressPercent}%` },
+                      ]}
+                    />
                   </View>
 
+                  {/* Card Footer: Big XP + Next Target */}
                   <View style={styles.xpInfoRow}>
-                    <Text style={styles.xpCurrentText}>{currentXp} XP Total</Text>
-                    <Text style={styles.xpNextText}>
-                      {next ? `${next - currentXp} XP to Level ${levelInfo.level + 1}` : 'Max Rank Achieved!'}
-                    </Text>
+                    <View style={styles.xpTotalRow}>
+                      <Text style={styles.xpBigNumber}>{currentXp}</Text>
+                      <Text style={styles.xpTotalLabel}>TOTAL XP</Text>
+                    </View>
+                    <View style={styles.nextLevelPill}>
+                      <Zap size={11} color="#F59E0B" />
+                      <Text style={styles.nextLevelPillText}>
+                        {next
+                          ? `${next - currentXp} XP to Level ${levelInfo.level + 1}`
+                          : 'Grandmaster Rank'}
+                      </Text>
+                    </View>
                   </View>
                 </View>
-              );
-            })()}
 
-            {/* Section: Unlockable Themes */}
-            <Text style={styles.rewardsSectionHeading}>TIMER THEMES</Text>
-            {REWARD_THEMES.map((t) => {
-              const currentXp = profile?.xp_points || 0;
-              const isUnlocked = isPremium || currentXp >= t.requiredXp;
-              const isEquipped = activeTheme === t.id;
+                {/* 3 Micro Stats Badges */}
+                <View style={styles.microStatsRow}>
+                  <View style={styles.microStatCard}>
+                    <Text style={styles.microStatVal}>{currentXp}</Text>
+                    <Text style={styles.microStatLabel}>XP EARNED</Text>
+                  </View>
+                  <View style={styles.microStatCard}>
+                    <Text style={styles.microStatVal}>Tier {levelInfo.level}</Text>
+                    <Text style={styles.microStatLabel}>CURRENT RANK</Text>
+                  </View>
+                  <View style={styles.microStatCard}>
+                    <Text style={styles.microStatVal}>
+                      {unlockedCount} / {REWARD_THEMES.length}
+                    </Text>
+                    <Text style={styles.microStatLabel}>THEMES UNLOCKED</Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })()}
 
-              return (
-                <View key={t.id} style={styles.rewardThemeItem}>
-                  <View style={[styles.rewardThemeColorDot, { backgroundColor: t.color }]} />
-                  <View style={{ flex: 1, marginLeft: 12 }}>
+          {/* Section: Unlockable Themes */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.rewardsSectionHeading}>TIMER RING THEMES</Text>
+            <Text style={styles.sectionHeaderSub}>
+              {REWARD_THEMES.filter(t => isPremium || (profile?.xp_points || 0) >= t.requiredXp).length} of {REWARD_THEMES.length} Unlocked
+            </Text>
+          </View>
+
+          {REWARD_THEMES.map((t) => {
+            const currentXp = profile?.xp_points || 0;
+            const isUnlocked = isPremium || currentXp >= t.requiredXp;
+            const isEquipped = activeTheme === t.id;
+
+            return (
+              <View
+                key={t.id}
+                style={[
+                  styles.rewardThemeCard,
+                  isEquipped && styles.rewardThemeCardActive,
+                ]}
+              >
+                {/* Theme Disc (mini timer ring preview) */}
+                <View style={[styles.rewardThemeOuterRing, { borderColor: t.color }]}>
+                  <View style={[styles.rewardThemeInnerGlow, { backgroundColor: t.color + '25' }]}>
+                    <View style={[styles.rewardThemeCenterDot, { backgroundColor: t.color }]} />
+                  </View>
+                </View>
+
+                {/* Name & Desc */}
+                <View style={styles.rewardThemeInfo}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={styles.rewardThemeName}>{t.name}</Text>
-                    <Text style={styles.rewardThemeDesc}>
-                      {isUnlocked ? t.desc : `Unlocks at ${t.requiredXp} XP (Level ${t.requiredLevel})`}
-                    </Text>
+                    {isEquipped && <View style={styles.activeMiniDot} />}
                   </View>
-
-                  {isEquipped ? (
-                    <View style={styles.equippedBadge}>
-                      <Check size={12} color="#5B4FE8" />
-                      <Text style={styles.equippedBadgeText}>Active</Text>
-                    </View>
-                  ) : isUnlocked ? (
-                    <TouchableOpacity
-                      style={styles.equipThemeBtn}
-                      onPress={() => handleEquipTheme(t.id, t.requiredXp)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.equipThemeBtnText}>Equip</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.lockedThemeBadge}>
-                      <Lock size={12} color="#9B9BAF" />
-                      <Text style={styles.lockedThemeText}>{t.requiredXp} XP</Text>
-                    </View>
-                  )}
+                  <Text
+                    style={[
+                      styles.rewardThemeDesc,
+                      !isUnlocked && styles.rewardThemeDescLocked,
+                    ]}
+                  >
+                    {isUnlocked
+                      ? t.desc
+                      : `Unlocks at ${t.requiredXp} XP (Level ${t.requiredLevel})`}
+                  </Text>
                 </View>
-              );
-            })}
 
-            {/* Section: Focus Milestones */}
-            <Text style={styles.rewardsSectionHeading}>XP REWARD BREAKDOWN</Text>
-            <View style={styles.milestoneItem}>
-              <View style={styles.milestoneIconWrap}>
-                <Zap size={16} color="#10B981" />
+                {/* Action CTA */}
+                {isEquipped ? (
+                  <View style={styles.equippedBadge}>
+                    <Check size={12} color="#A78BFA" strokeWidth={3} />
+                    <Text style={styles.equippedBadgeText}>Active</Text>
+                  </View>
+                ) : isUnlocked ? (
+                  <TouchableOpacity
+                    style={styles.equipThemeBtn}
+                    onPress={() => handleEquipTheme(t.id, t.requiredXp)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.equipThemeBtnText}>Equip</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.lockedThemeBadge}>
+                    <Lock size={11} color="#6B7280" />
+                    <Text style={styles.lockedThemeText}>{t.requiredXp} XP</Text>
+                  </View>
+                )}
               </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.milestoneTitle}>Focus Session Completion</Text>
-                <Text style={styles.milestoneDesc}>Base +20 XP + 2 XP for each focused minute</Text>
-              </View>
-              <Text style={styles.milestoneXpTag}>+20+ XP</Text>
-            </View>
+            );
+          })}
 
-            <View style={styles.milestoneItem}>
-              <View style={styles.milestoneIconWrap}>
-                <Shield size={16} color="#E8A020" />
-              </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.milestoneTitle}>Strict Focus Mode Bonus</Text>
-                <Text style={styles.milestoneDesc}>Complete without leaving the app</Text>
-              </View>
-              <Text style={styles.milestoneXpTag}>+25 XP</Text>
-            </View>
+          {/* Section: Focus Milestones */}
+          <View style={[styles.sectionHeaderRow, { marginTop: 16 }]}>
+            <Text style={styles.rewardsSectionHeading}>HOW TO EARN XP</Text>
+            <Text style={styles.sectionHeaderSub}>Automatic Multipliers</Text>
+          </View>
 
-            <View style={styles.milestoneItem}>
-              <View style={styles.milestoneIconWrap}>
-                <Target size={16} color="#5B4FE8" />
-              </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.milestoneTitle}>Deep Flow State</Text>
-                <Text style={styles.milestoneDesc}>Reflect as Fully Focused in session summary</Text>
-              </View>
-              <Text style={styles.milestoneXpTag}>+15 XP</Text>
+          <View style={styles.milestoneCard}>
+            <View style={[styles.milestoneIconWrap, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+              <Zap size={16} color="#10B981" />
             </View>
-          </BottomSheetScrollView>
-        </BottomSheet>
+            <View style={styles.milestoneInfo}>
+              <Text style={styles.milestoneTitle}>Focus Session Completion</Text>
+              <Text style={styles.milestoneDesc}>Base +20 XP + 2 XP for each focused minute</Text>
+            </View>
+            <View style={[styles.milestoneTag, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)' }]}>
+              <Text style={[styles.milestoneTagText, { color: '#34D399' }]}>+20+ XP</Text>
+            </View>
+          </View>
+
+          <View style={styles.milestoneCard}>
+            <View style={[styles.milestoneIconWrap, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+              <Shield size={16} color="#F59E0B" />
+            </View>
+            <View style={styles.milestoneInfo}>
+              <Text style={styles.milestoneTitle}>Strict Focus Mode Bonus</Text>
+              <Text style={styles.milestoneDesc}>Complete without leaving or switching apps</Text>
+            </View>
+            <View style={[styles.milestoneTag, { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)' }]}>
+              <Text style={[styles.milestoneTagText, { color: '#FBBF24' }]}>+25 XP</Text>
+            </View>
+          </View>
+
+          <View style={styles.milestoneCard}>
+            <View style={[styles.milestoneIconWrap, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}>
+              <Target size={16} color="#A78BFA" />
+            </View>
+            <View style={styles.milestoneInfo}>
+              <Text style={styles.milestoneTitle}>Deep Flow State Reflection</Text>
+              <Text style={styles.milestoneDesc}>Reflect as "Fully Focused" in session summary</Text>
+            </View>
+            <View style={[styles.milestoneTag, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
+              <Text style={[styles.milestoneTagText, { color: '#C4B5FD' }]}>+15 XP</Text>
+            </View>
+          </View>
+        </BottomSheetScrollView>
+      </BottomSheet>
 
       {/* TIMER SETTINGS SHEET */}
       <BottomSheet
@@ -2443,44 +2540,80 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   rewardsContentContainer: {
-    paddingHorizontal: 22,
-    paddingTop: 10,
+    paddingHorizontal: 20,
+    paddingTop: 8,
     paddingBottom: 60,
+  },
+  rewardsHeaderSection: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  rewardsHeaderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    marginBottom: 10,
+  },
+  rewardsHeaderBadgeText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FBBF24',
+    letterSpacing: 1.2,
   },
   rewardsTitle: {
     fontFamily: 'InstrumentSerif',
-    fontSize: 26,
-    color: '#17172A',
+    fontSize: 28,
+    color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
+    letterSpacing: 0.3,
   },
   rewardsSubtitle: {
     fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#9B9BAF',
+    fontSize: 13,
+    color: '#9494A8',
     textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 18,
+    lineHeight: 19,
+    paddingHorizontal: 16,
   },
-  rewardsList: {
-    flex: 1,
+  rewardsHeroWrapper: {
+    marginBottom: 22,
   },
   levelProgressCard: {
-    backgroundColor: '#F8F8FC',
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#ECECF4',
-    marginBottom: 20,
+    backgroundColor: '#1E1B2E',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(124, 58, 237, 0.35)',
+    shadowColor: '#5B4FE8',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
   },
   levelHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 6,
+  },
+  levelHeaderLeft: {
+    flexDirection: 'column',
+    gap: 4,
   },
   levelBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: '#5B4FE8',
+    alignSelf: 'flex-start',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
@@ -2490,157 +2623,287 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   levelTitleText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#17172A',
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: 2,
+    letterSpacing: 0.2,
+  },
+  rankIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   xpProgressTrack: {
-    height: 8,
-    backgroundColor: '#E4E4EE',
-    borderRadius: 4,
+    height: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 5,
     overflow: 'hidden',
-    marginBottom: 8,
+    marginVertical: 14,
   },
   xpProgressFill: {
     height: '100%',
-    backgroundColor: '#E8A020',
-    borderRadius: 4,
+    backgroundColor: '#F59E0B',
+    borderRadius: 5,
   },
   xpInfoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  xpCurrentText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#5B4FE8',
+  xpTotalRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
   },
-  xpNextText: {
-    fontFamily: 'DMSans',
+  xpBigNumber: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  xpTotalLabel: {
+    fontFamily: 'DMSans-Medium',
     fontSize: 11,
-    color: '#9B9BAF',
+    fontWeight: '700',
+    color: '#8E8D9F',
+    letterSpacing: 0.8,
+  },
+  nextLevelPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+  nextLevelPillText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FBBF24',
+  },
+  microStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  microStatCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.035)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  microStatVal: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  microStatLabel: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#7E7C8F',
+    letterSpacing: 0.5,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    marginBottom: 12,
   },
   rewardsSectionHeading: {
     fontFamily: 'DMSans-Medium',
     fontSize: 11,
-    fontWeight: '700',
-    color: '#9B9BAF',
-    letterSpacing: 1,
-    marginTop: 12,
-    marginBottom: 10,
+    fontWeight: '800',
+    color: '#8E8D9F',
+    letterSpacing: 1.2,
   },
-  rewardThemeItem: {
+  sectionHeaderSub: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  rewardThemeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0EFFB',
+    backgroundColor: 'rgba(255, 255, 255, 0.035)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 9,
   },
-  rewardThemeColorDot: {
+  rewardThemeCardActive: {
+    backgroundColor: 'rgba(91, 79, 232, 0.14)',
+    borderColor: '#635BFF',
+  },
+  rewardThemeOuterRing: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  rewardThemeInnerGlow: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    borderWidth: 2,
-    borderColor: 'rgba(0,0,0,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rewardThemeCenterDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  rewardThemeInfo: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
   },
   rewardThemeName: {
     fontFamily: 'DMSans-Medium',
     fontSize: 14,
-    fontWeight: '600',
-    color: '#17172A',
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  activeMiniDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#A78BFA',
   },
   rewardThemeDesc: {
     fontFamily: 'DMSans',
     fontSize: 11,
-    color: '#9B9BAF',
+    color: '#9494A8',
     marginTop: 2,
+    lineHeight: 15,
+  },
+  rewardThemeDescLocked: {
+    color: '#D97706',
+    fontWeight: '500',
   },
   equippedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(91, 79, 232, 0.1)',
-    borderColor: '#5B4FE8',
+    backgroundColor: 'rgba(91, 79, 232, 0.25)',
+    borderColor: '#7C3AED',
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
   },
   equippedBadgeText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 11,
-    fontWeight: '700',
-    color: '#5B4FE8',
+    fontWeight: '800',
+    color: '#C4B5FD',
   },
   equipThemeBtn: {
     backgroundColor: '#5B4FE8',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 10,
+    shadowColor: '#5B4FE8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
   },
   equipThemeBtnText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFFFFF',
   },
   lockedThemeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F0EFFB',
+    gap: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
   lockedThemeText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 11,
-    color: '#9B9BAF',
-    fontWeight: '600',
+    color: '#7E7C8F',
+    fontWeight: '700',
   },
-  milestoneItem: {
+  milestoneCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0EFFB',
+    backgroundColor: 'rgba(255, 255, 255, 0.035)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+    borderRadius: 16,
+    padding: 13,
+    marginBottom: 9,
   },
   milestoneIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: '#F4F3FB',
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  milestoneInfo: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
   },
   milestoneTitle: {
     fontFamily: 'DMSans-Medium',
     fontSize: 13,
-    fontWeight: '600',
-    color: '#17172A',
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   milestoneDesc: {
     fontFamily: 'DMSans',
     fontSize: 11,
-    color: '#9B9BAF',
-    marginTop: 1,
+    color: '#9494A8',
+    marginTop: 2,
+    lineHeight: 15,
   },
-  milestoneXpTag: {
+  milestoneTag: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  milestoneTagText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#E8A020',
-    backgroundColor: 'rgba(232, 160, 32, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    fontSize: 11,
+    fontWeight: '800',
   },
   activeSessionControlRow: {
     flexDirection: 'row',
