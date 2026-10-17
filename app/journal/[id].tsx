@@ -255,6 +255,7 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
   const dayNum = displayDate.getDate();
   const yearNum = displayDate.getFullYear();
 
+  const stampText = `${monthAbbr}  ·  ${String(dayNum).padStart(2, '0')}  ·  ${yearNum}`;
   const fullDateText = displayDate.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
@@ -492,21 +493,30 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                 </View>
               </View>
 
-              {/* DATE BLOCK */}
+              {/* DATE & EMBOSSED VINTAGE STAMP HEADER */}
               <View style={styles.dateBlock}>
-                <TextInput
-                  style={[
-                    styles.weekdayInput,
-                    { fontFamily: Platform.OS === 'ios' ? 'Fraunces' : 'InstrumentSerif' },
-                  ]}
-                  value={title}
-                  onChangeText={setTitle}
-                  placeholder="Monday"
-                  placeholderTextColor="#A89E8D"
-                  editable={isToday}
-                />
-                <View style={styles.dateBadgeRow}>
-                  <Text style={styles.fullDateText}>{fullDateText}</Text>
+                <View style={styles.dateHeaderRow}>
+                  <View style={styles.titleColumn}>
+                    <TextInput
+                      style={[
+                        styles.weekdayInput,
+                        { fontFamily: Platform.OS === 'ios' ? 'Fraunces' : 'InstrumentSerif' },
+                      ]}
+                      value={title}
+                      onChangeText={setTitle}
+                      placeholder="Monday"
+                      placeholderTextColor="#A89E8D"
+                      editable={isToday}
+                    />
+                    <Text style={styles.fullDateText}>{fullDateText}</Text>
+                  </View>
+
+                  {/* VINTAGE EMBOSSED GOLD DATE STAMP */}
+                  <View style={styles.cornerStamp}>
+                    <View style={styles.cornerStampInner}>
+                      <Text style={styles.cornerStampText}>{stampText}</Text>
+                    </View>
+                  </View>
                 </View>
               </View>
 
@@ -553,10 +563,10 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                 <View style={styles.dividerHairline} />
               </View>
 
-              {/* PROMPTS */}
+              {/* PROMPTS IN LUXURY STATIONERY CARDS */}
               <View style={styles.promptsContainer}>
                 {/* 1. MOOD CHECK-IN */}
-                <View style={styles.promptItem}>
+                <View style={styles.promptCard}>
                   <View style={styles.promptHeaderRow}>
                     <View style={styles.promptHeaderLeft}>
                       <Text style={styles.promptLabel}>How was today, really?</Text>
@@ -600,9 +610,12 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                 </View>
 
                 {/* 2. HIGHLIGHTS */}
-                <View style={styles.promptItem}>
+                <View style={styles.promptCard}>
                   <View style={styles.promptHeaderLeft}>
-                    <Text style={styles.promptLabel}>What made today special?</Text>
+                    <View style={styles.promptTitleRow}>
+                      <Sparkles size={14} color="#8A6D3B" />
+                      <Text style={styles.promptLabel}>What made today special?</Text>
+                    </View>
                     <Text style={styles.promptSub}>HIGHLIGHT OF THE DAY</Text>
                   </View>
                   <TextInput
@@ -616,7 +629,7 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                 </View>
 
                 {/* 3. GRATITUDE - 3 SEPARATE NUMBERED LINES */}
-                <View style={styles.promptItem}>
+                <View style={styles.promptCard}>
                   <View style={styles.promptHeaderLeft}>
                     <Text style={styles.promptLabel}>Three things I'm grateful for</Text>
                     <Text style={styles.promptSub}>DAILY GRATITUDE</Text>
@@ -649,7 +662,7 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                 </View>
 
                 {/* 4. NOT TO DO */}
-                <View style={styles.promptItem}>
+                <View style={styles.promptCard}>
                   <View style={styles.promptHeaderLeft}>
                     <Text style={styles.promptLabel}>What to avoid tomorrow?</Text>
                     <Text style={styles.promptSub}>REFLECTIONS & BOUNDARIES</Text>
@@ -666,9 +679,12 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                 </View>
 
                 {/* 5. TAGS */}
-                <View style={styles.promptItem}>
+                <View style={styles.promptCard}>
                   <View style={styles.promptHeaderLeft}>
-                    <Text style={styles.promptLabel}>Tags & Categories</Text>
+                    <View style={styles.promptTitleRow}>
+                      <TagIcon size={14} color="#8A6D3B" />
+                      <Text style={styles.promptLabel}>Tags & Categories</Text>
+                    </View>
                     <Text style={styles.promptSub}>CLASSIFICATION</Text>
                   </View>
 
@@ -905,6 +921,15 @@ const styles = StyleSheet.create({
   dateBlock: {
     marginBottom: 16,
   },
+  dateHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  titleColumn: {
+    flex: 1,
+    marginRight: 10,
+  },
   weekdayInput: {
     fontSize: 30,
     color: '#241D17',
@@ -913,16 +938,41 @@ const styles = StyleSheet.create({
     margin: 0,
     letterSpacing: -0.4,
   },
-  dateBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
   fullDateText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 12,
     color: '#8A7A64',
     letterSpacing: 0.3,
+    marginTop: 4,
+  },
+  cornerStamp: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(173, 138, 84, 0.75)',
+    paddingHorizontal: 3,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#FAF4E6',
+    transform: [{ rotate: '2.5deg' }],
+    shadowColor: '#302619',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  cornerStampInner: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(173, 138, 84, 0.55)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  cornerStampText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    color: '#8A6D3B',
+    letterSpacing: 1.2,
+    fontWeight: '700',
   },
   dearDiary: {
     fontFamily: 'Caveat',
@@ -934,11 +984,17 @@ const styles = StyleSheet.create({
   writingArea: {
     position: 'relative',
     marginBottom: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(173, 138, 84, 0.18)',
   },
   entryTextArea: {
     fontSize: 17,
     lineHeight: 30,
-    color: '#2B2620',
+    color: '#241D17',
     minHeight: 160,
     paddingTop: 4,
   },
@@ -1006,10 +1062,28 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   promptsContainer: {
-    gap: 22,
+    gap: 16,
+  },
+  promptCard: {
+    backgroundColor: '#FAF6EB',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(173, 138, 84, 0.22)',
+    padding: 14,
+    shadowColor: '#302619',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   promptItem: {
     backgroundColor: 'transparent',
+  },
+  promptTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
   },
   promptHeaderRow: {
     flexDirection: 'row',
