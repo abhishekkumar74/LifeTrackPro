@@ -27,7 +27,9 @@ import {
   Smile,
   Sparkles,
   TrendingUp,
+  Trophy,
 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import Svg, {
   Path,
   Circle,
@@ -601,70 +603,106 @@ export default function StatsScreen(): React.JSX.Element {
             />
           }
         >
-          {/* SINGLE UNIFIED LIFETRACK WRAPPED & WEEKLY BENCHMARKING HERO CARD */}
+          {/* SINGLE UNIFIED LIFETRACK WRAPPED & BENCHMARKING HERO CARD */}
           <View style={styles.unifiedHeroCard}>
             <View style={styles.unifiedHeroHeader}>
               <View style={styles.wrappedBadge}>
-                <Sparkles size={11} color="#FFD700" />
+                <Sparkles size={11} color="#FBBF24" />
                 <Text style={styles.wrappedBadgeText}>LIFETRACK WRAPPED</Text>
               </View>
 
               <View style={styles.unifiedRankBadge}>
-                <TrendingUp size={12} color="#00B894" />
+                <TrendingUp size={12} color="#34D399" />
                 <Text style={styles.unifiedRankText}>
-                  Top 8% {profile?.category ? profile.category.replace('_', ' ').toUpperCase() : 'STUDENT'}
+                  TOP 8% {profile?.category ? profile.category.replace('_', ' ').toUpperCase() : 'STUDENT'}
                 </Text>
               </View>
             </View>
 
-            <Text style={styles.unifiedHeroTitle}>This Week's Growth & Report ✨</Text>
-            <Text style={styles.unifiedHeroDesc}>
-              You focused for <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>{dailyAverageFocusHours}h/day</Text> on average — studying more than <Text style={{ color: '#FFD700', fontWeight: 'bold' }}>92% of peers</Text> in your category!
+            <Text style={styles.unifiedHeroTitle}>
+              {selectedPeriod === 'day'
+                ? "Today's Focus & Momentum ✨"
+                : selectedPeriod === 'month'
+                ? "This Month's Growth & Report ✨"
+                : "This Week's Growth & Report ✨"}
             </Text>
 
+            {selectedPeriod === 'day' ? (
+              <Text style={styles.unifiedHeroDesc}>
+                You logged <Text style={styles.highlightWhite}>{dailyAverageFocusHours}h</Text> of focus today — outperforming <Text style={styles.highlightGold}>92% of peers</Text> in your category!
+              </Text>
+            ) : selectedPeriod === 'month' ? (
+              <Text style={styles.unifiedHeroDesc}>
+                You averaged <Text style={styles.highlightWhite}>{dailyAverageFocusHours}h/day</Text> this month — staying ahead of <Text style={styles.highlightGold}>92% of peers</Text> in your category!
+              </Text>
+            ) : (
+              <Text style={styles.unifiedHeroDesc}>
+                You focused for <Text style={styles.highlightWhite}>{dailyAverageFocusHours}h/day</Text> on average — studying more than <Text style={styles.highlightGold}>92% of peers</Text> in your category!
+              </Text>
+            )}
+
             <View style={styles.unifiedMetricsRow}>
-              <View style={styles.unifiedMetricItem}>
-                <Text style={styles.unifiedMetricLabel}>Total Focus</Text>
-                <Text style={styles.unifiedMetricValue}>
+              {/* Card 1: Total Focus */}
+              <View style={styles.unifiedMetricCard}>
+                <View style={styles.metricCardHeader}>
+                  <Clock size={11} color="#A78BFA" />
+                  <Text style={styles.unifiedMetricLabel}>TOTAL</Text>
+                </View>
+                <Text style={styles.unifiedMetricValue} numberOfLines={1}>
                   {(enhancedStats?.reportCard?.thisWeekHours || (totalPeriodFocusMinutes / 60)).toFixed(1)}h
                 </Text>
               </View>
 
-              <View style={styles.unifiedMetricDivider} />
-
-              <View style={styles.unifiedMetricItem}>
-                <Text style={styles.unifiedMetricLabel}>Best Day</Text>
-                <Text style={styles.unifiedMetricValue}>
-                  {enhancedStats?.reportCard?.bestDayName || 'Thu'}
+              {/* Card 2: Active Streak */}
+              <View style={styles.unifiedMetricCard}>
+                <View style={styles.metricCardHeader}>
+                  <Flame size={11} color="#F59E0B" fill="#F59E0B" />
+                  <Text style={styles.unifiedMetricLabel}>STREAK</Text>
+                </View>
+                <Text style={[styles.unifiedMetricValue, { color: '#FDE68A' }]} numberOfLines={1}>
+                  {todayStats.habitStreak ?? enhancedStats?.focusStats?.focusStreak ?? 1}d
                 </Text>
               </View>
 
-              <View style={styles.unifiedMetricDivider} />
-
-              <View style={styles.unifiedMetricItem}>
-                <Text style={styles.unifiedMetricLabel}>Habit Rate</Text>
-                <Text style={styles.unifiedMetricValue}>
+              {/* Card 3: Habit Rate */}
+              <View style={styles.unifiedMetricCard}>
+                <View style={styles.metricCardHeader}>
+                  <CheckSquare size={11} color="#34D399" />
+                  <Text style={styles.unifiedMetricLabel}>HABITS</Text>
+                </View>
+                <Text style={[styles.unifiedMetricValue, { color: '#6EE7B7' }]} numberOfLines={1}>
                   {enhancedStats?.reportCard?.habitConsistencyRate || 85}%
                 </Text>
               </View>
 
-              <View style={styles.unifiedMetricDivider} />
-
-              <View style={styles.unifiedMetricItem}>
-                <Text style={styles.unifiedMetricLabel}>Goals Met</Text>
-                <Text style={styles.unifiedMetricValue}>
-                  {enhancedStats?.reportCard?.goalsCompletedThisWeek || 1}
+              {/* Card 4: Best / Peak Day */}
+              <View style={styles.unifiedMetricCard}>
+                <View style={styles.metricCardHeader}>
+                  <Trophy size={11} color="#FBBF24" />
+                  <Text style={styles.unifiedMetricLabel}>PEAK</Text>
+                </View>
+                <Text style={[styles.unifiedMetricValue, { color: '#FCD34D' }]} numberOfLines={1}>
+                  {(enhancedStats?.reportCard?.bestDayName || 'Thu').slice(0, 3)}
                 </Text>
               </View>
             </View>
 
             <TouchableOpacity
               style={styles.unifiedShareBtn}
-              onPress={() => setShareProgressModalVisible(true)}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                setShareProgressModalVisible(true);
+              }}
               activeOpacity={0.85}
             >
-              <Share2 size={16} color="#FFFFFF" />
-              <Text style={styles.unifiedShareBtnText}>Share Progress Card ✨</Text>
+              <View style={styles.unifiedShareBtnLeft}>
+                <Share2 size={16} color="#FFFFFF" />
+                <Text style={styles.unifiedShareBtnText}>Share Progress Card</Text>
+              </View>
+              <View style={styles.storyPill}>
+                <Sparkles size={11} color="#FDE047" />
+                <Text style={styles.storyPillText}>STORY</Text>
+              </View>
             </TouchableOpacity>
           </View>
           {isNewUser && (
@@ -1250,69 +1288,110 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   unifiedHeroCard: {
-    backgroundColor: '#17172A',
-    borderRadius: 20,
+    backgroundColor: '#111026',
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: 'rgba(124, 58, 237, 0.32)',
     padding: 18,
     marginBottom: 4,
-    shadowColor: '#17172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowColor: '#5B4FE8',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 6,
   },
   unifiedHeroHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  wrappedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 14,
+  },
+  wrappedBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    color: '#FBBF24',
+    letterSpacing: 0.8,
   },
   unifiedRankBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(0, 184, 148, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 14,
   },
   unifiedRankText: {
-    fontFamily: 'DMMono',
-    fontSize: 9,
-    color: '#00B894',
-    fontWeight: '700',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    color: '#34D399',
+    letterSpacing: 0.5,
   },
   unifiedHeroTitle: {
     fontFamily: 'InstrumentSerif',
-    fontSize: 22,
+    fontSize: 24,
     color: '#FFFFFF',
+    letterSpacing: -0.3,
     marginBottom: 6,
+    lineHeight: 30,
   },
   unifiedHeroDesc: {
     fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#9B9BAF',
-    lineHeight: 18,
+    fontSize: 13,
+    color: '#9E9EB8',
+    lineHeight: 20,
     marginBottom: 16,
+  },
+  highlightWhite: {
+    color: '#FFFFFF',
+    fontFamily: 'DMSans-Bold',
+    fontWeight: '700',
+  },
+  highlightGold: {
+    color: '#FBBF24',
+    fontFamily: 'DMSans-Bold',
+    fontWeight: '700',
   },
   unifiedMetricsRow: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    gap: 8,
     marginBottom: 16,
   },
-  unifiedMetricItem: {
+  unifiedMetricCard: {
     flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
   },
   unifiedMetricLabel: {
-    fontFamily: 'DMSans',
-    fontSize: 10,
-    color: '#9B9BAF',
-    marginBottom: 2,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9,
+    color: '#8E8EA8',
+    letterSpacing: 0.6,
   },
   unifiedMetricValue: {
     fontFamily: 'DMSans-Bold',
@@ -1320,86 +1399,53 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
   },
-  unifiedMetricDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
   unifiedShareBtn: {
     backgroundColor: '#5B4FE8',
-    height: 44,
-    borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: '#5B4FE8',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  unifiedShareBtnText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  wrappedBannerCard: {
-    backgroundColor: '#17172A',
-    borderRadius: 16,
-    padding: 16,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(196, 181, 253, 0.35)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
-    shadowColor: '#17172A',
+    paddingHorizontal: 16,
+    shadowColor: '#5B4FE8',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 4,
   },
-  wrappedLeftContent: {
-    flex: 1,
-    paddingRight: 12,
+  unifiedShareBtnLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  wrappedBadge: {
+  unifiedShareBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  storyPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
-  wrappedBadgeText: {
+  storyPillText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 9,
-    color: '#FFD700',
-    letterSpacing: 0.8,
-  },
-  wrappedTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 20,
+    fontSize: 10,
+    fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 4,
+    letterSpacing: 0.6,
   },
-  wrappedSubtitle: {
-    fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#9B9BAF',
-    lineHeight: 16,
-  },
-  wrappedShareIconBg: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#5B4FE8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
   newUserBanner: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
