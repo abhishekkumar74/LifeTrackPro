@@ -5,6 +5,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { Goal, Habit, ScheduleBlock, ScheduleSkipEntry, Task } from '@/types/app.types';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getStreakShieldCount } from '@/lib/utils/focus-rewards';
 
 export interface TodayStats {
   topTask: Task | null;
@@ -202,6 +203,8 @@ export function useTodayStats(): TodayStats {
           .gte('date', thirtyDaysAgoStr)
       ]);
 
+      const streakShields = await getStreakShieldCount();
+
       // Check errors
       if (tasksRes.error) throw tasksRes.error;
       if (focusRes.error) throw focusRes.error;
@@ -323,7 +326,7 @@ export function useTodayStats(): TodayStats {
         }
       }
 
-      // 4b. Focus streak calculation (completed sessions only)
+      // 4b. Focus streak calculation (completed sessions only, protected by Streak Shields)
       const completedFocusDates = new Set(
         (focusAllSessionsRes.data || []).map(fs => {
           const d = new Date(fs.started_at);
@@ -331,31 +334,41 @@ export function useTodayStats(): TodayStats {
         })
       );
       let focusStreak = 0;
+      let shieldsRemaining = streakShields;
+
+      const calcStreakFrom = (startOffset: number) => {
+        let count = 0;
+        let skippedWithShield = 0;
+        const curr = new Date();
+        curr.setDate(curr.getDate() - startOffset);
+
+        while (true) {
+          const dateStr = formatDateStr(curr);
+          if (completedFocusDates.has(dateStr)) {
+            count++;
+          } else if (shieldsRemaining > 0 && count > 0 && skippedWithShield === 0) {
+            // Shield absorbs 1 missed gap day in an active streak
+            shieldsRemaining--;
+            skippedWithShield++;
+          } else {
+            break;
+          }
+          curr.setDate(curr.getDate() - 1);
+        }
+        return count;
+      };
 
       if (completedFocusDates.has(checkDateTodayStr)) {
-        focusStreak = 1;
-        const curr = new Date();
-        while (true) {
-          curr.setDate(curr.getDate() - 1);
-          const dateStr = formatDateStr(curr);
-          if (completedFocusDates.has(dateStr)) {
-            focusStreak++;
-          } else {
-            break;
-          }
-        }
+        focusStreak = calcStreakFrom(0);
       } else if (completedFocusDates.has(checkDateYesterdayStr)) {
-        focusStreak = 1;
-        const curr = new Date();
-        curr.setDate(curr.getDate() - 1);
-        while (true) {
-          curr.setDate(curr.getDate() - 1);
-          const dateStr = formatDateStr(curr);
-          if (completedFocusDates.has(dateStr)) {
-            focusStreak++;
-          } else {
-            break;
-          }
+        focusStreak = calcStreakFrom(1);
+      } else if (shieldsRemaining > 0) {
+        // Yesterday was missed, but if active 2 days ago, shield protects the streak!
+        const twoDaysAgo = new Date();
+        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+        if (completedFocusDates.has(formatDateStr(twoDaysAgo))) {
+          shieldsRemaining--;
+          focusStreak = calcStreakFrom(2);
         }
       }
 

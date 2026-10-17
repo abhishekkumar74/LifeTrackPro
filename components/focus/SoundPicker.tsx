@@ -13,8 +13,9 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { Volume2, VolumeX, Volume1, CloudRain, Coffee, Waves, Music, Radio, Sparkles } from 'lucide-react-native';
+import { Volume2, VolumeX, Volume1, CloudRain, Coffee, Waves, Music, Radio, Sparkles, Lock } from 'lucide-react-native';
 import { SoundKey } from '@/lib/store/focus.store';
+import { isSoundUnlocked, SOUND_REWARD_LEVELS } from '@/lib/utils/focus-rewards';
 
 interface SoundPickerProps {
   activeSound: SoundKey | null;
@@ -24,6 +25,8 @@ interface SoundPickerProps {
   onScrollStateChange?: (enabled: boolean) => void;
   isPremium?: boolean;
   onPremiumTrigger?: () => void;
+  userLevel?: number;
+  userXp?: number;
 }
 
 interface ChipItem {
@@ -51,6 +54,8 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
   onScrollStateChange,
   isPremium = false,
   onPremiumTrigger,
+  userLevel = 1,
+  userXp = 0,
 }) => {
   const [sliderWidth, setSliderWidth] = useState<number>(0);
   const opacity = useSharedValue(0);
@@ -154,9 +159,12 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
       >
         {SOUNDS.map((sound) => {
           const active = activeSound === sound.key;
-          const isLocked = !isPremium && PREMIUM_SOUNDS.includes(sound.key);
+          const isUnlocked = isSoundUnlocked(sound.key, isPremium, userLevel, userXp);
+          const isLocked = !isUnlocked;
+          const reqConfig = SOUND_REWARD_LEVELS.find((s) => s.key === sound.key);
+          const isLevelUnlockedFree = !isPremium && isUnlocked && reqConfig && !reqConfig.isFree;
           const IconComp = sound.icon;
-          const iconColor = active ? '#A89EF8' : isLocked ? '#E8A020' : 'rgba(255, 255, 255, 0.5)';
+          const iconColor = active ? '#A89EF8' : isLocked ? '#E8A020' : isLevelUnlockedFree ? '#34D399' : 'rgba(255, 255, 255, 0.5)';
 
           return (
             <TouchableOpacity
@@ -165,6 +173,7 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
                 styles.chip,
                 active && styles.chipActive,
                 isLocked && styles.chipLocked,
+                isLevelUnlockedFree && !active && { borderColor: 'rgba(52, 211, 153, 0.35)', backgroundColor: 'rgba(52, 211, 153, 0.08)' },
               ]}
               onPress={() => {
                 onSelect(sound.key);
@@ -177,10 +186,21 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
                   styles.chipText,
                   active && styles.chipTextActive,
                   isLocked && styles.chipTextLocked,
+                  isLevelUnlockedFree && !active && { color: '#6EE7B7' },
                 ]}>
                   {sound.label}
                 </Text>
-                {isLocked && <Sparkles size={11} color="#E8A020" />}
+                {isLocked && reqConfig && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: 2 }}>
+                    <Lock size={10} color="#E8A020" />
+                    <Text style={{ fontSize: 10, color: '#E8A020', fontWeight: '700' }}>
+                      Lv {reqConfig.requiredLevel}
+                    </Text>
+                  </View>
+                )}
+                {isLevelUnlockedFree && (
+                  <Sparkles size={11} color="#34D399" />
+                )}
               </View>
             </TouchableOpacity>
           );

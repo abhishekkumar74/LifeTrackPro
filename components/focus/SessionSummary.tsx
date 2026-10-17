@@ -21,6 +21,7 @@ import Animated, {
 
 import { Frown, Meh, Smile, SmilePlus, Zap, LucideIcon } from 'lucide-react-native';
 import { AdInterstitial } from '@/components/ads';
+import { calculateSessionXP } from '@/lib/utils/focus-rewards';
 
 interface SessionSummaryProps {
   isVisible: boolean;
@@ -107,10 +108,19 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
     }
   }, [isVisible]);
 
-  // Award Focus XP: Base 20 XP + 2 XP per min + strict mode bonus
-  const durationBonus = Math.floor(duration * 2);
-  const strictBonus = isStrictMode ? (hasViolation ? 5 : 25) : 0;
-  const calculatedXP = 20 + durationBonus + strictBonus;
+  // Award Focus XP: Balanced, scaled formula preventing 1-min spam exploits
+  const calculatedXP = calculateSessionXP({
+    durationMinutes: duration,
+    isStrictMode,
+    hasViolation,
+    accuracy: isStrictMode
+      ? selectedAccuracy
+      : selectedMood && selectedMood >= 4
+      ? 'fully_focused'
+      : selectedMood === 3
+      ? 'partially_distracted'
+      : 'off_track',
+  });
 
   const handleSave = async () => {
     if (isSaving) return;

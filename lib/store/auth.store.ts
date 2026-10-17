@@ -14,6 +14,7 @@ interface AuthState {
   isLoading: boolean;
   setSession: (session: Session | null) => void;
   setProfile: (profile: UserProfile | null) => void;
+  deductXp: (amount: number) => boolean;
   setLoading: (isLoading: boolean) => void;
   clearAuth: () => void;
   signOut: () => Promise<void>;
@@ -31,7 +32,45 @@ export const useAuthStore = create<AuthState>()(
           session,
           user: session ? session.user : null,
         }),
-      setProfile: (profile) => set({ profile }),
+      setProfile: (incomingProfile) =>
+        set((state) => {
+          if (!incomingProfile) return { profile: null };
+          if (!state.profile) return { profile: incomingProfile };
+
+          // Defensive Protection: Never allow XP, Level, or Focus Seeds to decrease
+          // due to stale network cache, offline mode, or subscription status changes
+          const safeXp = Math.max(Number(state.profile.xp_points || 0), Number(incomingProfile.xp_points || 0));
+          const safeLevel = Math.max(Number(state.profile.level || 1), Number(incomingProfile.level || 1));
+          const safeSeeds = Math.max(Number(state.profile.focus_seeds || 0), Number(incomingProfile.focus_seeds || 0));
+
+          return {
+            profile: {
+              ...state.profile,
+              ...incomingProfile,
+              xp_points: safeXp,
+              level: safeLevel,
+              focus_seeds: safeSeeds,
+            },
+          };
+        }),
+      deductXp: (amount: number) => {
+        let success = false;
+        set((state) => {
+          if (!state.profile) return state;
+          const currentXp = Number(state.profile.xp_points || 0);
+          if (currentXp < amount) return state;
+          success = true;
+          const newXp = currentXp - amount;
+          return {
+            profile: {
+              ...state.profile,
+              xp_points: newXp,
+              focus_seeds: newXp,
+            },
+          };
+        });
+        return success;
+      },
       setLoading: (isLoading) => set({ isLoading }),
       clearAuth: () =>
         set({

@@ -53,6 +53,11 @@ import {
   VolumeX,
   Volume1,
   Sparkles,
+  CloudRain,
+  Coffee,
+  Waves,
+  Music,
+  Radio,
 } from 'lucide-react-native';
 import { trackEvent } from '@/lib/posthog';
 import { FocusLiveActivity } from '@/lib/native/live-activity';
@@ -75,15 +80,17 @@ export const playRewardingCompletionHaptics = async () => {
   }
 };
 
-export const calculateFocusLevel = (xp: number) => {
-  if (xp >= 2000) return { level: 7, title: 'Grandmaster', nextXp: null, prevXp: 2000 };
-  if (xp >= 1400) return { level: 6, title: 'Focus Virtuoso', nextXp: 2000, prevXp: 1400 };
-  if (xp >= 900) return { level: 5, title: 'Master of Flow', nextXp: 1400, prevXp: 900 };
-  if (xp >= 500) return { level: 4, title: 'Deep Worker', nextXp: 900, prevXp: 500 };
-  if (xp >= 250) return { level: 3, title: 'Flow Specialist', nextXp: 500, prevXp: 250 };
-  if (xp >= 100) return { level: 2, title: 'Steady Achiever', nextXp: 250, prevXp: 100 };
-  return { level: 1, title: 'Focus Novice', nextXp: 100, prevXp: 0 };
-};
+import {
+  calculateFocusLevel,
+  calculateSessionXP,
+  isSoundUnlocked,
+  SOUND_REWARD_LEVELS,
+  getStreakShieldCount,
+  setStreakShieldCount,
+  STREAK_SHIELD_XP_COST,
+  MAX_STREAK_SHIELDS,
+} from '@/lib/utils/focus-rewards';
+export { calculateFocusLevel };
 
 const REWARD_THEMES = [
   { id: 'default', name: 'Indigo Core', color: '#5B4FE8', requiredLevel: 1, requiredXp: 0, desc: 'Clean default indigo focus theme' },
@@ -351,8 +358,60 @@ export default function FocusScreen(): React.JSX.Element {
   const [rewardsModalOpen, setRewardsModalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [soundSheetOpen, setSoundSheetOpen] = useState(false);
+  const [streakShields, setStreakShields] = useState<number>(1);
+  const [isForgingShield, setIsForgingShield] = useState(false);
   const lastActiveSoundRef = useRef<SoundKey>('rain');
   const backgroundStartTimestampRef = useRef<number | null>(null);
+
+  // Load streak shields from storage
+  useEffect(() => {
+    getStreakShieldCount().then((count) => setStreakShields(count));
+  }, []);
+
+  const handleBuyStreakShield = async () => {
+    if (isForgingShield) return;
+    if (streakShields >= MAX_STREAK_SHIELDS) {
+      useUiStore.getState().showToast('Shield Vault Full! You have maximum 3/3 shields.', 'info');
+      return;
+    }
+    const currentXp = profile?.xp_points || 0;
+    if (currentXp < STREAK_SHIELD_XP_COST) {
+      Alert.alert(
+        'Need More Focus XP ⚡',
+        `Forging a Streak Shield requires ${STREAK_SHIELD_XP_COST} XP.\nYou currently have ${currentXp} XP.\n\nComplete focus sessions to earn XP!`,
+        [{ text: 'Got It' }]
+      );
+      return;
+    }
+
+    setIsForgingShield(true);
+    try {
+      const success = useAuthStore.getState().deductXp(STREAK_SHIELD_XP_COST);
+      if (success) {
+        const newShields = streakShields + 1;
+        setStreakShields(newShields);
+        await setStreakShieldCount(newShields);
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        // Sync deducted XP to Supabase in background
+        const session = (await supabase.auth.getSession()).data.session;
+        if (session) {
+          const newXp = currentXp - STREAK_SHIELD_XP_COST;
+          supabase
+            .from('profiles')
+            .update({ xp_points: newXp, focus_seeds: newXp })
+            .eq('id', session.user.id)
+            .then(() => {}, () => {});
+        }
+
+        useUiStore.getState().showToast('🛡️ Streak Shield Forged! Streak is protected.', 'success');
+      }
+    } catch {
+      useUiStore.getState().showToast('Failed to forge shield. Please try again.', 'error');
+    } finally {
+      setIsForgingShield(false);
+    }
+  };
 
   // AppState listener for Strict focus mode accountability
   useEffect(() => {
@@ -614,7 +673,12 @@ export default function FocusScreen(): React.JSX.Element {
       if (status === 'completed') {
         const earned = seedsEarned && seedsEarned > 0
           ? seedsEarned
-          : Math.max(20, 20 + dbDuration * 2 + (isStrictModeActive && !isStrictViolated ? 25 : 0));
+          : calculateSessionXP({
+              durationMinutes: dbDuration,
+              isStrictMode: isStrictModeActive,
+              hasViolation: isStrictViolated,
+              accuracy: focusAccuracy || (mood && mood >= 4 ? 'fully_focused' : null),
+            });
 
         const currentXp = Number(profile?.xp_points || 0);
         const newXp = currentXp + earned;
@@ -796,7 +860,12 @@ export default function FocusScreen(): React.JSX.Element {
           if (status === 'completed') {
             const earned = seedsEarned && seedsEarned > 0
               ? seedsEarned
-              : Math.max(20, 20 + dbDuration * 2 + (isStrictModeActive && !isStrictViolated ? 25 : 0));
+              : calculateSessionXP({
+                  durationMinutes: dbDuration,
+                  isStrictMode: isStrictModeActive,
+                  hasViolation: isStrictViolated,
+                  accuracy: focusAccuracy || (mood && mood >= 4 ? 'fully_focused' : null),
+                });
             const currentXp = Number(profile?.xp_points || 0);
             const newXp = currentXp + earned;
             const currentLevel = Number(profile?.level || 1);
@@ -943,11 +1012,16 @@ export default function FocusScreen(): React.JSX.Element {
   const handleSoundSelect = useCallback(async (key: SoundKey | null) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    // Opt-in Rewarded Video Ad for unlocking premium ambient soundscapes (ONLY for Non-Premium users)
-    if (!isPremium && key && (key === 'lofi' || key === 'cafe' || key === 'brown_noise' || key === 'ocean')) {
+    // Check if user has unlocked this sound via Level/XP or Premium
+    const userLevel = profile?.level || 1;
+    const userXp = profile?.xp_points || 0;
+    const unlocked = isSoundUnlocked(key, isPremium, userLevel, userXp);
+
+    if (!unlocked && key) {
+      const reqConfig = SOUND_REWARD_LEVELS.find((s) => s.key === key);
       Alert.alert(
-        'Unlock Soundscape 🎧',
-        `Upgrade to Gold for unlimited access, or watch a short video ad to unlock ${key.toUpperCase().replace('_', ' ')} for this focus session.`,
+        `Unlock ${reqConfig?.label || 'Soundscape'} 🎧`,
+        `Earn ${reqConfig?.requiredXp || 250} XP (Reach Level ${reqConfig?.requiredLevel || 3}) to unlock permanently for FREE, or watch a quick ad to use for this session!`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -975,7 +1049,7 @@ export default function FocusScreen(): React.JSX.Element {
     } else {
       await ambient.stop();
     }
-  }, [isPremium, setSound, ambient, soundVolume]);
+  }, [isPremium, profile?.level, profile?.xp_points, setSound, ambient, soundVolume]);
 
   const handleVolumeChange = useCallback(async (vol: number) => {
     setVolume(vol);
@@ -1467,8 +1541,149 @@ export default function FocusScreen(): React.JSX.Element {
             );
           })()}
 
+          {/* Section: Streak Shield Protection Vault */}
+          <View style={[styles.sectionHeaderRow, { marginTop: 10 }]}>
+            <Text style={styles.rewardsSectionHeading}>STREAK SHIELD VAULT</Text>
+            <Text style={styles.sectionHeaderSub}>
+              {streakShields} of {MAX_STREAK_SHIELDS} Active
+            </Text>
+          </View>
+
+          <View style={styles.vaultCard}>
+            <View style={styles.vaultHeaderRow}>
+              <View style={styles.vaultIconContainer}>
+                <Shield size={20} color="#38BDF8" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={styles.vaultTitle}>Focus Streak Protection</Text>
+                <Text style={styles.vaultSubtitle}>
+                  Forged with XP to save your daily streak if you miss a study day.
+                </Text>
+              </View>
+            </View>
+
+            {/* Visual 3 Shield Slots */}
+            <View style={styles.shieldVisualRow}>
+              {[0, 1, 2].map((idx) => {
+                const isFilled = idx < streakShields;
+                return (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.shieldSlot,
+                      isFilled ? styles.shieldSlotFilled : styles.shieldSlotEmpty,
+                    ]}
+                  >
+                    <Shield
+                      size={20}
+                      color={isFilled ? '#38BDF8' : '#475569'}
+                      fill={isFilled ? 'rgba(56, 189, 248, 0.25)' : 'transparent'}
+                    />
+                    <Text style={[styles.shieldSlotText, isFilled && styles.shieldSlotTextFilled]}>
+                      {isFilled ? 'Protected' : 'Empty Slot'}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Action Bar */}
+            <View style={styles.vaultFooterRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Zap size={14} color="#F59E0B" />
+                <Text style={styles.vaultCostText}>{STREAK_SHIELD_XP_COST} XP per shield</Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.forgeShieldBtn,
+                  (streakShields >= MAX_STREAK_SHIELDS || (profile?.xp_points || 0) < STREAK_SHIELD_XP_COST) &&
+                    styles.forgeShieldBtnDisabled,
+                ]}
+                onPress={handleBuyStreakShield}
+                disabled={isForgingShield || streakShields >= MAX_STREAK_SHIELDS}
+                activeOpacity={0.8}
+              >
+                {isForgingShield ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.forgeShieldBtnText}>
+                    {streakShields >= MAX_STREAK_SHIELDS ? 'Vault Full' : 'Forge Shield 🛡️'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Section: Unlockable Soundscapes */}
+          <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
+            <Text style={styles.rewardsSectionHeading}>AMBIENT SOUNDSCAPES</Text>
+            <Text style={styles.sectionHeaderSub}>Free XP Level Unlocks</Text>
+          </View>
+
+          {SOUND_REWARD_LEVELS.map((sound) => {
+            const currentXp = profile?.xp_points || 0;
+            const currentLevel = profile?.level || 1;
+            const isUnlocked = isSoundUnlocked(sound.key, isPremium, currentLevel, currentXp);
+            const isCurrent = activeSound === sound.key;
+            
+            const IconComp = sound.key === 'rain'
+              ? CloudRain
+              : sound.key === 'ocean'
+              ? Waves
+              : sound.key === 'cafe'
+              ? Coffee
+              : sound.key === 'lofi'
+              ? Music
+              : Radio;
+
+            return (
+              <View
+                key={sound.key}
+                style={[
+                  styles.soundRewardCard,
+                  isCurrent && styles.soundRewardCardActive,
+                ]}
+              >
+                <View style={[styles.soundRewardIconWrap, isUnlocked && styles.soundRewardIconWrapUnlocked]}>
+                  <IconComp size={18} color={isUnlocked ? '#60A5FA' : '#64748B'} />
+                </View>
+
+                <View style={styles.soundRewardInfo}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.soundRewardTitle}>{sound.label}</Text>
+                    {isCurrent && <View style={styles.activeMiniDot} />}
+                  </View>
+                  <Text style={[styles.soundRewardSub, !isUnlocked && styles.soundRewardSubLocked]}>
+                    {sound.isFree
+                      ? 'Available to all focusers'
+                      : isUnlocked
+                      ? isPremium ? 'Gold Member Benefit' : `Unlocked at Level ${sound.requiredLevel}`
+                      : `Unlocks at ${sound.requiredXp} XP (Level ${sound.requiredLevel})`}
+                  </Text>
+                </View>
+
+                {isUnlocked ? (
+                  <TouchableOpacity
+                    style={[styles.soundActionBtn, isCurrent && styles.soundActionBtnActive]}
+                    onPress={() => handleSoundSelect(sound.key as any)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.soundActionBtnText, isCurrent && styles.soundActionBtnTextActive]}>
+                      {isCurrent ? 'Playing' : 'Play'}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.lockedThemeBadge}>
+                    <Lock size={11} color="#6B7280" />
+                    <Text style={styles.lockedThemeText}>Lv {sound.requiredLevel}</Text>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+
           {/* Section: Unlockable Themes */}
-          <View style={styles.sectionHeaderRow}>
+          <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
             <Text style={styles.rewardsSectionHeading}>TIMER RING THEMES</Text>
             <Text style={styles.sectionHeaderSub}>
               {REWARD_THEMES.filter(t => isPremium || (profile?.xp_points || 0) >= t.requiredXp).length} of {REWARD_THEMES.length} Unlocked
@@ -1537,10 +1752,10 @@ export default function FocusScreen(): React.JSX.Element {
             );
           })}
 
-          {/* Section: Focus Milestones */}
-          <View style={[styles.sectionHeaderRow, { marginTop: 16 }]}>
+          {/* Section: Focus Milestones & Fair XP Rules */}
+          <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
             <Text style={styles.rewardsSectionHeading}>HOW TO EARN XP</Text>
-            <Text style={styles.sectionHeaderSub}>Automatic Multipliers</Text>
+            <Text style={styles.sectionHeaderSub}>Balanced & Fair Economy</Text>
           </View>
 
           <View style={styles.milestoneCard}>
@@ -1548,11 +1763,24 @@ export default function FocusScreen(): React.JSX.Element {
               <Zap size={16} color="#10B981" />
             </View>
             <View style={styles.milestoneInfo}>
-              <Text style={styles.milestoneTitle}>Focus Session Completion</Text>
-              <Text style={styles.milestoneDesc}>Base +20 XP + 2 XP for each focused minute</Text>
+              <Text style={styles.milestoneTitle}>Focus Time Duration</Text>
+              <Text style={styles.milestoneDesc}>Earn +2 XP for every focused minute of deep work</Text>
             </View>
             <View style={[styles.milestoneTag, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)' }]}>
-              <Text style={[styles.milestoneTagText, { color: '#34D399' }]}>+20+ XP</Text>
+              <Text style={[styles.milestoneTagText, { color: '#34D399' }]}>+2 XP / min</Text>
+            </View>
+          </View>
+
+          <View style={styles.milestoneCard}>
+            <View style={[styles.milestoneIconWrap, { backgroundColor: 'rgba(56, 189, 248, 0.15)' }]}>
+              <Award size={16} color="#38BDF8" />
+            </View>
+            <View style={styles.milestoneInfo}>
+              <Text style={styles.milestoneTitle}>Completion Milestone Bonus</Text>
+              <Text style={styles.milestoneDesc}>5m: +5 XP · 15m: +15 XP · 25m: +25 XP · 45m+: +40 XP</Text>
+            </View>
+            <View style={[styles.milestoneTag, { backgroundColor: 'rgba(56, 189, 248, 0.15)', borderColor: 'rgba(56, 189, 248, 0.3)' }]}>
+              <Text style={[styles.milestoneTagText, { color: '#38BDF8' }]}>Up to +40 XP</Text>
             </View>
           </View>
 
@@ -1562,10 +1790,10 @@ export default function FocusScreen(): React.JSX.Element {
             </View>
             <View style={styles.milestoneInfo}>
               <Text style={styles.milestoneTitle}>Strict Focus Mode Bonus</Text>
-              <Text style={styles.milestoneDesc}>Complete without leaving or switching apps</Text>
+              <Text style={styles.milestoneDesc}>Scaled accountability bonus when completed without leaving app</Text>
             </View>
             <View style={[styles.milestoneTag, { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)' }]}>
-              <Text style={[styles.milestoneTagText, { color: '#FBBF24' }]}>+25 XP</Text>
+              <Text style={[styles.milestoneTagText, { color: '#FBBF24' }]}>Up to +35 XP</Text>
             </View>
           </View>
 
@@ -1575,10 +1803,10 @@ export default function FocusScreen(): React.JSX.Element {
             </View>
             <View style={styles.milestoneInfo}>
               <Text style={styles.milestoneTitle}>Deep Flow State Reflection</Text>
-              <Text style={styles.milestoneDesc}>Reflect as "Fully Focused" in session summary</Text>
+              <Text style={styles.milestoneDesc}>Reflect honestly as "Fully Focused" in session summary</Text>
             </View>
             <View style={[styles.milestoneTag, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
-              <Text style={[styles.milestoneTagText, { color: '#C4B5FD' }]}>+15 XP</Text>
+              <Text style={[styles.milestoneTagText, { color: '#C4B5FD' }]}>Up to +15 XP</Text>
             </View>
           </View>
         </BottomSheetScrollView>
@@ -1803,6 +2031,8 @@ export default function FocusScreen(): React.JSX.Element {
             volume={soundVolume}
             onVolumeChange={handleVolumeChange}
             isPremium={isPremium}
+            userLevel={profile?.level || 1}
+            userXp={profile?.xp_points || 0}
             onPremiumTrigger={() => router.push('/paywall')}
           />
 
@@ -3022,5 +3252,187 @@ const styles = StyleSheet.create({
   muteAllTextActive: {
     color: '#A89EF8',
     fontWeight: '700',
+  },
+  // Streak Shield Vault Styles
+  vaultCard: {
+    backgroundColor: '#16192E',
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#38BDF8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  vaultHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  vaultIconContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+  },
+  vaultTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  vaultSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  shieldVisualRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginVertical: 4,
+  },
+  shieldSlot: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  shieldSlotFilled: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+  },
+  shieldSlotEmpty: {
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  shieldSlotText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  shieldSlotTextFilled: {
+    color: '#38BDF8',
+  },
+  vaultFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  vaultCostText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FBBF24',
+  },
+  forgeShieldBtn: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    shadowColor: '#38BDF8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  forgeShieldBtnDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  forgeShieldBtnText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  // Soundscape Reward Roadmap Styles
+  soundRewardCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.035)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 9,
+  },
+  soundRewardCardActive: {
+    backgroundColor: 'rgba(96, 165, 250, 0.12)',
+    borderColor: '#3B82F6',
+  },
+  soundRewardIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  soundRewardIconWrapUnlocked: {
+    backgroundColor: 'rgba(96, 165, 250, 0.15)',
+  },
+  soundRewardInfo: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+  soundRewardTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  soundRewardSub: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9494A8',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  soundRewardSubLocked: {
+    color: '#F59E0B',
+    fontWeight: '500',
+  },
+  soundActionBtn: {
+    backgroundColor: 'rgba(96, 165, 250, 0.18)',
+    borderColor: 'rgba(96, 165, 250, 0.4)',
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  soundActionBtnActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#60A5FA',
+  },
+  soundActionBtnText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#93C5FD',
+  },
+  soundActionBtnTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
 });
