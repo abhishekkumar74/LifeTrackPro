@@ -16,7 +16,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import BottomSheet, {
@@ -43,6 +43,8 @@ import {
   Trophy,
   Zap,
   Shield,
+  Clock,
+  X,
   Target,
   Check,
   Lock,
@@ -268,6 +270,17 @@ export default function FocusScreen(): React.JSX.Element {
       ScreenOrientation.unlockAsync().catch(() => {});
     };
   }, []);
+
+  // Ensure status bar is ALWAYS light-content (crisp white icons & text) when Focus tab is active
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('light-content', true);
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor('#111013', true);
+        StatusBar.setTranslucent(false);
+      }
+    }, [])
+  );
 
   // Store bindings
   const {
@@ -1108,11 +1121,21 @@ export default function FocusScreen(): React.JSX.Element {
               activeOpacity={0.7}
               accessibilityLabel="Back to Home"
             >
-              <Text style={styles.closeIconText}>✕</Text>
+              <X size={15} color="rgba(255, 255, 255, 0.85)" strokeWidth={2.2} />
             </TouchableOpacity>
 
             <View style={styles.topCenterContainer}>
-              <Text style={styles.topTodayText}>TODAY  {todayMinutes} min</Text>
+              <View style={styles.todayFocusCapsule}>
+                <Clock size={11} color="#A78BFA" strokeWidth={2.4} />
+                <Text style={styles.todayFocusLabel}>TODAY</Text>
+                <Text style={styles.todayFocusValue} numberOfLines={1}>
+                  {todayMinutes >= 60
+                    ? todayMinutes % 60 === 0
+                      ? `${Math.floor(todayMinutes / 60)}h`
+                      : `${Math.floor(todayMinutes / 60)}h ${todayMinutes % 60}m`
+                    : `${todayMinutes}m`}
+                </Text>
+              </View>
             </View>
 
             <View style={styles.topRightActions}>
@@ -2137,9 +2160,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   circleGlassBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.14)',
@@ -2159,19 +2182,36 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 4,
   },
-  topTodayText: {
-    fontFamily: 'DMMono',
-    fontSize: 13,
+  todayFocusCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
+    borderRadius: 14,
+  },
+  todayFocusLabel: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9,
+    color: '#8E8EA8',
+    letterSpacing: 0.8,
     fontWeight: '700',
-    letterSpacing: 2.2,
-    color: 'rgba(255, 255, 255, 0.75)',
-    textTransform: 'uppercase',
+  },
+  todayFocusValue: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   topRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   mainHeading: {
     fontFamily: 'InstrumentSerif',
