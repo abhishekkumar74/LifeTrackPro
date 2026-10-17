@@ -31,12 +31,14 @@ import {
   ChevronRight,
   FileText,
   Info,
+  KeyRound,
   Lock,
   LogOut,
   MessageSquare,
   Minus,
   Plus,
   Shield,
+  ShieldCheck,
   Star,
   Trash2,
   Upload,
@@ -64,6 +66,14 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 const CATEGORIES: UserCategory[] = ['student', 'cse_student', 'employee', 'creator', 'entrepreneur', 'educator', 'aspirant'];
 const PEAK_TIMES: ('morning' | 'afternoon' | 'night')[] = ['morning', 'afternoon', 'night'];
 const DURATIONS = [25, 50, 90];
+const DELETION_REASONS = [
+  'Too busy / Need to focus offline',
+  'Trouble getting started or not useful',
+  'Privacy or data security concerns',
+  'Created a second or fresh account',
+  'Too many reminders or notifications',
+  'Something else',
+];
 
 const SUBCATEGORIES: Record<UserCategory, string[]> = {
   cse_student: [
@@ -197,8 +207,35 @@ export default function ProfileScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { profile, setProfile, user } = useAuthStore();
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [accountModalView, setAccountModalView] = useState<'main' | 'change_password' | 'ownership' | 'deletion_wizard'>('main');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [deletionReason, setDeletionReason] = useState('');
+  const [deletionPassword, setDeletionPassword] = useState('');
+  const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  const isOAuthUser = useMemo(() => {
+    const provider = user?.app_metadata?.provider;
+    return Boolean(provider && provider !== 'email');
+  }, [user]);
+
+  const scheduledPurgeDate = useMemo(() => {
+    const d = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+  }, []);
+
+  const closeAccountModal = () => {
+    setIsAccountModalOpen(false);
+    setAccountModalView('main');
+    setNewPassword('');
+    setConfirmPassword('');
+    setDeletionPassword('');
+    setDeletionReason('');
+  };
+
   const showToast = useUiStore((state) => state.showToast);
   const { request: requestNotificationPermission } = useNotificationPermission();
 
@@ -624,71 +661,136 @@ export default function ProfileScreen(): React.JSX.Element {
     ]);
   };
 
-  const handleScheduleDeletion = () => {
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      Alert.alert('Invalid Password', 'New password must be at least 6 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Password Mismatch', 'The passwords you entered do not match.');
+      return;
+    }
+    try {
+      setIsChangingPassword(true);
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setNewPassword('');
+      setConfirmPassword('');
+      setAccountModalView('main');
+      showToast('Password updated successfully!', 'success');
+    } catch (err: any) {
+      Alert.alert('Update Failed', err.message || 'Could not update password. Please try again.');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handleDeactivateAccount = () => {
     Alert.alert(
-      'Schedule Account Deletion',
-      'Your account will be deactivated immediately and queued for deletion in 30 days.\n\nYou can log back in at any time within 30 days to cancel this request and restore all your data (streaks, habits, notes, goals, and XP points).',
+      'Deactivate Account?',
+      'Taking a break? Your profile and streaks will be temporarily hidden. You can reactivate your account at any time simply by logging back in.',
       [
-        { text: 'Keep Account', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Schedule Deletion',
+          text: 'Deactivate',
           style: 'destructive',
           onPress: async () => {
             try {
-              setIsDeletingAccount(true);
-              const currentUserId = user?.id || (await supabase.auth.getSession()).data.session?.user?.id;
-
-              if (currentUserId) {
-                // 1. Try RPC schedule_account_deletion
-                const { error: rpcError } = await supabase.rpc('schedule_account_deletion');
-
-                // 2. Fallback to direct update on profiles table if RPC is not created yet
-                if (rpcError) {
-                  if (__DEV__) console.warn('schedule_account_deletion RPC fallback:', rpcError.message);
-                  await supabase
-                    .from('profiles')
-                    .update({
-                      is_pending_deletion: true,
-                      deletion_scheduled_at: new Date().toISOString(),
-                    })
-                    .eq('id', currentUserId);
-                }
-              }
-
-              // 3. Close modal
-              setIsAccountModalOpen(false);
-
-              // 4. Cancel notifications and reset analytics
+              closeAccountModal();
               await cancelAllNotifications();
               resetUser();
-
-              // 5. Clear local AsyncStorage
-              await AsyncStorage.clear();
-
-              // 6. Clear query client & sign out
               queryClient.clear();
               await supabase.auth.signOut();
               useAuthStore.getState().clearAuth();
-
-              // 7. Route to login and notify user
               router.replace('/login');
-              Alert.alert(
-                'Account Deactivated',
-                'Your account has been deactivated and scheduled for deletion in 30 days. You can log back in anytime to restore it.'
-              );
+              Alert.alert('Account Deactivated', 'Your account is now taking a break. Log back in anytime to reactivate.');
             } catch (err: any) {
-              if (__DEV__) console.error('Error scheduling account deletion:', err);
-              Alert.alert(
-                'Action Failed',
-                'Could not schedule account deletion. Please check your internet connection or contact support@lifetrackpro.com.'
-              );
-            } finally {
-              setIsDeletingAccount(false);
+              if (__DEV__) console.warn('Error deactivating account:', err);
             }
           },
         },
       ]
     );
+  };
+
+  const handleScheduleDeletion = async () => {
+    if (!deletionReason) {
+      Alert.alert('Reason Required', 'Please select a reason why you are leaving.');
+      return;
+    }
+
+    if (!isOAuthUser) {
+      if (!deletionPassword.trim()) {
+        Alert.alert('Password Required', 'Please enter your password to confirm identity.');
+        return;
+      }
+      setIsVerifyingPassword(true);
+      const { error: authErr } = await supabase.auth.signInWithPassword({
+        email: user?.email || '',
+        password: deletionPassword,
+      });
+      setIsVerifyingPassword(false);
+
+      if (authErr) {
+        Alert.alert('Incorrect Password', 'The password you entered is incorrect. Please check and try again.');
+        return;
+      }
+    } else {
+      if (deletionPassword.trim().toUpperCase() !== 'DELETE') {
+        Alert.alert('Confirmation Required', 'Please type DELETE in capital letters to confirm.');
+        return;
+      }
+    }
+
+    try {
+      setIsDeletingAccount(true);
+      const currentUserId = user?.id || (await supabase.auth.getSession()).data.session?.user?.id;
+
+      if (currentUserId) {
+        // 1. Try RPC schedule_account_deletion
+        const { error: rpcError } = await supabase.rpc('schedule_account_deletion');
+
+        // 2. Fallback to direct update on profiles table if RPC is not created yet
+        if (rpcError) {
+          if (__DEV__) console.warn('schedule_account_deletion RPC fallback:', rpcError.message);
+          await supabase
+            .from('profiles')
+            .update({
+              is_pending_deletion: true,
+              deletion_scheduled_at: new Date().toISOString(),
+            })
+            .eq('id', currentUserId);
+        }
+      }
+
+      // Close modal & reset fields
+      closeAccountModal();
+
+      // Cancel notifications and reset analytics
+      await cancelAllNotifications();
+      resetUser();
+
+      // Clear local storage & sign out
+      await AsyncStorage.clear();
+      queryClient.clear();
+      await supabase.auth.signOut();
+      useAuthStore.getState().clearAuth();
+
+      // Route to login and notify user
+      router.replace('/login');
+      Alert.alert(
+        'Account Deactivated',
+        `Your account has been deactivated and scheduled for permanent deletion on ${scheduledPurgeDate}. You can log back in anytime before this date to cancel.`
+      );
+    } catch (err: any) {
+      if (__DEV__) console.error('Error scheduling account deletion:', err);
+      Alert.alert(
+        'Action Failed',
+        'Could not schedule account deletion. Please check your internet connection or contact support@lifetrackpro.com.'
+      );
+    } finally {
+      setIsDeletingAccount(false);
+    }
   };
 
   const getCategoryDisplay = () => {
@@ -1270,15 +1372,35 @@ export default function ProfileScreen(): React.JSX.Element {
         visible={isAccountModalOpen}
         animationType="fade"
         transparent
-        onRequestClose={() => setIsAccountModalOpen(false)}
+        onRequestClose={closeAccountModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.accountModalCard}>
             {/* Header */}
             <View style={styles.accountModalHeader}>
-              <Text style={styles.accountModalTitle}>Account Settings</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                {accountModalView !== 'main' && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (accountModalView === 'deletion_wizard') setAccountModalView('ownership');
+                      else setAccountModalView('main');
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={styles.accountModalBackBtn}
+                    activeOpacity={0.7}
+                  >
+                    <ArrowLeft size={18} color="#17172A" />
+                  </TouchableOpacity>
+                )}
+                <Text style={styles.accountModalTitle}>
+                  {accountModalView === 'main' && 'Account Settings'}
+                  {accountModalView === 'change_password' && 'Change Password'}
+                  {accountModalView === 'ownership' && 'Ownership & Control'}
+                  {accountModalView === 'deletion_wizard' && 'Delete Account'}
+                </Text>
+              </View>
               <TouchableOpacity
-                onPress={() => setIsAccountModalOpen(false)}
+                onPress={closeAccountModal}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 style={styles.accountModalCloseBtn}
                 activeOpacity={0.7}
@@ -1288,49 +1410,281 @@ export default function ProfileScreen(): React.JSX.Element {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-              {/* Account Details Box */}
-              <View style={styles.accountInfoBox}>
-                <View style={styles.accountInfoRow}>
-                  <Text style={styles.accountInfoLabel}>Email</Text>
-                  <Text style={styles.accountInfoVal} numberOfLines={1}>
-                    {user?.email || profile?.name || 'Authenticated User'}
-                  </Text>
-                </View>
-                <View style={[styles.accountInfoRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
-                  <Text style={styles.accountInfoLabel}>Status</Text>
-                  <View style={styles.activeBadge}>
-                    <View style={styles.activeDot} />
-                    <Text style={styles.activeBadgeText}>Active</Text>
+              {/* ================= VIEW 1: MAIN ACCOUNT SETTINGS ================= */}
+              {accountModalView === 'main' && (
+                <>
+                  {/* Section 1: Personal Details */}
+                  <Text style={styles.accountSectionLabel}>PERSONAL DETAILS</Text>
+                  <View style={styles.accountInfoBox}>
+                    <View style={styles.accountInfoRow}>
+                      <Text style={styles.accountInfoLabel}>Email</Text>
+                      <Text style={styles.accountInfoVal} numberOfLines={1}>
+                        {user?.email || profile?.name || 'Authenticated User'}
+                      </Text>
+                    </View>
+                    <View style={styles.accountInfoRow}>
+                      <Text style={styles.accountInfoLabel}>Member Since</Text>
+                      <Text style={styles.accountInfoVal}>
+                        {profile?.created_at
+                          ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                          : 'Active Member'}
+                      </Text>
+                    </View>
+                    <View style={styles.accountInfoRow}>
+                      <Text style={styles.accountInfoLabel}>Subscription</Text>
+                      <Text style={styles.accountInfoVal}>
+                        {profile?.is_premium ? 'LifeTrack Pro Premium' : 'Free Tier'}
+                      </Text>
+                    </View>
+                    <View style={[styles.accountInfoRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                      <Text style={styles.accountInfoLabel}>Status</Text>
+                      <View style={styles.activeBadge}>
+                        <View style={styles.activeDot} />
+                        <Text style={styles.activeBadgeText}>Active</Text>
+                      </View>
+                    </View>
                   </View>
-                </View>
-              </View>
 
-              {/* 30-Day Recovery Info Card */}
-              <View style={styles.recoveryNoticeCard}>
-                <View style={styles.recoveryNoticeHeader}>
-                  <Info size={16} color="#5B4FE8" />
-                  <Text style={styles.recoveryNoticeTitle}>30-Day Recovery Guarantee</Text>
-                </View>
-                <Text style={styles.recoveryNoticeDesc}>
-                  If you decide to schedule account deletion, your profile will be deactivated immediately. LifeTrack Pro safely reserves your data for 30 days. You can log back in at any time within 30 days to cancel the deletion and restore all your study streaks, notes, XP, and habits.
-                </Text>
-              </View>
+                  {/* Section 2: Security & Login */}
+                  <Text style={styles.accountSectionLabel}>SECURITY & LOGIN</Text>
+                  <View style={styles.accountMenuBox}>
+                    {!isOAuthUser && (
+                      <TouchableOpacity
+                        style={styles.accountMenuRow}
+                        onPress={() => setAccountModalView('change_password')}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.accountMenuIconCircle}>
+                          <KeyRound size={16} color="#5B4FE8" />
+                        </View>
+                        <View style={styles.accountMenuTextCol}>
+                          <Text style={styles.accountMenuTitle}>Change Password</Text>
+                          <Text style={styles.accountMenuSub}>Update your login password</Text>
+                        </View>
+                        <ChevronRight size={16} color="#9B9BAF" />
+                      </TouchableOpacity>
+                    )}
+                    <View style={[styles.accountMenuRow, { borderBottomWidth: 0 }]}>
+                      <View style={styles.accountMenuIconCircle}>
+                        <ShieldCheck size={16} color="#1EAA6B" />
+                      </View>
+                      <View style={styles.accountMenuTextCol}>
+                        <Text style={styles.accountMenuTitle}>Login Security</Text>
+                        <Text style={styles.accountMenuSub}>Protected on this active device</Text>
+                      </View>
+                      <Check size={16} color="#1EAA6B" />
+                    </View>
+                  </View>
 
-              {/* Discreet Danger Zone Link */}
-              <View style={styles.dangerZoneBox}>
-                <TouchableOpacity
-                  style={styles.scheduleDeletionBtn}
-                  onPress={handleScheduleDeletion}
-                  activeOpacity={0.7}
-                  disabled={isDeletingAccount}
-                >
-                  {isDeletingAccount ? (
-                    <ActivityIndicator size="small" color="#E85858" />
-                  ) : (
-                    <Text style={styles.scheduleDeletionText}>Schedule Account Deletion (30-Day Grace)</Text>
+                  {/* Section 3: Account Ownership & Control (Where Deletion is deeply nested!) */}
+                  <Text style={styles.accountSectionLabel}>ACCOUNT CONTROL</Text>
+                  <View style={styles.accountMenuBox}>
+                    <TouchableOpacity
+                      style={[styles.accountMenuRow, { borderBottomWidth: 0 }]}
+                      onPress={() => setAccountModalView('ownership')}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.accountMenuIconCircle}>
+                        <Lock size={16} color="#717182" />
+                      </View>
+                      <View style={styles.accountMenuTextCol}>
+                        <Text style={styles.accountMenuTitle}>Account Ownership & Control</Text>
+                        <Text style={styles.accountMenuSub}>Deactivation or deletion options</Text>
+                      </View>
+                      <ChevronRight size={16} color="#9B9BAF" />
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+
+              {/* ================= VIEW 2: CHANGE PASSWORD ================= */}
+              {accountModalView === 'change_password' && (
+                <View style={styles.formContainer}>
+                  <Text style={styles.formInstructions}>
+                    Enter a new password for your LifeTrack Pro account. Passwords must be at least 6 characters long.
+                  </Text>
+                  <View style={styles.formInputGroup}>
+                    <Text style={styles.formInputLabel}>New Password</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="At least 6 characters"
+                      placeholderTextColor="#9B9BAF"
+                      secureTextEntry
+                      value={newPassword}
+                      onChangeText={setNewPassword}
+                    />
+                  </View>
+                  <View style={styles.formInputGroup}>
+                    <Text style={styles.formInputLabel}>Confirm New Password</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Re-type new password"
+                      placeholderTextColor="#9B9BAF"
+                      secureTextEntry
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.primaryActionBtn, isChangingPassword && { opacity: 0.7 }]}
+                    onPress={handleChangePassword}
+                    disabled={isChangingPassword}
+                    activeOpacity={0.8}
+                  >
+                    {isChangingPassword ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.primaryActionBtnText}>Update Password</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* ================= VIEW 3: OWNERSHIP & CONTROL ================= */}
+              {accountModalView === 'ownership' && (
+                <View style={styles.ownershipContainer}>
+                  <Text style={styles.ownershipSubtitle}>
+                    Choose whether you want to take a temporary break or schedule permanent account deletion.
+                  </Text>
+
+                  {/* Option 1: Temporary Deactivation */}
+                  <TouchableOpacity
+                    style={styles.ownershipCard}
+                    onPress={handleDeactivateAccount}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.ownershipCardHeader}>
+                      <View style={[styles.ownershipIconCircle, { backgroundColor: '#F0EFFB' }]}>
+                        <Lock size={18} color="#5B4FE8" />
+                      </View>
+                      <View style={styles.ownershipCardTitleCol}>
+                        <Text style={styles.ownershipCardTitle}>Deactivate Account (Temporary)</Text>
+                        <Text style={styles.ownershipCardDesc}>
+                          Taking a break? Deactivating your account is temporary. Your streaks and profile will be hidden until you log back in.
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.ownershipCardActionRow}>
+                      <Text style={styles.deactivateActionText}>Take a break</Text>
+                      <ChevronRight size={14} color="#5B4FE8" />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Option 2: Schedule Deletion */}
+                  <TouchableOpacity
+                    style={[styles.ownershipCard, { borderColor: '#F2D4D4' }]}
+                    onPress={() => setAccountModalView('deletion_wizard')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.ownershipCardHeader}>
+                      <View style={[styles.ownershipIconCircle, { backgroundColor: '#FDF2F2' }]}>
+                        <Trash2 size={18} color="#E85858" />
+                      </View>
+                      <View style={styles.ownershipCardTitleCol}>
+                        <Text style={[styles.ownershipCardTitle, { color: '#E85858' }]}>
+                          Delete Account (30-Day Grace)
+                        </Text>
+                        <Text style={styles.ownershipCardDesc}>
+                          Deleting your account is permanent after 30 days. You have 30 days to log back in and cancel before data is wiped.
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.ownershipCardActionRow}>
+                      <Text style={[styles.deactivateActionText, { color: '#E85858' }]}>Continue to deletion</Text>
+                      <ChevronRight size={14} color="#E85858" />
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* ================= VIEW 4: DELETION WIZARD ================= */}
+              {accountModalView === 'deletion_wizard' && (
+                <View style={styles.wizardContainer}>
+                  {/* Step A: Reason Selector */}
+                  <Text style={styles.wizardSectionTitle}>1. Why are you leaving?</Text>
+                  <Text style={styles.wizardSubtitle}>Please select a reason to help us improve LifeTrack Pro:</Text>
+
+                  <View style={styles.reasonsList}>
+                    {DELETION_REASONS.map((r) => {
+                      const isSelected = deletionReason === r;
+                      return (
+                        <TouchableOpacity
+                          key={r}
+                          style={[styles.reasonRow, isSelected && styles.reasonRowSelected]}
+                          onPress={() => setDeletionReason(r)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[styles.radioCircle, isSelected && styles.radioCircleSelected]}>
+                            {isSelected && <View style={styles.radioDot} />}
+                          </View>
+                          <Text style={[styles.reasonRowText, isSelected && styles.reasonRowTextSelected]}>
+                            {r}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Contextual Tip if "Too busy" is selected */}
+                  {deletionReason === 'Too busy / Need to focus offline' && (
+                    <View style={styles.retentionTipBox}>
+                      <Info size={15} color="#5B4FE8" />
+                      <Text style={styles.retentionTipText}>
+                        💡 Tip: You can pause study notifications in Preferences without losing your focus streaks or XP points!
+                      </Text>
+                    </View>
                   )}
-                </TouchableOpacity>
-              </View>
+
+                  {/* Step B: Identity Verification */}
+                  <Text style={[styles.wizardSectionTitle, { marginTop: 20 }]}>2. Confirm your identity</Text>
+                  <Text style={styles.wizardSubtitle}>
+                    {isOAuthUser
+                      ? 'For your security, please type DELETE below in capital letters:'
+                      : 'For your security, please re-enter your LifeTrack Pro account password:'}
+                  </Text>
+                  <TextInput
+                    style={styles.wizardInput}
+                    placeholder={isOAuthUser ? 'Type DELETE' : 'Enter your password'}
+                    placeholderTextColor="#9B9BAF"
+                    secureTextEntry={!isOAuthUser}
+                    value={deletionPassword}
+                    onChangeText={setDeletionPassword}
+                    autoCapitalize={isOAuthUser ? 'characters' : 'none'}
+                  />
+
+                  {/* Step C: 30-Day Notice Banner */}
+                  <View style={styles.recoveryNoticeCard}>
+                    <View style={styles.recoveryNoticeHeader}>
+                      <Info size={16} color="#5B4FE8" />
+                      <Text style={styles.recoveryNoticeTitle}>30-Day Grace Period</Text>
+                    </View>
+                    <Text style={styles.recoveryNoticeDesc}>
+                      Your account will be deactivated today. You will have until{' '}
+                      <Text style={{ fontWeight: '700', color: '#17172A' }}>{scheduledPurgeDate}</Text> to log back in
+                      and cancel. After this date, all your data will be permanently wiped.
+                    </Text>
+                  </View>
+
+                  {/* Step D: Final Submit Button */}
+                  <TouchableOpacity
+                    style={[
+                      styles.finalDeleteBtn,
+                      (!deletionReason || !deletionPassword.trim() || isDeletingAccount || isVerifyingPassword) && {
+                        opacity: 0.45,
+                      },
+                    ]}
+                    onPress={handleScheduleDeletion}
+                    disabled={!deletionReason || !deletionPassword.trim() || isDeletingAccount || isVerifyingPassword}
+                    activeOpacity={0.8}
+                  >
+                    {isDeletingAccount || isVerifyingPassword ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.finalDeleteBtnText}>Schedule Account Deletion</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -1663,20 +2017,28 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-    maxHeight: '85%',
+    maxHeight: '88%',
   },
   accountModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F2F1EE',
   },
+  accountModalBackBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   accountModalTitle: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: '#17172A',
   },
@@ -1687,6 +2049,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F7',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  accountSectionLabel: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9B9BAF',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginTop: 4,
   },
   accountInfoBox: {
     backgroundColor: '#F8F8FA',
@@ -1736,11 +2107,250 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#1EAA6B',
   },
+  accountMenuBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#ECECF0',
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  accountMenuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F7',
+  },
+  accountMenuIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F5F5F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  accountMenuTextCol: {
+    flex: 1,
+  },
+  accountMenuTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#17172A',
+  },
+  accountMenuSub: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#8A8A9E',
+    marginTop: 1,
+  },
+  formContainer: {
+    paddingVertical: 6,
+  },
+  formInstructions: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  formInputGroup: {
+    marginBottom: 14,
+  },
+  formInputLabel: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#4B5563',
+    marginBottom: 6,
+  },
+  formInput: {
+    backgroundColor: '#F8F8FA',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    height: 44,
+    paddingHorizontal: 12,
+    fontFamily: 'DMSans',
+    fontSize: 14,
+    color: '#17172A',
+  },
+  primaryActionBtn: {
+    backgroundColor: '#5B4FE8',
+    borderRadius: 12,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    marginBottom: 16,
+  },
+  primaryActionBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  ownershipContainer: {
+    paddingVertical: 6,
+  },
+  ownershipSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  ownershipCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  ownershipCardHeader: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  ownershipIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ownershipCardTitleCol: {
+    flex: 1,
+  },
+  ownershipCardTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#17172A',
+    marginBottom: 4,
+  },
+  ownershipCardDesc: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 17,
+  },
+  ownershipCardActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#F5F5F7',
+    paddingTop: 10,
+  },
+  deactivateActionText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5B4FE8',
+  },
+  wizardContainer: {
+    paddingVertical: 6,
+  },
+  wizardSectionTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#17172A',
+    marginBottom: 4,
+  },
+  wizardSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  reasonsList: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  reasonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F8FA',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  reasonRowSelected: {
+    borderColor: '#5B4FE8',
+    backgroundColor: '#F5F4FE',
+  },
+  radioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#9CA3AF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioCircleSelected: {
+    borderColor: '#5B4FE8',
+  },
+  radioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#5B4FE8',
+  },
+  reasonRowText: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#374151',
+    flex: 1,
+  },
+  reasonRowTextSelected: {
+    fontFamily: 'DMSans-Medium',
+    color: '#17172A',
+    fontWeight: '600',
+  },
+  retentionTipBox: {
+    flexDirection: 'row',
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  retentionTipText: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#3730A3',
+    lineHeight: 17,
+    flex: 1,
+  },
+  wizardInput: {
+    backgroundColor: '#F8F8FA',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    height: 44,
+    paddingHorizontal: 12,
+    fontFamily: 'DMSans',
+    fontSize: 14,
+    color: '#17172A',
+    marginBottom: 16,
+  },
   recoveryNoticeCard: {
     backgroundColor: '#F5F4FE',
     borderRadius: 14,
-    padding: 16,
-    marginBottom: 20,
+    padding: 14,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#E7E4FD',
   },
@@ -1748,11 +2358,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   recoveryNoticeTitle: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 14,
+    fontSize: 13,
     color: '#342CA6',
   },
   recoveryNoticeDesc: {
@@ -1761,20 +2371,19 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: '#5C5887',
   },
-  dangerZoneBox: {
-    paddingTop: 4,
-    paddingBottom: 12,
+  finalDeleteBtn: {
+    backgroundColor: '#E85858',
+    borderRadius: 12,
+    height: 46,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
-  scheduleDeletionBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  scheduleDeletionText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 13,
-    color: '#C94545',
-    textDecorationLine: 'underline',
+  finalDeleteBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   sheetContent: {
     paddingHorizontal: 20,
