@@ -131,7 +131,8 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
   });
 
   const animatedKnobStyle = useAnimatedStyle(() => {
-    const angleDeg = animatedProgress.value * 360;
+    // Anticlockwise rotation from 12 o'clock
+    const angleDeg = -animatedProgress.value * 360;
     return {
       transform: [{ rotate: `${angleDeg}deg` }],
     };
@@ -212,18 +213,18 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           fill={`url(#${auraGradId})`}
         />
 
-        {/* Shaded Progress Sector (Wedge / Color Fade) */}
+        {/* Shaded Progress Sector (Anticlockwise Color Fade Wedge) */}
         <AnimatedCircle
           cx={center}
           cy={center}
           r={sectorRadius}
-          stroke={isNightMode ? 'rgba(255, 59, 48, 0.32)' : hexToRgba(accentColor, 0.25)}
+          stroke={isNightMode ? 'rgba(255, 59, 48, 0.38)' : hexToRgba(accentColor, 0.35)}
           strokeWidth={sectorStrokeWidth}
           strokeDasharray={`${sectorCircumference} ${sectorCircumference}`}
           animatedProps={animatedSectorProps}
           strokeLinecap="butt"
           fill="transparent"
-          transform={`rotate(-90 ${center} ${center})`}
+          transform={`translate(${2 * center} 0) scale(-1 1) rotate(-90 ${center} ${center})`}
         />
 
         {/* Outer Liquid Glass Bezel Ring 1 (Highlight) */}
@@ -261,9 +262,8 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           // Resting state before start: clean uniform chronometer dial
           const isResting = !isRunning && !isPaused && secondsLeft === totalSeconds;
 
-          // Inside the swept sector
-          const isTickSwept = !isResting && tick.index <= activeTicksCount;
-          const isLeadingTick = isRunning && tick.index === activeTicksCount;
+          // Anticlockwise swept ticks: tick 0 is 12 o'clock, ticks sweep: 59, 58, 57...
+          const isTickSwept = !isResting && (tick.index === 0 || tick.index >= 60 - activeTicksCount);
 
           let strokeColor: string;
           let strokeWidth: number;
@@ -271,40 +271,27 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           if (isResting) {
             strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.42 : 0.22);
             strokeWidth = tick.isMajor ? 2.4 : 1.4;
-          } else if (isLeadingTick) {
-            // Bright highlight tick for the active leading edge
-            strokeColor = isNightMode ? '#FFA39E' : '#FFFFFF';
-            strokeWidth = tick.isMajor ? 3.6 : 2.6;
           } else if (isTickSwept) {
             // Illuminated ticks inside the swept color sector
             strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.95 : 0.75);
             strokeWidth = tick.isMajor ? 2.8 : 1.7;
           } else {
-            // Faded ticks ahead in the un-swept area
+            // Faded ticks in the remaining time (dark area)
             strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.18 : 0.08);
             strokeWidth = tick.isMajor ? 2.0 : 1.2;
           }
 
           return (
-            <React.Fragment key={tick.index}>
-              <Line
-                x1={tick.x1}
-                y1={tick.y1}
-                x2={tick.x2}
-                y2={tick.y2}
-                stroke={strokeColor}
-                strokeWidth={strokeWidth}
-                strokeLinecap="round"
-              />
-              {isLeadingTick && (
-                <Circle
-                  cx={tick.x1}
-                  cy={tick.y1}
-                  r={2.5}
-                  fill={isNightMode ? '#FFA39E' : '#FFFFFF'}
-                />
-              )}
-            </React.Fragment>
+            <Line
+              key={tick.index}
+              x1={tick.x1}
+              y1={tick.y1}
+              x2={tick.x2}
+              y2={tick.y2}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+            />
           );
         })}
 
@@ -323,7 +310,7 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
         />
       </Svg>
 
-      {/* Smooth Moving Leading Edge Radial Sweep & Indicator Knob */}
+      {/* Smooth Moving Leading Edge Radial Sweep & Outer Indicator Knob */}
       <Animated.View
         pointerEvents="none"
         style={[
@@ -332,40 +319,58 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           { width: size, height: size },
         ]}
       >
-        {/* Subtle Radial Divider Line at the leading sweep edge */}
         {(isRunning || isPaused || elapsedFraction > 0.005) && (
-          <View
-            style={{
-              position: 'absolute',
-              left: center - 0.75,
-              top: center - trackRadius,
-              width: 1.5,
-              height: trackRadius - 20,
-              backgroundColor: isNightMode ? 'rgba(255, 163, 158, 0.7)' : hexToRgba(accentColor, 0.55),
-            }}
-          />
-        )}
+          <>
+            {/* Radial Divider Line from inner aura out to tick track */}
+            <View
+              style={{
+                position: 'absolute',
+                left: center - 0.75,
+                top: center - outerRadius + 18,
+                width: 1.5,
+                height: outerRadius - 18 - 30,
+                backgroundColor: isNightMode ? 'rgba(255, 163, 158, 0.7)' : hexToRgba(accentColor, 0.55),
+              }}
+            />
 
-        {/* Glowing Indicator Knob (Dot) right on the track */}
-        {(isRunning || isPaused || elapsedFraction > 0.005) && (
-          <View
-            style={{
-              position: 'absolute',
-              left: center - 5,
-              top: center - trackRadius - 5,
-              width: 10,
-              height: 10,
-              borderRadius: 5,
-              backgroundColor: isNightMode ? '#FF3B30' : accentColor,
-              borderWidth: 1.5,
-              borderColor: isNightMode ? '#FFA39E' : '#FFFFFF',
-              shadowColor: isNightMode ? '#FF3B30' : accentColor,
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.9,
-              shadowRadius: 5,
-              elevation: 6,
-            }}
-          />
+            {/* Smooth Moving White Chronometer Line across the ticks */}
+            <View
+              style={{
+                position: 'absolute',
+                left: center - 1.2,
+                top: center - outerRadius,
+                width: 2.4,
+                height: 18,
+                backgroundColor: isNightMode ? '#FFA39E' : '#FFFFFF',
+                borderRadius: 1.2,
+                shadowColor: '#FFFFFF',
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.8,
+                shadowRadius: 3,
+                elevation: 4,
+              }}
+            />
+
+            {/* Glowing Indicator Knob (Dot) at the OUTER CIRCLE */}
+            <View
+              style={{
+                position: 'absolute',
+                left: center - 5,
+                top: center - outerRadius - 4,
+                width: 10,
+                height: 10,
+                borderRadius: 5,
+                backgroundColor: isNightMode ? '#FF3B30' : accentColor,
+                borderWidth: 1.5,
+                borderColor: isNightMode ? '#FFA39E' : '#FFFFFF',
+                shadowColor: isNightMode ? '#FF3B30' : accentColor,
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.9,
+                shadowRadius: 6,
+                elevation: 8,
+              }}
+            />
+          </>
         )}
       </Animated.View>
 
