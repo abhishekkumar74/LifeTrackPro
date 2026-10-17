@@ -17,6 +17,8 @@ import {
   Palette,
   X,
   Lock,
+  Sparkles,
+  BookOpen,
 } from 'lucide-react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -386,12 +388,13 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
 
   const MOOD_OPTIONS = [
-    { value: 1, emoji: '😔', label: 'Low' },
-    { value: 2, emoji: '😐', label: 'Flat' },
-    { value: 3, emoji: '🙂', label: 'Good' },
-    { value: 4, emoji: '😄', label: 'Bright' },
-    { value: 5, emoji: '🤩', label: 'Radiant' },
+    { value: 1, emoji: '😔', label: 'Low', phrase: 'Heavy & Low' },
+    { value: 2, emoji: '😐', label: 'Flat', phrase: 'Calm & Neutral' },
+    { value: 3, emoji: '🙂', label: 'Good', phrase: 'Good & Steady' },
+    { value: 4, emoji: '😄', label: 'Bright', phrase: 'Bright & Upbeat' },
+    { value: 5, emoji: '🤩', label: 'Radiant', phrase: 'Radiant & Grateful' },
   ];
+  const activeMoodObj = MOOD_OPTIONS.find((m) => m.value === mood) || MOOD_OPTIONS[2];
 
   if (!isNew && entryLoading) {
     return (
@@ -522,23 +525,42 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                 />
 
                 <View style={styles.metaRow}>
-                  <Text style={styles.wordCountText}>{wordCount} words</Text>
+                  <View style={styles.wordCountBadge}>
+                    <BookOpen size={11} color="#8A6D3B" />
+                    <Text style={styles.wordCountText}>{wordCount} words</Text>
+                  </View>
+                  {wordCount > 0 && (
+                    <Text style={styles.readingTimeText}>
+                      • ~{Math.max(1, Math.ceil(wordCount / 120))} min read
+                    </Text>
+                  )}
                 </View>
               </View>
 
-              {/* DIVIDER */}
+              {/* DIVIDER WITH GOLD FILIGREE ACCENT */}
               <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerLabel}>TODAY, IN A FEW WORDS</Text>
-                <View style={styles.dividerLine} />
+                <View style={styles.dividerHairline} />
+                <View style={styles.dividerBadge}>
+                  <Sparkles size={11} color="#AD8A54" />
+                  <Text style={styles.dividerLabel}>Daily Reflections</Text>
+                </View>
+                <View style={styles.dividerHairline} />
               </View>
 
               {/* PROMPTS */}
               <View style={styles.promptsContainer}>
-                {/* 1. MOOD */}
+                {/* 1. MOOD CHECK-IN */}
                 <View style={styles.promptItem}>
-                  <Text style={styles.promptLabel}>How was today, really?</Text>
-                  <Text style={styles.promptSub}>MOOD</Text>
+                  <View style={styles.promptHeaderRow}>
+                    <View style={styles.promptHeaderLeft}>
+                      <Text style={styles.promptLabel}>How was today, really?</Text>
+                      <Text style={styles.promptSub}>MOOD CHECK-IN</Text>
+                    </View>
+                    <View style={styles.activeMoodBadge}>
+                      <Text style={styles.activeMoodBadgeEmoji}>{activeMoodObj.emoji}</Text>
+                      <Text style={styles.activeMoodBadgeText}>{activeMoodObj.label}</Text>
+                    </View>
+                  </View>
 
                   <View style={styles.moodSelectRow}>
                     {MOOD_OPTIONS.map((opt) => {
@@ -549,10 +571,10 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                           style={[styles.moodOpt, isActive && styles.moodOptActive]}
                           onPress={() => {
                             if (!isToday) return;
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                             setMood(opt.value);
                           }}
-                          activeOpacity={isToday ? 0.7 : 1}
+                          activeOpacity={isToday ? 0.75 : 1}
                         >
                           <Text
                             style={[styles.moodEmoji, isActive && styles.moodEmojiActive]}
@@ -564,6 +586,7 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                           >
                             {opt.label}
                           </Text>
+                          {isActive && <View style={styles.moodActiveDot} />}
                         </TouchableOpacity>
                       );
                     })}
@@ -572,12 +595,14 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
 
                 {/* 2. HIGHLIGHTS */}
                 <View style={styles.promptItem}>
-                  <Text style={styles.promptLabel}>What made today special?</Text>
-                  <Text style={styles.promptSub}>HIGHLIGHTS</Text>
+                  <View style={styles.promptHeaderLeft}>
+                    <Text style={styles.promptLabel}>What made today special?</Text>
+                    <Text style={styles.promptSub}>HIGHLIGHT OF THE DAY</Text>
+                  </View>
                   <TextInput
                     style={[styles.promptLineInput, { fontFamily: activeFontFamily }]}
                     placeholder="A moment worth remembering…"
-                    placeholderTextColor="#9C9382"
+                    placeholderTextColor="#A89E8D"
                     value={achievements}
                     onChangeText={setHighlights}
                     editable={isToday}
@@ -586,64 +611,48 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
 
                 {/* 3. GRATITUDE - 3 SEPARATE NUMBERED LINES */}
                 <View style={styles.promptItem}>
-                  <Text style={styles.promptLabel}>Three things I'm grateful for</Text>
-                  <Text style={styles.promptSub}>GRATITUDE</Text>
-
-                  <View style={styles.numberedInputRow}>
-                    <Text style={styles.numberPrefix}>1.</Text>
-                    <TextInput
-                      style={[styles.promptLineInputNumbered, { fontFamily: activeFontFamily }]}
-                      placeholder="First thing you're grateful for…"
-                      placeholderTextColor="#9C9382"
-                      value={gratitude1}
-                      onChangeText={(val) => {
-                        setGratitude1(val);
-                        handleContentChange(content);
-                      }}
-                      editable={isToday}
-                    />
+                  <View style={styles.promptHeaderLeft}>
+                    <Text style={styles.promptLabel}>Three things I'm grateful for</Text>
+                    <Text style={styles.promptSub}>DAILY GRATITUDE</Text>
                   </View>
 
-                  <View style={styles.numberedInputRow}>
-                    <Text style={styles.numberPrefix}>2.</Text>
-                    <TextInput
-                      style={[styles.promptLineInputNumbered, { fontFamily: activeFontFamily }]}
-                      placeholder="Second thing you're grateful for…"
-                      placeholderTextColor="#9C9382"
-                      value={gratitude2}
-                      onChangeText={(val) => {
-                        setGratitude2(val);
-                        handleContentChange(content);
-                      }}
-                      editable={isToday}
-                    />
-                  </View>
-
-                  <View style={styles.numberedInputRow}>
-                    <Text style={styles.numberPrefix}>3.</Text>
-                    <TextInput
-                      style={[styles.promptLineInputNumbered, { fontFamily: activeFontFamily }]}
-                      placeholder="Third thing you're grateful for…"
-                      placeholderTextColor="#9C9382"
-                      value={gratitude3}
-                      onChangeText={(val) => {
-                        setGratitude3(val);
-                        handleContentChange(content);
-                      }}
-                      editable={isToday}
-                    />
+                  <View style={styles.gratitudeList}>
+                    {[
+                      { num: '1', val: gratitude1, setVal: setGratitude1, ph: "First thing you're grateful for…" },
+                      { num: '2', val: gratitude2, setVal: setGratitude2, ph: "Second thing you're grateful for…" },
+                      { num: '3', val: gratitude3, setVal: setGratitude3, ph: "Third thing you're grateful for…" },
+                    ].map((item) => (
+                      <View key={item.num} style={styles.numberedInputRow}>
+                        <View style={styles.numberBadge}>
+                          <Text style={styles.numberBadgeText}>{item.num}</Text>
+                        </View>
+                        <TextInput
+                          style={[styles.promptLineInputNumbered, { fontFamily: activeFontFamily }]}
+                          placeholder={item.ph}
+                          placeholderTextColor="#A89E8D"
+                          value={item.val}
+                          onChangeText={(val) => {
+                            item.setVal(val);
+                            handleContentChange(content);
+                          }}
+                          editable={isToday}
+                        />
+                      </View>
+                    ))}
                   </View>
                 </View>
 
                 {/* 4. NOT TO DO */}
                 <View style={styles.promptItem}>
-                  <Text style={styles.promptLabel}>What to avoid tomorrow?</Text>
-                  <Text style={styles.promptSub}>REFLECTIONS & BOUNDARIES</Text>
+                  <View style={styles.promptHeaderLeft}>
+                    <Text style={styles.promptLabel}>What to avoid tomorrow?</Text>
+                    <Text style={styles.promptSub}>REFLECTIONS & BOUNDARIES</Text>
+                  </View>
 
                   <TextInput
                     style={[styles.promptLineInput, { fontFamily: activeFontFamily }]}
-                    placeholder="One habit to step away from…"
-                    placeholderTextColor="#9C9382"
+                    placeholder="One habit or distraction to step away from…"
+                    placeholderTextColor="#A89E8D"
                     value={notToDos}
                     onChangeText={setNotToDos}
                     editable={isToday}
@@ -652,8 +661,10 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
 
                 {/* 5. TAGS */}
                 <View style={styles.promptItem}>
-                  <Text style={styles.promptLabel}>Tags</Text>
-                  <Text style={styles.promptSub}>CATEGORIES</Text>
+                  <View style={styles.promptHeaderLeft}>
+                    <Text style={styles.promptLabel}>Tags & Categories</Text>
+                    <Text style={styles.promptSub}>CLASSIFICATION</Text>
+                  </View>
 
                   <View style={styles.tagsContainer}>
                     {tags.map((tag, idx) => (
@@ -662,19 +673,21 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                         style={styles.tagChip}
                         onPress={() => handleRemoveTag(tag)}
                         disabled={!isToday}
+                        activeOpacity={0.7}
                       >
-                        <Text style={styles.tagChipText}>#{tag}</Text>
-                        {isToday && <Text style={styles.tagRemoveX}> ×</Text>}
+                        <Text style={styles.tagHash}>#</Text>
+                        <Text style={styles.tagChipText}>{tag}</Text>
+                        {isToday && <Text style={styles.tagRemoveX}>×</Text>}
                       </TouchableOpacity>
                     ))}
 
                     {isToday && (
                       <View style={styles.tagInputWrapper}>
-                        <TagIcon size={12} color="#9C9382" />
+                        <TagIcon size={12} color="#8A6D3B" />
                         <TextInput
                           style={styles.tagTextInput}
                           placeholder="Add tag…"
-                          placeholderTextColor="#9C9382"
+                          placeholderTextColor="#A89E8D"
                           value={tagInput}
                           onChangeText={setTagInput}
                           onSubmitEditing={handleAddTag}
@@ -697,7 +710,9 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                     <ActivityIndicator size="small" color="#F3ECDA" />
                   ) : (
                     <>
-                      <Check size={18} color="#F3ECDA" />
+                      <View style={styles.saveIconBubble}>
+                        <Check size={16} color="#FAF5E8" strokeWidth={2.5} />
+                      </View>
                       <Text style={styles.bottomSaveButtonText}>Save Diary Page</Text>
                     </>
                   )}
@@ -934,11 +949,10 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   saveStateText: {
-    fontFamily: 'SpaceMono',
-    fontSize: 9.5,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
     color: '#3F5A44',
-    letterSpacing: 0.6,
-    fontWeight: 'bold',
+    letterSpacing: 0.4,
   },
   dateBlock: {
     marginBottom: 8,
@@ -951,10 +965,10 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   fullDateText: {
-    fontFamily: 'SpaceMono',
-    fontSize: 11,
-    color: '#6B6154',
-    letterSpacing: 0.5,
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#7D7160',
+    letterSpacing: 0.3,
     marginTop: 2,
   },
   dearDiary: {
@@ -978,193 +992,311 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: 'rgba(107, 84, 46, 0.12)',
     marginTop: 8,
   },
+  wordCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(173, 138, 84, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
   wordCountText: {
-    fontFamily: 'SpaceMono',
-    fontSize: 10,
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#8A6D3B',
+    fontWeight: '600',
+  },
+  readingTimeText: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
     color: '#9C9382',
-    letterSpacing: 0.4,
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginVertical: 18,
+    marginVertical: 22,
+    gap: 12,
   },
-  dividerLine: {
+  dividerHairline: {
     flex: 1,
     height: 1,
-    borderStyle: 'dotted',
+    backgroundColor: 'rgba(173, 138, 84, 0.35)',
+  },
+  dividerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FAF5E8',
     borderWidth: 1,
-    borderColor: '#E2D3AC',
+    borderColor: 'rgba(173, 138, 84, 0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 14,
+    shadowColor: '#AD8A54',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   dividerLabel: {
-    fontFamily: 'SpaceMono',
-    fontSize: 9.5,
-    color: '#9C9382',
-    letterSpacing: 1,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    color: '#8A6D3B',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   promptsContainer: {
-    gap: 20,
+    gap: 22,
   },
-  promptItem: {},
+  promptItem: {
+    backgroundColor: 'transparent',
+  },
+  promptHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  promptHeaderLeft: {
+    flex: 1,
+  },
   promptLabel: {
     fontFamily: Platform.OS === 'ios' ? 'Fraunces' : 'InstrumentSerif',
     fontStyle: 'italic',
-    fontSize: 16,
-    color: '#3F5A44',
+    fontSize: 17,
+    color: '#263729',
     marginBottom: 2,
+    letterSpacing: 0.2,
   },
   promptSub: {
-    fontFamily: 'SpaceMono',
-    fontSize: 9.5,
-    color: '#9C9382',
-    letterSpacing: 0.8,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9,
+    color: '#8A6D3B',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
     marginBottom: 6,
   },
+  activeMoodBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FAF5E8',
+    borderWidth: 1,
+    borderColor: '#C5A059',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    shadowColor: '#AD8A54',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  activeMoodBadgeEmoji: {
+    fontSize: 13,
+  },
+  activeMoodBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#3F5A44',
+  },
   promptLineInput: {
     fontSize: 15,
-    color: '#2B2620',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2D3AC',
-    paddingVertical: 6,
+    color: '#241F1A',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#D8C69F',
+    paddingVertical: 7,
     paddingHorizontal: 2,
+  },
+  gratitudeList: {
+    gap: 8,
+    marginTop: 4,
   },
   numberedInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
+    gap: 10,
   },
-  numberPrefix: {
-    fontFamily: 'SpaceMono',
-    fontSize: 13,
-    color: '#AD8A54',
-    fontWeight: 'bold',
-    width: 18,
+  numberBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(173, 138, 84, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(173, 138, 84, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  numberBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#8A6D3B',
   },
   promptLineInputNumbered: {
     flex: 1,
     fontSize: 15,
-    color: '#2B2620',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2D3AC',
-    paddingVertical: 6,
+    color: '#241F1A',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#D8C69F',
+    paddingVertical: 7,
     paddingHorizontal: 2,
   },
   moodSelectRow: {
     flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-    marginTop: 4,
+    gap: 6,
+    justifyContent: 'space-between',
+    marginTop: 8,
   },
   moodOpt: {
+    flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: '#EFE6CE',
-    borderWidth: 1,
-    borderColor: '#E2D3AC',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 2,
+    borderRadius: 14,
+    backgroundColor: '#FAF5E8',
+    borderWidth: 1.5,
+    borderColor: 'rgba(184, 150, 98, 0.25)',
+    shadowColor: '#302619',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
   },
   moodOptActive: {
-    backgroundColor: 'rgba(63,90,68,0.12)',
-    borderColor: '#3F5A44',
+    backgroundColor: '#243C2C',
+    borderColor: '#C5A059',
+    borderWidth: 1.5,
+    shadowColor: '#17271D',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    elevation: 4,
   },
   moodEmoji: {
-    fontSize: 20,
+    fontSize: 22,
     opacity: 0.7,
   },
   moodEmojiActive: {
+    fontSize: 24,
     opacity: 1,
-    transform: [{ scale: 1.1 }],
+    transform: [{ scale: 1.12 }],
   },
   moodLabel: {
-    fontFamily: 'SpaceMono',
-    fontSize: 9,
-    color: '#6B6154',
-    textTransform: 'uppercase',
-    marginTop: 3,
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#7D7160',
+    marginTop: 4,
   },
   moodLabelActive: {
-    color: '#3F5A44',
-    fontWeight: '700',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    color: '#FAF5E8',
+  },
+  moodActiveDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D4AF37',
+    marginTop: 3,
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 6,
   },
   tagChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EFE6CE',
+    backgroundColor: '#FAF5E8',
     borderWidth: 1,
-    borderColor: '#E2D3AC',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    borderColor: 'rgba(173, 138, 84, 0.35)',
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 14,
+    gap: 2,
+    shadowColor: '#AD8A54',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  tagHash: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#8A6D3B',
   },
   tagChipText: {
-    fontFamily: 'SpaceMono',
-    fontSize: 11,
-    color: '#3F5A44',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#263729',
   },
   tagRemoveX: {
-    fontFamily: 'SpaceMono',
-    fontSize: 12,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
     color: '#9C4A3C',
-    fontWeight: 'bold',
+    marginLeft: 3,
   },
   tagInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#EFE6CE',
+    backgroundColor: '#FAF5E8',
     borderWidth: 1,
-    borderColor: '#E2D3AC',
-    borderRadius: 12,
+    borderColor: 'rgba(173, 138, 84, 0.35)',
+    borderRadius: 14,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
   },
   tagTextInput: {
-    fontFamily: 'SpaceMono',
-    fontSize: 11,
-    color: '#2B2620',
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#241F1A',
     minWidth: 70,
     padding: 0,
   },
   bottomSaveButton: {
-    backgroundColor: '#3F5A44',
-    borderRadius: 24,
+    backgroundColor: '#243C2C',
+    borderRadius: 28,
     paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginTop: 26,
-    shadowColor: '#3F5A44',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    gap: 10,
+    marginTop: 32,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(212, 175, 55, 0.45)',
+    shadowColor: '#17271D',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.32,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  saveIconBubble: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   bottomSaveButtonText: {
-    fontFamily: 'SpaceMono',
-    fontSize: 13,
-    color: '#F3ECDA',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 15,
+    color: '#FAF5E8',
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   // FONT MODAL STYLES
   modalOverlay: {
