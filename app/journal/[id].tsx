@@ -256,11 +256,6 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
   const yearNum = displayDate.getFullYear();
 
   const stampText = `${monthAbbr}  ·  ${String(dayNum).padStart(2, '0')}  ·  ${yearNum}`;
-  const fullDateText = displayDate.toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
 
   useEffect(() => {
     if (existingEntry) {
@@ -430,14 +425,21 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
 
             {/* SILK RIBBON BOOKMARK */}
             <View style={styles.silkRibbon} pointerEvents="none">
-              <Svg width="16" height="54" viewBox="0 0 18 70">
+              <Svg width="18" height="66" viewBox="0 0 18 70">
                 <Polygon points="0,0 18,0 18,58 9,70 0,58" fill="#9C4A3C" />
               </Svg>
             </View>
 
+            {/* VINTAGE EMBOSSED GOLD DATE STAMP IN CORNER NEAR RED PATTI */}
+            <View style={styles.cornerStamp} pointerEvents="none">
+              <View style={styles.cornerStampInner}>
+                <Text style={styles.cornerStampText}>{stampText}</Text>
+              </View>
+            </View>
+
             {/* PAGE INNER CONTENT */}
             <View style={styles.pageInner}>
-              {/* TOP HEADER CONTROLS (Balanced & spacious) */}
+              {/* TOP HEADER CONTROLS (Clean & uncluttered) */}
               <View style={styles.topBar}>
                 {/* LEFT: BACK BUTTON */}
                 <TouchableOpacity
@@ -454,70 +456,21 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                 >
                   <ChevronLeft size={19} color="#263729" />
                 </TouchableOpacity>
-
-                {/* RIGHT: CLEAN GROUPED TOOLBAR ACTIONS */}
-                <View style={styles.rightActionsGroup}>
-                  {/* FONT THEME SELECTOR BUTTON */}
-                  <TouchableOpacity
-                    style={styles.paperActionButton}
-                    onPress={() => setShowFontModal(true)}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    <Palette size={15} color="#263729" />
-                  </TouchableOpacity>
-
-                  {/* LOCK VAULT BUTTON */}
-                  <TouchableOpacity
-                    style={styles.paperActionButton}
-                    onPress={() => {
-                      lockVault();
-                      router.replace('/journal');
-                    }}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    <Lock size={15} color="#8A6D3B" />
-                  </TouchableOpacity>
-
-                  {!isNew && (
-                    <TouchableOpacity
-                      style={[styles.paperActionButton, styles.paperDeleteButton]}
-                      onPress={handleDelete}
-                      activeOpacity={0.7}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    >
-                      <Trash2 size={15} color="#9C4A3C" />
-                    </TouchableOpacity>
-                  )}
-                </View>
               </View>
 
-              {/* DATE & EMBOSSED VINTAGE STAMP HEADER */}
+              {/* DATE BLOCK (Clean without redundant subtitle) */}
               <View style={styles.dateBlock}>
-                <View style={styles.dateHeaderRow}>
-                  <View style={styles.titleColumn}>
-                    <TextInput
-                      style={[
-                        styles.weekdayInput,
-                        { fontFamily: Platform.OS === 'ios' ? 'Fraunces' : 'InstrumentSerif' },
-                      ]}
-                      value={title}
-                      onChangeText={setTitle}
-                      placeholder="Monday"
-                      placeholderTextColor="#A89E8D"
-                      editable={isToday}
-                    />
-                    <Text style={styles.fullDateText}>{fullDateText}</Text>
-                  </View>
-
-                  {/* VINTAGE EMBOSSED GOLD DATE STAMP */}
-                  <View style={styles.cornerStamp}>
-                    <View style={styles.cornerStampInner}>
-                      <Text style={styles.cornerStampText}>{stampText}</Text>
-                    </View>
-                  </View>
-                </View>
+                <TextInput
+                  style={[
+                    styles.weekdayInput,
+                    { fontFamily: Platform.OS === 'ios' ? 'Fraunces' : 'InstrumentSerif' },
+                  ]}
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholder="Monday"
+                  placeholderTextColor="#A89E8D"
+                  editable={isToday}
+                />
               </View>
 
               {/* DEAR DIARY GREETING */}
@@ -540,16 +493,57 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
                   editable={isToday}
                 />
 
-                <View style={styles.metaRow}>
+                <View style={styles.writingFooterRow}>
+                  {/* WORD COUNT BADGE */}
                   <View style={styles.wordCountBadge}>
                     <BookOpen size={11} color="#8A6D3B" />
                     <Text style={styles.wordCountText}>{wordCount} words</Text>
+                    {wordCount > 0 && (
+                      <Text style={styles.readingTimeText}>
+                        • ~{Math.max(1, Math.ceil(wordCount / 120))} min read
+                      </Text>
+                    )}
                   </View>
-                  {wordCount > 0 && (
-                    <Text style={styles.readingTimeText}>
-                      • ~{Math.max(1, Math.ceil(wordCount / 120))} min read
-                    </Text>
-                  )}
+
+                  {/* STATIONERY ACCESSORY TOOLS */}
+                  <View style={styles.stationeryToolsGroup}>
+                    {/* FONT THEME SELECTOR */}
+                    <TouchableOpacity
+                      style={styles.stationeryToolBtn}
+                      onPress={() => setShowFontModal(true)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Palette size={12} color="#2D4333" />
+                      <Text style={styles.stationeryToolText}>Font</Text>
+                    </TouchableOpacity>
+
+                    {/* VAULT LOCK BUTTON */}
+                    <TouchableOpacity
+                      style={styles.stationeryToolBtn}
+                      onPress={() => {
+                        lockVault();
+                        router.replace('/journal');
+                      }}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Lock size={12} color="#8A6D3B" />
+                      <Text style={styles.stationeryToolText}>Lock</Text>
+                    </TouchableOpacity>
+
+                    {/* DELETE ENTRY BUTTON */}
+                    {!isNew && (
+                      <TouchableOpacity
+                        style={[styles.stationeryToolBtn, styles.stationeryToolDeleteBtn]}
+                        onPress={handleDelete}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <Trash2 size={12} color="#9C4A3C" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               </View>
 
@@ -856,96 +850,19 @@ const styles = StyleSheet.create({
   },
   silkRibbon: {
     position: 'absolute',
-    right: 18,
+    right: 20,
     top: 0,
-    zIndex: 1,
+    zIndex: 4,
     shadowColor: '#000',
     shadowOffset: { width: 1, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 2,
-  },
-  pageInner: {
-    paddingLeft: 40,
-    paddingRight: 20,
-    paddingTop: 18,
-    paddingBottom: 32,
-    zIndex: 2,
-  },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  paperBackButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(173, 138, 84, 0.35)',
-    backgroundColor: '#FAF5E8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#AD8A54',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  rightActionsGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#FAF5E8',
-    borderWidth: 1,
-    borderColor: 'rgba(173, 138, 84, 0.35)',
-    borderRadius: 20,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    shadowColor: '#AD8A54',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  paperActionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  paperDeleteButton: {
-    backgroundColor: 'rgba(156,74,60,0.08)',
-  },
-  dateBlock: {
-    marginBottom: 16,
-  },
-  dateHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  titleColumn: {
-    flex: 1,
-    marginRight: 10,
-  },
-  weekdayInput: {
-    fontSize: 30,
-    color: '#241D17',
-    fontWeight: 'bold',
-    padding: 0,
-    margin: 0,
-    letterSpacing: -0.4,
-  },
-  fullDateText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    color: '#8A7A64',
-    letterSpacing: 0.3,
-    marginTop: 4,
   },
   cornerStamp: {
+    position: 'absolute',
+    right: 28,
+    top: 12,
+    zIndex: 3,
     borderWidth: 1.5,
     borderColor: 'rgba(173, 138, 84, 0.75)',
     paddingHorizontal: 3,
@@ -968,11 +885,51 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   cornerStampText: {
-    fontFamily: 'DMSans-Bold',
+    fontFamily: 'SpaceMono',
     fontSize: 10,
     color: '#8A6D3B',
     letterSpacing: 1.2,
     fontWeight: '700',
+  },
+  pageInner: {
+    paddingLeft: 40,
+    paddingRight: 20,
+    paddingTop: 18,
+    paddingBottom: 32,
+    zIndex: 2,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    marginBottom: 16,
+  },
+  paperBackButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(173, 138, 84, 0.35)',
+    backgroundColor: '#FAF5E8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#AD8A54',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  dateBlock: {
+    marginBottom: 8,
+    paddingRight: 110,
+  },
+  weekdayInput: {
+    fontSize: 32,
+    color: '#241D17',
+    fontWeight: 'bold',
+    padding: 0,
+    margin: 0,
+    letterSpacing: -0.4,
   },
   dearDiary: {
     fontFamily: 'Caveat',
@@ -998,7 +955,7 @@ const styles = StyleSheet.create({
     minHeight: 160,
     paddingTop: 4,
   },
-  metaRow: {
+  writingFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1006,6 +963,40 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(107, 84, 46, 0.12)',
     marginTop: 8,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  stationeryToolsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  stationeryToolBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FAF5E8',
+    borderWidth: 1,
+    borderColor: 'rgba(173, 138, 84, 0.35)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 12,
+    shadowColor: '#AD8A54',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 1.5,
+    elevation: 1,
+  },
+  stationeryToolText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#3A3023',
+    fontWeight: '600',
+  },
+  stationeryToolDeleteBtn: {
+    backgroundColor: 'rgba(156, 74, 60, 0.08)',
+    borderColor: 'rgba(156, 74, 60, 0.25)',
+    paddingHorizontal: 7,
   },
   wordCountBadge: {
     flexDirection: 'row',
