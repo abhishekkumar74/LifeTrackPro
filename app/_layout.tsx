@@ -28,7 +28,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import LoadingScreen from '@/components/shared/LoadingScreen';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Toast } from '@/components/shared/Toast';
-import { Platform, UIManager, View, Text, ActivityIndicator, LogBox } from 'react-native';
+import { Platform, UIManager, View, Text, ActivityIndicator, LogBox, Alert } from 'react-native';
 import { UserProfile } from '@/types/app.types';
 import { requestNotificationPermission, useNotificationResponse, scheduleMorningBrief } from '@/lib/notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -378,6 +378,65 @@ function RootLayout() {
             level: userProf.level,
             xp_points: userProf.xp_points,
           });
+
+          // 30-Day Account Deletion Recovery Check
+          if (userProf.is_pending_deletion) {
+            const reqTime = userProf.deletion_scheduled_at
+              ? new Date(userProf.deletion_scheduled_at).getTime()
+              : Date.now();
+            const msPassed = Date.now() - reqTime;
+            const daysPassed = Math.floor(msPassed / (1000 * 60 * 60 * 24));
+            const daysRemaining = Math.max(0, 30 - daysPassed);
+
+            if (daysRemaining <= 0) {
+              Alert.alert(
+                'Account Expired',
+                'The 30-day grace period for this account has expired.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: async () => {
+                      await useAuthStore.getState().signOut();
+                      router.replace('/login');
+                    },
+                  },
+                ]
+              );
+              return;
+            }
+
+            Alert.alert(
+              'Account Scheduled for Deletion',
+              `Your account is scheduled for deletion and will be permanently erased in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.\n\nWould you like to cancel deletion and restore your account now?`,
+              [
+                {
+                  text: 'Keep Scheduled & Sign Out',
+                  style: 'cancel',
+                  onPress: async () => {
+                    await useAuthStore.getState().signOut();
+                    router.replace('/login');
+                  },
+                },
+                {
+                  text: 'Restore My Account',
+                  style: 'default',
+                  onPress: async () => {
+                    try {
+                      await supabase
+                        .from('profiles')
+                        .update({ is_pending_deletion: false, deletion_scheduled_at: null })
+                        .eq('id', userProf.id);
+                      setProfile({ ...userProf, is_pending_deletion: false, deletion_scheduled_at: null });
+                      Alert.alert('Account Restored', 'Welcome back! All your streaks, notes, XP, and progress have been restored.');
+                    } catch (restoreErr) {
+                      if (__DEV__) console.warn('Failed to restore account:', restoreErr);
+                    }
+                  },
+                },
+              ],
+              { cancelable: false }
+            );
+          }
         }
       }
     } catch (err) {

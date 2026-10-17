@@ -30,6 +30,7 @@ import {
   Check,
   ChevronRight,
   FileText,
+  Info,
   Lock,
   LogOut,
   MessageSquare,
@@ -39,12 +40,14 @@ import {
   Star,
   Trash2,
   Upload,
+  X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   Platform,
   ScrollView,
   Share,
@@ -195,6 +198,7 @@ export default function ProfileScreen(): React.JSX.Element {
   const queryClient = useQueryClient();
   const { profile, setProfile, user } = useAuthStore();
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const showToast = useUiStore((state) => state.showToast);
   const { request: requestNotificationPermission } = useNotificationPermission();
 
@@ -620,67 +624,67 @@ export default function ProfileScreen(): React.JSX.Element {
     ]);
   };
 
-  const handleDeleteAccount = () => {
+  const handleScheduleDeletion = () => {
     Alert.alert(
-      'Delete Account',
-      'Are you sure you want to permanently delete your account? All your study streaks, focus sessions, tasks, notes, goals, and XP points will be permanently erased. This action CANNOT be undone.',
+      'Schedule Account Deletion',
+      'Your account will be deactivated immediately and queued for deletion in 30 days.\n\nYou can log back in at any time within 30 days to cancel this request and restore all your data (streaks, habits, notes, goals, and XP points).',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Keep Account', style: 'cancel' },
         {
-          text: 'Continue',
+          text: 'Schedule Deletion',
           style: 'destructive',
-          onPress: () => {
-            // Second confirmation dialog required for destructive account deletion
-            Alert.alert(
-              'Final Confirmation',
-              'This is your last chance. Once deleted, your account and all data cannot be recovered. Are you absolutely certain you want to proceed?',
-              [
-                { text: 'Keep My Account', style: 'cancel' },
-                {
-                  text: 'Permanently Delete',
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      setIsDeletingAccount(true);
-                      const currentUserId = user?.id || (await supabase.auth.getSession()).data.session?.user?.id;
+          onPress: async () => {
+            try {
+              setIsDeletingAccount(true);
+              const currentUserId = user?.id || (await supabase.auth.getSession()).data.session?.user?.id;
 
-                      // 1. Attempt PostgreSQL RPC delete_user_account (deletes auth.users + cascades all tables)
-                      const { error: rpcError } = await supabase.rpc('delete_user_account');
+              if (currentUserId) {
+                // 1. Try RPC schedule_account_deletion
+                const { error: rpcError } = await supabase.rpc('schedule_account_deletion');
 
-                      // 2. If RPC is not created yet or fails, fallback to deleting public.profiles
-                      if (rpcError && currentUserId) {
-                        if (__DEV__) console.warn('RPC delete_user_account failed, falling back to profiles delete:', rpcError.message);
-                        await supabase.from('profiles').delete().eq('id', currentUserId);
-                      }
+                // 2. Fallback to direct update on profiles table if RPC is not created yet
+                if (rpcError) {
+                  if (__DEV__) console.warn('schedule_account_deletion RPC fallback:', rpcError.message);
+                  await supabase
+                    .from('profiles')
+                    .update({
+                      is_pending_deletion: true,
+                      deletion_scheduled_at: new Date().toISOString(),
+                    })
+                    .eq('id', currentUserId);
+                }
+              }
 
-                      // 3. Cancel all local notifications & reset analytics tracking
-                      await cancelAllNotifications();
-                      resetUser();
+              // 3. Close modal
+              setIsAccountModalOpen(false);
 
-                      // 4. Clear all local AsyncStorage data
-                      await AsyncStorage.clear();
+              // 4. Cancel notifications and reset analytics
+              await cancelAllNotifications();
+              resetUser();
 
-                      // 5. Clear react-query cache, sign out of supabase auth, and clear auth store
-                      queryClient.clear();
-                      await supabase.auth.signOut();
-                      useAuthStore.getState().clearAuth();
+              // 5. Clear local AsyncStorage
+              await AsyncStorage.clear();
 
-                      // 6. Navigate to login screen
-                      router.replace('/(auth)/login');
-                      Alert.alert('Account Deleted', 'Your account and all associated data have been permanently removed.');
-                    } catch (err: any) {
-                      if (__DEV__) console.error('Error deleting account:', err);
-                      Alert.alert(
-                        'Deletion Error',
-                        'Failed to complete account deletion. Please check your internet connection or contact support@lifetrackpro.com.'
-                      );
-                    } finally {
-                      setIsDeletingAccount(false);
-                    }
-                  },
-                },
-              ]
-            );
+              // 6. Clear query client & sign out
+              queryClient.clear();
+              await supabase.auth.signOut();
+              useAuthStore.getState().clearAuth();
+
+              // 7. Route to login and notify user
+              router.replace('/login');
+              Alert.alert(
+                'Account Deactivated',
+                'Your account has been deactivated and scheduled for deletion in 30 days. You can log back in anytime to restore it.'
+              );
+            } catch (err: any) {
+              if (__DEV__) console.error('Error scheduling account deletion:', err);
+              Alert.alert(
+                'Action Failed',
+                'Could not schedule account deletion. Please check your internet connection or contact support@lifetrackpro.com.'
+              );
+            } finally {
+              setIsDeletingAccount(false);
+            }
           },
         },
       ]
@@ -1069,6 +1073,18 @@ export default function ProfileScreen(): React.JSX.Element {
         <View style={styles.settingsSection}>
           <Text style={styles.sectionTitle}>Data & Privacy</Text>
 
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => setIsAccountModalOpen(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.rowLabelCol}>
+              <Text style={styles.rowTitle}>Account Settings</Text>
+              <Text style={styles.rowSubtitle}>Security, email & recovery options</Text>
+            </View>
+            <ChevronRight size={18} color="#9B9BAF" />
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.row} onPress={handleExportData} activeOpacity={0.7}>
             <View style={styles.rowLabelCol}>
               <Text style={styles.rowTitle}>Request Data Export</Text>
@@ -1141,23 +1157,6 @@ export default function ProfileScreen(): React.JSX.Element {
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut} activeOpacity={0.8}>
           <LogOut size={16} color="#E85858" style={{ marginRight: 8 }} />
           <Text style={styles.signOutButtonText}>Sign Out</Text>
-        </TouchableOpacity>
-
-        {/* DELETE ACCOUNT BUTTON */}
-        <TouchableOpacity
-          style={styles.deleteAccountButton}
-          onPress={handleDeleteAccount}
-          activeOpacity={0.8}
-          disabled={isDeletingAccount}
-        >
-          {isDeletingAccount ? (
-            <ActivityIndicator size="small" color="#E85858" />
-          ) : (
-            <>
-              <Trash2 size={15} color="#E85858" style={{ marginRight: 8 }} />
-              <Text style={styles.deleteAccountButtonText}>Delete Account</Text>
-            </>
-          )}
         </TouchableOpacity>
       </ScrollView>
 
@@ -1265,6 +1264,77 @@ export default function ProfileScreen(): React.JSX.Element {
         isVisible={showRatingModal}
         onClose={() => setShowRatingModal(false)}
       />
+
+      {/* Hidden Account Settings Modal (Instagram / Spotify style) */}
+      <Modal
+        visible={isAccountModalOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setIsAccountModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.accountModalCard}>
+            {/* Header */}
+            <View style={styles.accountModalHeader}>
+              <Text style={styles.accountModalTitle}>Account Settings</Text>
+              <TouchableOpacity
+                onPress={() => setIsAccountModalOpen(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                style={styles.accountModalCloseBtn}
+                activeOpacity={0.7}
+              >
+                <X size={18} color="#717182" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+              {/* Account Details Box */}
+              <View style={styles.accountInfoBox}>
+                <View style={styles.accountInfoRow}>
+                  <Text style={styles.accountInfoLabel}>Email</Text>
+                  <Text style={styles.accountInfoVal} numberOfLines={1}>
+                    {user?.email || profile?.name || 'Authenticated User'}
+                  </Text>
+                </View>
+                <View style={[styles.accountInfoRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                  <Text style={styles.accountInfoLabel}>Status</Text>
+                  <View style={styles.activeBadge}>
+                    <View style={styles.activeDot} />
+                    <Text style={styles.activeBadgeText}>Active</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* 30-Day Recovery Info Card */}
+              <View style={styles.recoveryNoticeCard}>
+                <View style={styles.recoveryNoticeHeader}>
+                  <Info size={16} color="#5B4FE8" />
+                  <Text style={styles.recoveryNoticeTitle}>30-Day Recovery Guarantee</Text>
+                </View>
+                <Text style={styles.recoveryNoticeDesc}>
+                  If you decide to schedule account deletion, your profile will be deactivated immediately. LifeTrack Pro safely reserves your data for 30 days. You can log back in at any time within 30 days to cancel the deletion and restore all your study streaks, notes, XP, and habits.
+                </Text>
+              </View>
+
+              {/* Discreet Danger Zone Link */}
+              <View style={styles.dangerZoneBox}>
+                <TouchableOpacity
+                  style={styles.scheduleDeletionBtn}
+                  onPress={handleScheduleDeletion}
+                  activeOpacity={0.7}
+                  disabled={isDeletingAccount}
+                >
+                  {isDeletingAccount ? (
+                    <ActivityIndicator size="small" color="#E85858" />
+                  ) : (
+                    <Text style={styles.scheduleDeletionText}>Schedule Account Deletion (30-Day Grace)</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   </View>
   );
@@ -1572,7 +1642,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     height: 48,
     marginTop: 8,
-    marginBottom: 10,
+    marginBottom: 24,
     backgroundColor: '#FFFFFF',
   },
   signOutButtonText: {
@@ -1581,23 +1651,130 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#E85858',
   },
-  deleteAccountButton: {
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 15, 26, 0.65)',
+    justifyContent: 'flex-end',
+  },
+  accountModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    maxHeight: '85%',
+  },
+  accountModalHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 18,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F1EE',
+  },
+  accountModalTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#17172A',
+  },
+  accountModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F7',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 20,
-    height: 44,
-    marginBottom: 32,
-    borderRadius: 12,
-    backgroundColor: 'rgba(232, 88, 88, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(232, 88, 88, 0.2)',
   },
-  deleteAccountButtonText: {
+  accountInfoBox: {
+    backgroundColor: '#F8F8FA',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#ECECF0',
+  },
+  accountInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 10,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EDEDF2',
+  },
+  accountInfoLabel: {
     fontFamily: 'DMSans-Medium',
     fontSize: 13,
-    fontWeight: '600',
-    color: '#E85858',
+    color: '#717182',
+  },
+  accountInfoVal: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
+    color: '#17172A',
+    maxWidth: '65%',
+  },
+  activeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EAF9F1',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#1EAA6B',
+  },
+  activeBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#1EAA6B',
+  },
+  recoveryNoticeCard: {
+    backgroundColor: '#F5F4FE',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E7E4FD',
+  },
+  recoveryNoticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  recoveryNoticeTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    color: '#342CA6',
+  },
+  recoveryNoticeDesc: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#5C5887',
+  },
+  dangerZoneBox: {
+    paddingTop: 4,
+    paddingBottom: 12,
+    alignItems: 'center',
+  },
+  scheduleDeletionBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  scheduleDeletionText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#C94545',
+    textDecorationLine: 'underline',
   },
   sheetContent: {
     paddingHorizontal: 20,

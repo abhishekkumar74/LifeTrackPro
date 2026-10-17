@@ -34,6 +34,8 @@ export interface UserProfile {
   ai_insight_updated_at: string | null;
   created_at?: string;
   updated_at?: string;
+  is_pending_deletion?: boolean;
+  deletion_scheduled_at?: string | null;
 }
 
 export interface Goal {
