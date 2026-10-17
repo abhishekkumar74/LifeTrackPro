@@ -4,11 +4,15 @@ import Svg, { Circle, Line, Defs, RadialGradient, Stop } from 'react-native-svg'
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedProps,
   withRepeat,
   withTiming,
   Easing,
+  cancelAnimation,
 } from 'react-native-reanimated';
 import { useFocusStore } from '@/lib/store/focus.store';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 interface TimerCircleProps {
   size?: number;
@@ -91,9 +95,50 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
     return list;
   }, [center, outerRadius]);
 
-  // Fraction of time remaining
-  const fractionRemaining = totalSeconds > 0 ? secondsLeft / totalSeconds : 1;
-  const activeTicksCount = Math.ceil(fractionRemaining * 60);
+  // Fraction of elapsed time (0 at start -> 1 at complete)
+  const elapsedFraction = totalSeconds > 0
+    ? Math.max(0, Math.min(1, (totalSeconds - secondsLeft) / totalSeconds))
+    : 0;
+
+  const trackRadius = outerRadius - 18;
+  const sectorRadius = trackRadius / 2;
+  const sectorStrokeWidth = trackRadius;
+  const sectorCircumference = 2 * Math.PI * sectorRadius;
+
+  // Shared value for smooth continuous linear progress
+  const animatedProgress = useSharedValue(elapsedFraction);
+
+  React.useEffect(() => {
+    if (isRunning && !isPaused) {
+      animatedProgress.value = withTiming(elapsedFraction, {
+        duration: 1000,
+        easing: Easing.linear,
+      });
+    } else {
+      cancelAnimation(animatedProgress);
+      animatedProgress.value = withTiming(elapsedFraction, {
+        duration: 250,
+        easing: Easing.out(Easing.quad),
+      });
+    }
+  }, [elapsedFraction, isRunning, isPaused, animatedProgress]);
+
+  const animatedSectorProps = useAnimatedProps(() => {
+    const strokeOffset = sectorCircumference * (1 - animatedProgress.value);
+    return {
+      strokeDashoffset: strokeOffset,
+    };
+  });
+
+  const animatedKnobStyle = useAnimatedStyle(() => {
+    const angleDeg = animatedProgress.value * 360;
+    return {
+      transform: [{ rotate: `${angleDeg}deg` }],
+    };
+  });
+
+  // Active ticks count based on progress
+  const activeTicksCount = Math.round(elapsedFraction * 60);
 
   // Time display strings
   const minutes = Math.floor(secondsLeft / 60);
@@ -167,6 +212,20 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           fill={`url(#${auraGradId})`}
         />
 
+        {/* Shaded Progress Sector (Wedge / Color Fade) */}
+        <AnimatedCircle
+          cx={center}
+          cy={center}
+          r={sectorRadius}
+          stroke={isNightMode ? 'rgba(255, 59, 48, 0.32)' : hexToRgba(accentColor, 0.25)}
+          strokeWidth={sectorStrokeWidth}
+          strokeDasharray={`${sectorCircumference} ${sectorCircumference}`}
+          animatedProps={animatedSectorProps}
+          strokeLinecap="butt"
+          fill="transparent"
+          transform={`rotate(-90 ${center} ${center})`}
+        />
+
         {/* Outer Liquid Glass Bezel Ring 1 (Highlight) */}
         <Circle
           cx={center}
@@ -199,29 +258,30 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
 
         {/* 60 Radial Chronometer Ticks */}
         {ticks.map((tick) => {
-          // If timer is stopped (at initial state), all ticks are lit in the faded remaining color.
-          // When running or paused, ticks up to activeTicksCount are illuminated in faded remaining color,
-          // and ticks beyond are extra faded in the other (elapsed) color.
-          const isTickRemaining = !isRunning && !isPaused && secondsLeft === totalSeconds
-            ? true
-            : tick.index < activeTicksCount;
+          // Resting state before start: clean uniform chronometer dial
+          const isResting = !isRunning && !isPaused && secondsLeft === totalSeconds;
 
-          const isLeadingTick = isRunning && tick.index === activeTicksCount - 1;
+          // Inside the swept sector
+          const isTickSwept = !isResting && tick.index <= activeTicksCount;
+          const isLeadingTick = isRunning && tick.index === activeTicksCount;
 
           let strokeColor: string;
           let strokeWidth: number;
 
-          if (isLeadingTick) {
+          if (isResting) {
+            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.42 : 0.22);
+            strokeWidth = tick.isMajor ? 2.4 : 1.4;
+          } else if (isLeadingTick) {
             // Bright highlight tick for the active leading edge
             strokeColor = isNightMode ? '#FFA39E' : '#FFFFFF';
             strokeWidth = tick.isMajor ? 3.6 : 2.6;
-          } else if (isTickRemaining) {
-            // Faded color in remaining time (app color with luminous presence or night mode red)
-            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.85 : 0.65);
+          } else if (isTickSwept) {
+            // Illuminated ticks inside the swept color sector
+            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.95 : 0.75);
             strokeWidth = tick.isMajor ? 2.8 : 1.7;
           } else {
-            // Some extra faded color in the other time (elapsed time)
-            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.16 : 0.08);
+            // Faded ticks ahead in the un-swept area
+            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.18 : 0.08);
             strokeWidth = tick.isMajor ? 2.0 : 1.2;
           }
 
@@ -262,6 +322,52 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           fill={isNightMode ? '#FF8880' : '#FFFFFF'}
         />
       </Svg>
+
+      {/* Smooth Moving Leading Edge Radial Sweep & Indicator Knob */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          animatedKnobStyle,
+          { width: size, height: size },
+        ]}
+      >
+        {/* Subtle Radial Divider Line at the leading sweep edge */}
+        {(isRunning || isPaused || elapsedFraction > 0.005) && (
+          <View
+            style={{
+              position: 'absolute',
+              left: center - 0.75,
+              top: center - trackRadius,
+              width: 1.5,
+              height: trackRadius - 20,
+              backgroundColor: isNightMode ? 'rgba(255, 163, 158, 0.7)' : hexToRgba(accentColor, 0.55),
+            }}
+          />
+        )}
+
+        {/* Glowing Indicator Knob (Dot) right on the track */}
+        {(isRunning || isPaused || elapsedFraction > 0.005) && (
+          <View
+            style={{
+              position: 'absolute',
+              left: center - 5,
+              top: center - trackRadius - 5,
+              width: 10,
+              height: 10,
+              borderRadius: 5,
+              backgroundColor: isNightMode ? '#FF3B30' : accentColor,
+              borderWidth: 1.5,
+              borderColor: isNightMode ? '#FFA39E' : '#FFFFFF',
+              shadowColor: isNightMode ? '#FF3B30' : accentColor,
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.9,
+              shadowRadius: 5,
+              elevation: 6,
+            }}
+          />
+        )}
+      </Animated.View>
 
       {/* Center Readout Overlay */}
       <View style={StyleSheet.absoluteFill}>
