@@ -623,7 +623,7 @@ export default function StatsScreen(): React.JSX.Element {
       'Network connection error. Please check your internet connection and try again.';
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Progress</Text>
@@ -636,7 +636,7 @@ export default function StatsScreen(): React.JSX.Element {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* Header Block */}
         <View style={styles.header}>
@@ -722,7 +722,7 @@ export default function StatsScreen(): React.JSX.Element {
                     {selectedPeriod === 'day' ? 'TODAY' : selectedPeriod === 'month' ? 'THIS MO' : 'THIS WK'}
                   </Text>
                 </View>
-                <Text style={styles.unifiedMetricValue} numberOfLines={1}>
+                <Text style={styles.unifiedMetricValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {periodFocusHours}h
                 </Text>
               </View>
@@ -735,7 +735,7 @@ export default function StatsScreen(): React.JSX.Element {
                     {selectedPeriod === 'day' ? 'STREAK' : 'ACTIVE'}
                   </Text>
                 </View>
-                <Text style={[styles.unifiedMetricValue, { color: '#FDE68A' }]} numberOfLines={1}>
+                <Text style={[styles.unifiedMetricValue, { color: '#FDE68A' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {periodActiveDaysCount}d
                 </Text>
               </View>
@@ -748,7 +748,7 @@ export default function StatsScreen(): React.JSX.Element {
                     {selectedPeriod === 'day' ? 'TASKS' : 'HABITS'}
                   </Text>
                 </View>
-                <Text style={[styles.unifiedMetricValue, { color: '#6EE7B7' }]} numberOfLines={1}>
+                <Text style={[styles.unifiedMetricValue, { color: '#6EE7B7' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {periodHabitStat}
                 </Text>
               </View>
@@ -761,7 +761,7 @@ export default function StatsScreen(): React.JSX.Element {
                     {selectedPeriod === 'day' ? 'PEAK HR' : 'PEAK DAY'}
                   </Text>
                 </View>
-                <Text style={[styles.unifiedMetricValue, { color: '#FCD34D' }]} numberOfLines={1}>
+                <Text style={[styles.unifiedMetricValue, { color: '#FCD34D' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {periodPeakStat}
                 </Text>
               </View>
@@ -1379,6 +1379,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 16,
     elevation: 6,
+    overflow: 'hidden',
   },
   unifiedHeroHeader: {
     flexDirection: 'row',
@@ -1472,12 +1473,14 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: '#8E8EA8',
     letterSpacing: 0.6,
+    includeFontPadding: false,
   },
   unifiedMetricValue: {
     fontFamily: 'DMSans-Bold',
     fontSize: 15,
     color: '#FFFFFF',
     fontWeight: '700',
+    includeFontPadding: false,
   },
   unifiedShareBtn: {
     backgroundColor: '#5B4FE8',

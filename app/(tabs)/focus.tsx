@@ -271,7 +271,7 @@ export default function FocusScreen(): React.JSX.Element {
     };
   }, []);
 
-  // Ensure status bar is ALWAYS light-content (crisp white icons & text) when Focus tab is active
+  // Ensure status bar is ALWAYS light-content (crisp white icons & text) when Focus tab is active, and restores smoothly on exit
   useFocusEffect(
     useCallback(() => {
       StatusBar.setBarStyle('light-content', true);
@@ -279,6 +279,13 @@ export default function FocusScreen(): React.JSX.Element {
         StatusBar.setBackgroundColor('#111013', true);
         StatusBar.setTranslucent(false);
       }
+      return () => {
+        StatusBar.setBarStyle('dark-content', true);
+        if (Platform.OS === 'android') {
+          StatusBar.setBackgroundColor('#F7F6F3', true);
+          StatusBar.setTranslucent(false);
+        }
+      };
     }, [])
   );
 
@@ -1128,7 +1135,7 @@ export default function FocusScreen(): React.JSX.Element {
               <View style={styles.todayFocusCapsule}>
                 <Clock size={11} color="#A78BFA" strokeWidth={2.4} />
                 <Text style={styles.todayFocusLabel}>TODAY</Text>
-                <Text style={styles.todayFocusValue} numberOfLines={1}>
+                <Text style={styles.todayFocusValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {todayMinutes >= 60
                     ? todayMinutes % 60 === 0
                       ? `${Math.floor(todayMinutes / 60)}h`
@@ -2201,12 +2208,14 @@ const styles = StyleSheet.create({
     color: '#8E8EA8',
     letterSpacing: 0.8,
     fontWeight: '700',
+    includeFontPadding: false,
   },
   todayFocusValue: {
     fontFamily: 'DMSans-Bold',
     fontSize: 11,
     color: '#FFFFFF',
     fontWeight: '700',
+    includeFontPadding: false,
   },
   topRightActions: {
     flexDirection: 'row',

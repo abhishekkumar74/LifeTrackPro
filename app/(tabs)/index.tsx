@@ -354,7 +354,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
 
       {/* Sticky Home Header */}
       <HomeHeader
