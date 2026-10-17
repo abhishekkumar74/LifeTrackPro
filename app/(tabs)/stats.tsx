@@ -158,19 +158,93 @@ export default function StatsScreen(): React.JSX.Element {
     return list.filter((a) => a.isUnlocked).length;
   }, [achievementsQuery.data]);
 
-  // Aggregate daily average focus minutes for weekly focus
+  // Period-aware focus minutes
+  const periodFocusMinutes = React.useMemo(() => {
+    if (periodStatsQuery.data?.focusMinutes !== undefined) {
+      return periodStatsQuery.data.focusMinutes;
+    }
+    const barData = barChartQuery.data || [];
+    return barData.reduce((sum, d) => sum + d.minutes, 0);
+  }, [periodStatsQuery.data?.focusMinutes, barChartQuery.data]);
+
+  const periodFocusHours = React.useMemo(() => {
+    return (periodFocusMinutes / 60).toFixed(1);
+  }, [periodFocusMinutes]);
+
+  // Aggregate daily average focus hours for selected period
   const dailyAverageFocusHours = React.useMemo(() => {
+    if (selectedPeriod === 'day') {
+      return periodFocusHours;
+    }
     const barData = barChartQuery.data || [];
     const activeDays = barData.filter((d) => !d.isFuture);
     const totalMins = activeDays.reduce((sum, d) => sum + d.minutes, 0);
-    const avgMins = activeDays.length > 0 ? totalMins / activeDays.length : 0;
-    return (avgMins / 60).toFixed(1);
-  }, [barChartQuery.data]);
+    const count = activeDays.length > 0 ? activeDays.length : 1;
+    return ((totalMins / count) / 60).toFixed(1);
+  }, [selectedPeriod, periodFocusHours, barChartQuery.data]);
 
-  const totalPeriodFocusMinutes = React.useMemo(() => {
+  const totalPeriodFocusMinutes = periodFocusMinutes;
+
+  // Period-aware active days / streak
+  const periodActiveDaysCount = React.useMemo(() => {
+    if (selectedPeriod === 'day') {
+      return todayStats.habitStreak ?? enhancedStats?.focusStats?.focusStreak ?? 1;
+    }
     const barData = barChartQuery.data || [];
-    return barData.reduce((sum, d) => sum + d.minutes, 0);
-  }, [barChartQuery.data]);
+    const daysWithFocus = barData.filter((d) => !d.isFuture && d.minutes > 0).length;
+    return daysWithFocus;
+  }, [selectedPeriod, todayStats.habitStreak, enhancedStats?.focusStats?.focusStreak, barChartQuery.data]);
+
+  // Period-aware habit consistency / tasks
+  const periodHabitStat = React.useMemo(() => {
+    const tasksDone = periodStatsQuery.data?.tasksDone ?? 0;
+    const tasksTotal = periodStatsQuery.data?.tasksTotal ?? 0;
+
+    if (selectedPeriod === 'day') {
+      if (tasksTotal > 0) {
+        return `${tasksDone}/${tasksTotal}`;
+      }
+      return `${tasksDone || (enhancedStats?.todaySummary?.todayTasksDone ?? 0)}`;
+    }
+
+    if (tasksTotal > 0) {
+      return `${Math.round((tasksDone / tasksTotal) * 100)}%`;
+    }
+    return `${enhancedStats?.reportCard?.habitConsistencyRate || 85}%`;
+  }, [periodStatsQuery.data, selectedPeriod, enhancedStats]);
+
+  // Period-aware peak stat
+  const periodPeakStat = React.useMemo(() => {
+    const barData = barChartQuery.data || [];
+    if (!barData || barData.length === 0) {
+      return selectedPeriod === 'day' ? '—' : 'Thu';
+    }
+
+    let maxItem = barData[0];
+    for (let i = 1; i < barData.length; i++) {
+      if (barData[i].minutes > maxItem.minutes) {
+        maxItem = barData[i];
+      }
+    }
+
+    if (!maxItem || maxItem.minutes === 0) {
+      if (selectedPeriod === 'day') return '—';
+      return enhancedStats?.reportCard?.bestDayName?.slice(0, 3) || '—';
+    }
+
+    if (selectedPeriod === 'day') {
+      return maxItem.dayLabel;
+    }
+    if (selectedPeriod === 'week') {
+      if (maxItem.date) {
+        const safeDateStr = maxItem.date.includes('T') ? maxItem.date : `${maxItem.date}T12:00:00`;
+        const d = new Date(safeDateStr);
+        return d.toLocaleDateString('en-US', { weekday: 'short' });
+      }
+      return maxItem.dayLabel;
+    }
+    return `${maxItem.dayLabel}th`;
+  }, [barChartQuery.data, selectedPeriod, enhancedStats?.reportCard?.bestDayName]);
 
   const renderTrend = (value: number) => {
     if (value === 0) {
@@ -201,16 +275,13 @@ export default function StatsScreen(): React.JSX.Element {
     const userName = profile?.name || user?.email?.split('@')[0] || 'Achiever';
     const category = profile?.category || 'Student';
 
-    const periodFocusMins = periodStatsQuery.data?.focusMinutes;
-    const reportCardHours = enhancedStats?.reportCard?.thisWeekHours;
-    const focusHours = periodFocusMins !== undefined && periodFocusMins > 0 
-      ? periodFocusMins / 60 
-      : (reportCardHours ?? (totalPeriodFocusMinutes > 0 ? totalPeriodFocusMinutes / 60 : 0));
-
+    const focusHours = parseFloat(periodFocusHours) || 0;
     const habitStreak = todayStats.habitStreak ?? enhancedStats?.focusStats?.focusStreak ?? 0;
-    const tasksDone = enhancedStats?.reportCard?.goalsCompletedThisWeek ?? enhancedStats?.todaySummary?.todayTasksDone ?? 0;
-    const consistencyRate = enhancedStats?.reportCard?.habitConsistencyRate ?? (periodStatsQuery.data?.taskChangePercent !== undefined ? Math.min(100, Math.max(0, 50 + periodStatsQuery.data.taskChangePercent)) : 85);
-    const bestDayName = enhancedStats?.reportCard?.bestDayName || 'Peak Day';
+    const tasksDone = periodStatsQuery.data?.tasksDone ?? enhancedStats?.todaySummary?.todayTasksDone ?? 0;
+    const consistencyRate = periodStatsQuery.data?.tasksTotal && periodStatsQuery.data.tasksTotal > 0
+      ? Math.round((periodStatsQuery.data.tasksDone / periodStatsQuery.data.tasksTotal) * 100)
+      : (enhancedStats?.reportCard?.habitConsistencyRate || 85);
+    const bestDayName = periodPeakStat;
     const bestDayHours = enhancedStats?.reportCard?.bestDayHours || 0;
 
     return {
@@ -226,10 +297,11 @@ export default function StatsScreen(): React.JSX.Element {
   }, [
     profile,
     user,
-    periodStatsQuery.data,
-    enhancedStats,
+    periodFocusHours,
     todayStats.habitStreak,
-    totalPeriodFocusMinutes,
+    enhancedStats,
+    periodStatsQuery.data,
+    periodPeakStat,
   ]);
 
   // Share Weekly Report Card
@@ -646,43 +718,51 @@ export default function StatsScreen(): React.JSX.Element {
               <View style={styles.unifiedMetricCard}>
                 <View style={styles.metricCardHeader}>
                   <Clock size={11} color="#A78BFA" />
-                  <Text style={styles.unifiedMetricLabel}>TOTAL</Text>
+                  <Text style={styles.unifiedMetricLabel}>
+                    {selectedPeriod === 'day' ? 'TODAY' : selectedPeriod === 'month' ? 'THIS MO' : 'THIS WK'}
+                  </Text>
                 </View>
                 <Text style={styles.unifiedMetricValue} numberOfLines={1}>
-                  {(enhancedStats?.reportCard?.thisWeekHours || (totalPeriodFocusMinutes / 60)).toFixed(1)}h
+                  {periodFocusHours}h
                 </Text>
               </View>
 
-              {/* Card 2: Active Streak */}
+              {/* Card 2: Streak / Active Days */}
               <View style={styles.unifiedMetricCard}>
                 <View style={styles.metricCardHeader}>
                   <Flame size={11} color="#F59E0B" fill="#F59E0B" />
-                  <Text style={styles.unifiedMetricLabel}>STREAK</Text>
+                  <Text style={styles.unifiedMetricLabel}>
+                    {selectedPeriod === 'day' ? 'STREAK' : 'ACTIVE'}
+                  </Text>
                 </View>
                 <Text style={[styles.unifiedMetricValue, { color: '#FDE68A' }]} numberOfLines={1}>
-                  {todayStats.habitStreak ?? enhancedStats?.focusStats?.focusStreak ?? 1}d
+                  {periodActiveDaysCount}d
                 </Text>
               </View>
 
-              {/* Card 3: Habit Rate */}
+              {/* Card 3: Habit Rate / Tasks */}
               <View style={styles.unifiedMetricCard}>
                 <View style={styles.metricCardHeader}>
                   <CheckSquare size={11} color="#34D399" />
-                  <Text style={styles.unifiedMetricLabel}>HABITS</Text>
+                  <Text style={styles.unifiedMetricLabel}>
+                    {selectedPeriod === 'day' ? 'TASKS' : 'HABITS'}
+                  </Text>
                 </View>
                 <Text style={[styles.unifiedMetricValue, { color: '#6EE7B7' }]} numberOfLines={1}>
-                  {enhancedStats?.reportCard?.habitConsistencyRate || 85}%
+                  {periodHabitStat}
                 </Text>
               </View>
 
-              {/* Card 4: Best / Peak Day */}
+              {/* Card 4: Best / Peak Day or Hour */}
               <View style={styles.unifiedMetricCard}>
                 <View style={styles.metricCardHeader}>
                   <Trophy size={11} color="#FBBF24" />
-                  <Text style={styles.unifiedMetricLabel}>PEAK</Text>
+                  <Text style={styles.unifiedMetricLabel}>
+                    {selectedPeriod === 'day' ? 'PEAK HR' : 'PEAK DAY'}
+                  </Text>
                 </View>
                 <Text style={[styles.unifiedMetricValue, { color: '#FCD34D' }]} numberOfLines={1}>
-                  {(enhancedStats?.reportCard?.bestDayName || 'Thu').slice(0, 3)}
+                  {periodPeakStat}
                 </Text>
               </View>
             </View>
