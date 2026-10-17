@@ -39,7 +39,7 @@ import { getSubjectColor } from '@/lib/utils/subject-colors';
 import { scheduleRevisionAlert } from '@/lib/notifications';
 import {
   Settings,
-  Tv,
+  Maximize2,
   Trophy,
   Zap,
   Shield,
@@ -168,57 +168,44 @@ const HistoryItemCard = React.memo<{ session: any }>(({ session }) => {
 
 export default function FocusScreen(): React.JSX.Element {
   const { width, height } = useWindowDimensions();
-  const [isStandByOpen, setIsStandByOpen] = useState(false);
-  const hasEnteredLandscapeRef = useRef(false);
+  const isPhysicalLandscape = width > height;
+  const [isManualLandscape, setIsManualLandscape] = useState(false);
+  const [isDismissedInLandscape, setIsDismissedInLandscape] = useState(false);
+
+  // When device returns to physical portrait, reset dismissed flag and manual lock
+  useEffect(() => {
+    if (!isPhysicalLandscape) {
+      setIsDismissedInLandscape(false);
+      setIsManualLandscape(false);
+    }
+  }, [isPhysicalLandscape]);
+
+  // StandBy is visible if physically horizontal (unless dismissed), or forced manually
+  const isLandscape = (isPhysicalLandscape && !isDismissedInLandscape) || isManualLandscape;
 
   const handleOpenStandBy = useCallback(async () => {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setIsStandByOpen(true);
-      hasEnteredLandscapeRef.current = false;
+      setIsDismissedInLandscape(false);
+      setIsManualLandscape(true);
       await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
     } catch {
-      setIsStandByOpen(true);
+      setIsManualLandscape(true);
     }
   }, []);
 
   const handleCloseStandBy = useCallback(async () => {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {}
-    setIsStandByOpen(false);
-    hasEnteredLandscapeRef.current = false;
-    try {
+      setIsManualLandscape(false);
+      setIsDismissedInLandscape(true);
       await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-      setTimeout(async () => {
-        try {
-          await ScreenOrientation.unlockAsync();
-        } catch {}
-      }, 400);
+      await ScreenOrientation.unlockAsync();
     } catch {
+      setIsManualLandscape(false);
+      setIsDismissedInLandscape(true);
       ScreenOrientation.unlockAsync().catch(() => {});
     }
-  }, []);
-
-  // When StandBy is active, automatically exit if phone returns to portrait upright after being in landscape
-  useEffect(() => {
-    if (!isStandByOpen) {
-      hasEnteredLandscapeRef.current = false;
-      return;
-    }
-
-    if (width > height) {
-      hasEnteredLandscapeRef.current = true;
-    } else if (hasEnteredLandscapeRef.current && width < height) {
-      handleCloseStandBy();
-    }
-  }, [width, height, isStandByOpen, handleCloseStandBy]);
-
-  // Clean unlock orientation on unmount
-  useEffect(() => {
-    return () => {
-      ScreenOrientation.unlockAsync().catch(() => {});
-    };
   }, []);
 
   const queryClient = useQueryClient();
@@ -265,6 +252,14 @@ export default function FocusScreen(): React.JSX.Element {
       handleOpenStandBy();
     }
   }, [params.standby, handleOpenStandBy]);
+
+  // Keep screen orientation unlocked so sensor auto-rotate works naturally and freely
+  useEffect(() => {
+    ScreenOrientation.unlockAsync().catch(() => {});
+    return () => {
+      ScreenOrientation.unlockAsync().catch(() => {});
+    };
+  }, []);
 
   // Store bindings
   const {
@@ -326,7 +321,10 @@ export default function FocusScreen(): React.JSX.Element {
     if (params.suggestedGoal) {
       setSessionGoal(params.suggestedGoal);
     }
-  }, [params.suggestedSubject, params.suggestedGoal, setSubjectTag, setSessionGoal]);
+    if (params.standby === 'true') {
+      setIsManualLandscape(true);
+    }
+  }, [params.suggestedSubject, params.suggestedGoal, params.standby, setSubjectTag, setSessionGoal]);
 
   // Timer loop interval
   useEffect(() => {
@@ -1042,14 +1040,13 @@ export default function FocusScreen(): React.JSX.Element {
                 </Text>
               </TouchableOpacity>
 
-              {/* StandBy Desk Clock mode button */}
               <TouchableOpacity
                 style={styles.circleGlassBtn}
                 onPress={handleOpenStandBy}
                 activeOpacity={0.7}
                 accessibilityLabel="StandBy Desk Clock"
               >
-                <Tv size={15} color="rgba(255, 255, 255, 0.85)" />
+                <Maximize2 size={15} color="rgba(255, 255, 255, 0.85)" />
               </TouchableOpacity>
 
               {/* Ambient Sound & Music button (Accessible anytime, running or idle) */}
@@ -1609,9 +1606,9 @@ export default function FocusScreen(): React.JSX.Element {
         onClose={() => setShowRatingModal(false)}
       />
 
-      {/* StandBy / Desk Clock Landscape Overlay */}
+      {/* iPhone StandBy / Desk Clock Landscape Overlay */}
       <LandscapeFocusClock
-        isVisible={isStandByOpen}
+        isVisible={isLandscape}
         secondsLeft={secondsLeft}
         totalSeconds={totalSeconds}
         isRunning={isRunning}
@@ -1641,7 +1638,6 @@ export default function FocusScreen(): React.JSX.Element {
         }}
         onClose={handleCloseStandBy}
       />
-
 
       {/* FOCUS HISTORY BOTTOM SHEET */}
       <BottomSheet

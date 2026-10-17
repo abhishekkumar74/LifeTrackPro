@@ -7,6 +7,7 @@ import {
   Modal,
   StatusBar,
   useWindowDimensions,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -60,12 +61,29 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
   onToggleSound,
   onClose,
 }) => {
-  const { width, height } = useWindowDimensions();
+  const { width: rawWidth, height: rawHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // Optional Apple StandBy Night Mode (crimson red phosphor tint for dark rooms)
   const [nightMode, setNightMode] = useState(false);
 
+  // Hardware back button support for Android
+  React.useEffect(() => {
+    if (!isVisible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (onClose) {
+        onClose();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [isVisible, onClose]);
+
   if (!isVisible) return null;
+
+  // Ensure calculations always use horizontal orientation (longer axis = width)
+  const width = Math.max(rawWidth, rawHeight);
+  const height = Math.min(rawWidth, rawHeight);
 
   const effectiveThemeColor = nightMode ? '#FF3B30' : activeThemeColor;
 
@@ -94,10 +112,14 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
           styles.container,
           nightMode && styles.containerNight,
           {
-            paddingLeft: Math.max(24, insets.left),
-            paddingRight: Math.max(24, insets.right),
-            paddingTop: Math.max(12, insets.top),
-            paddingBottom: Math.max(12, insets.bottom),
+            width: '100%',
+            height: '100%',
+            minWidth: '100%',
+            minHeight: '100%',
+            paddingLeft: Math.max(28, insets.left),
+            paddingRight: Math.max(28, insets.right),
+            paddingTop: Math.max(14, insets.top),
+            paddingBottom: Math.max(14, insets.bottom),
           },
         ]}
       >
@@ -270,7 +292,7 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
               ) : (
                 <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
               )}
-              <Text style={styles.primaryStandbyBtnText}>
+              <Text style={styles.primaryStandbyBtnText} numberOfLines={1}>
                 {isRunning && !isPaused ? 'Pause Focus' : isPaused ? 'Resume Focus' : 'Start Focus'}
               </Text>
             </TouchableOpacity>
@@ -298,6 +320,8 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
+    height: '100%',
     flexDirection: 'row',
     backgroundColor: '#09080D',
     alignItems: 'center',
