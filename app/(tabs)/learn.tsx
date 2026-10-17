@@ -47,7 +47,6 @@ import {
   Search,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { AdBanner } from '@/components/ads';
 
 // Custom Hooks
 import {
@@ -1237,11 +1236,7 @@ export default function LearnScreen(): React.JSX.Element {
                       </Text>
                     </View>
                   }
-                  ListFooterComponent={
-                    <View style={{ marginTop: 16, marginBottom: 24, alignItems: 'center' }}>
-                      <AdBanner />
-                    </View>
-                  }
+                  ListFooterComponent={<View style={{ height: 24 }} />}
                 />
               ) : (
                 /* Syllabus Setup Welcome Screen Flow (Syllabus empty) */

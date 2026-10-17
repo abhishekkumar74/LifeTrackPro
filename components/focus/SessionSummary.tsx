@@ -18,9 +18,8 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-
 import { Frown, Meh, Smile, SmilePlus, Zap, LucideIcon, Sparkles } from 'lucide-react-native';
-import { AdInterstitial, AdRewarded } from '@/components/ads';
+import { AdRewarded } from '@/components/ads';
 import { calculateSessionXP } from '@/lib/utils/focus-rewards';
 import { useAuthStore } from '@/lib/store/auth.store';
 
@@ -138,8 +137,6 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
     setIsSaving(true);
     try {
       await onSave(moodVal, note, isStrictMode ? selectedAccuracy : null, calculatedXP);
-      // Safely check frequency capping and trigger interstitial at natural transition point
-      AdInterstitial.showAtTransitionPoint('focus_session_summary');
     } catch (e) {
       setIsSaving(false);
     }

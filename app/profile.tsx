@@ -1037,51 +1037,27 @@ export default function ProfileScreen(): React.JSX.Element {
           <TouchableOpacity
             style={styles.journalVaultCard}
             onPress={() => {
-              if (profile?.is_premium) {
-                router.push('/journal' as any);
-              } else {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-                Alert.alert(
-                  'Secret Journal Vault 👑',
-                  'The Secret Journal Vault is an exclusive Gold Member feature. Upgrade to LifeTrack Pro Gold to unlock your private encrypted diary, PIN security, and custom handwriting fonts.',
-                  [
-                    {
-                      text: 'Upgrade to Gold 👑',
-                      onPress: () => router.push('/paywall'),
-                    },
-                    {
-                      text: 'Cancel',
-                      style: 'cancel',
-                    },
-                  ]
-                );
-              }
+              router.push('/journal' as any);
             }}
             activeOpacity={0.85}
           >
             <View style={styles.journalVaultIconCol}>
-              {profile?.is_premium ? (
-                <Lock size={18} color="#E5A93C" />
-              ) : (
-                <Crown size={18} color="#D97706" />
-              )}
+              <Lock size={18} color="#E5A93C" />
             </View>
             <View style={styles.journalVaultTextCol}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={styles.journalVaultTitle}>Secret Journal Vault</Text>
-                <View style={profile?.is_premium ? styles.journalVaultBadge : styles.journalVaultGoldBadge}>
-                  <Text style={profile?.is_premium ? styles.journalVaultBadgeText : styles.journalVaultGoldBadgeText}>
-                    {profile?.is_premium ? 'PIN VAULT' : 'GOLD 👑'}
+                <View style={styles.journalVaultBadge}>
+                  <Text style={styles.journalVaultBadgeText}>
+                    EARLY BIRD FREE 🎁
                   </Text>
                 </View>
               </View>
               <Text style={styles.journalVaultSub} numberOfLines={1}>
-                {profile?.is_premium
-                  ? 'Private daily reflections & growth logs'
-                  : 'Exclusive private encrypted diary for Gold members'}
+                Private encrypted diary & daily reflections (Early Bird Free)
               </Text>
             </View>
-            <ChevronRight size={16} color={profile?.is_premium ? '#E5A93C' : '#D97706'} />
+            <ChevronRight size={16} color="#E5A93C" />
           </TouchableOpacity>
         </View>
 

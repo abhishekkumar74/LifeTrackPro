@@ -30,31 +30,6 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
   const { data: entries = [], isLoading: entriesLoading } = useJournalEntries();
   const deleteMutation = useDeleteJournalEntry();
 
-  // Premium Barrier: Prompt non-premium users to upgrade
-  useEffect(() => {
-    if (profile && !isPremium) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-      Alert.alert(
-        'Secret Journal Vault 👑',
-        'The Secret Journal Vault is an exclusive Gold Member feature. Upgrade to LifeTrack Pro Gold to unlock your private encrypted diary, PIN security, and custom handwriting fonts.',
-        [
-          {
-            text: 'Upgrade to Gold 👑',
-            onPress: () => router.replace('/paywall'),
-          },
-          {
-            text: 'Go Back',
-            style: 'cancel',
-            onPress: () => {
-              if (router.canGoBack()) router.back();
-              else router.replace('/profile');
-            },
-          },
-        ]
-      );
-    }
-  }, [profile, isPremium]);
-
   // Lock vault when app goes to background or screen turns off
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -253,50 +228,6 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#AD8A54" />
       </View>
-    );
-  }
-
-  // GOLD MEMBER PREMIUM GATE
-  if (profile && !isPremium) {
-    return (
-      <SafeAreaView style={styles.stageContainer} edges={['top', 'left', 'right', 'bottom']}>
-        <StatusBar barStyle="dark-content" backgroundColor="#EFE6CE" />
-
-        <View style={styles.paperTopBar}>
-          <TouchableOpacity
-            style={styles.paperBackButton}
-            onPress={() => {
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace('/profile');
-              }
-            }}
-          >
-            <ArrowLeft size={16} color="#6B6154" />
-          </TouchableOpacity>
-          <Text style={styles.paperTopBarTitle}>Secret Vault</Text>
-          <View style={{ width: 34 }} />
-        </View>
-
-        <View style={styles.goldBarrierContainer}>
-          <View style={styles.goldLockIconBubble}>
-            <Crown size={34} color="#D97706" />
-          </View>
-          <Text style={styles.goldLockTitle}>Gold Member Exclusive 👑</Text>
-          <Text style={styles.goldLockSub}>
-            The Secret Journal Vault is reserved exclusively for LifeTrack Pro Gold members. Keep your daily thoughts, reflections, and personal growth private and encrypted with PIN security and vintage handwriting fonts.
-          </Text>
-          <TouchableOpacity
-            style={styles.goldUpgradeBtn}
-            onPress={() => router.push('/paywall')}
-            activeOpacity={0.85}
-          >
-            <Crown size={16} color="#FFFFFF" />
-            <Text style={styles.goldUpgradeBtnText}>Upgrade to Gold 👑</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
     );
   }
 

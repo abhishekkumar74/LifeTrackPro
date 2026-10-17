@@ -172,13 +172,6 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
   const isPremium = profile?.is_premium || false;
   const { isUnlocked, lockVault } = useVaultPin();
 
-  // Premium Barrier: Only Gold members can access the diary editor
-  useEffect(() => {
-    if (profile && !isPremium) {
-      router.replace('/paywall');
-    }
-  }, [profile, isPremium]);
-
   // Vault Lock Protection: If vault is locked, return to the PIN screen
   useEffect(() => {
     if (!isUnlocked) {

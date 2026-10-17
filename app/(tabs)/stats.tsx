@@ -42,7 +42,7 @@ import Svg, {
 
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { AdBanner, AdRewarded } from '@/components/ads';
+import { AdRewarded } from '@/components/ads';
 
 // Custom Hooks & Stats Data Hooks
 import {
@@ -1296,9 +1296,6 @@ export default function StatsScreen(): React.JSX.Element {
               ))}
             </View>
           )}
-
-          {/* AdMob Banner */}
-          <AdBanner style={{ marginTop: 16, marginBottom: 24 }} />
         </ScrollView>
 
         <ShareableProgressModal
