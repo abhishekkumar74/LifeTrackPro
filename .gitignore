@@ -51,9 +51,10 @@ yarn-error.*
 
 # macOS
 .DS_Store
-Icon?
 !**/icon.png
 *.html
+!privacy.html
+!docs/*.html
 *.pem
 
 # typescript
