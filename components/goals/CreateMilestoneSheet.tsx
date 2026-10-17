@@ -22,6 +22,8 @@ import { COLORS, TYPOGRAPHY } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
 import { SubjectPicker } from '@/components/shared/SubjectPicker';
 
+const SNAP_POINTS = ['62%'];
+
 interface CreateMilestoneSheetProps {
   isVisible: boolean;
   goalId: string;
@@ -45,13 +47,10 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
 
     useEffect(() => {
       if (isVisible) {
-        sheetRef.current?.expand();
         setTitle('');
         setDueDate(null);
         setSelectedSubject(null);
         setErrorMsg(null);
-      } else {
-        sheetRef.current?.close();
       }
     }, [isVisible]);
 
@@ -125,11 +124,16 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    if (!isVisible) {
+      return null;
+    }
+
     return (
       <BottomSheet
         ref={sheetRef}
-        index={-1}
-        snapPoints={['62%']}
+        index={0}
+        snapPoints={SNAP_POINTS}
+        enableDynamicSizing={false}
         enablePanDownToClose={true}
         backdropComponent={renderBackdrop}
         onChange={handleSheetChange}

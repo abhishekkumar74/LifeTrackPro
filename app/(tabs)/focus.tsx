@@ -1361,6 +1361,7 @@ export default function FocusScreen(): React.JSX.Element {
         ref={rewardsSheetRef}
         index={-1}
         snapPoints={['75%', '92%']}
+        enableDynamicSizing={false}
         enablePanDownToClose={true}
         backdropComponent={renderTopicBackdrop}
         backgroundStyle={styles.bottomSheetDarkBackground}
@@ -1491,6 +1492,7 @@ export default function FocusScreen(): React.JSX.Element {
         ref={settingsSheetRef}
         index={-1}
         snapPoints={['35%']}
+        enableDynamicSizing={false}
         enablePanDownToClose={true}
         backdropComponent={renderTopicBackdrop}
         onChange={(idx) => {
@@ -1562,6 +1564,7 @@ export default function FocusScreen(): React.JSX.Element {
           ref={topicSheetRef}
           index={0}
           snapPoints={['50%']}
+          enableDynamicSizing={false}
           enablePanDownToClose={false}
           backdropComponent={renderTopicBackdrop}
           backgroundStyle={styles.bottomSheetBackground}
@@ -1644,6 +1647,7 @@ export default function FocusScreen(): React.JSX.Element {
         ref={historySheetRef}
         index={-1}
         snapPoints={['75%', '92%']}
+        enableDynamicSizing={false}
         enablePanDownToClose={true}
         backdropComponent={renderTopicBackdrop}
         backgroundStyle={styles.bottomSheetDarkBackground}
@@ -1681,6 +1685,7 @@ export default function FocusScreen(): React.JSX.Element {
         ref={soundSheetRef}
         index={-1}
         snapPoints={['55%']}
+        enableDynamicSizing={false}
         enablePanDownToClose={true}
         backdropComponent={renderTopicBackdrop}
         backgroundStyle={styles.bottomSheetDarkBackground}

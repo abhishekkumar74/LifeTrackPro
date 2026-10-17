@@ -26,13 +26,16 @@ const LABEL_PRIMARY = "Make this my primary goal";
 const BTN_SUBMIT = "Create Goal";
 const TIMELINES: ('3M' | '6M' | '1Y' | '2Y' | '5Y')[] = ['3M', '6M', '1Y', '2Y', '5Y'];
 const BORDER_COLOR = '#E8E7E3';
+const SNAP_POINTS = ['75%'];
  
 interface CreateGoalSheetProps {
+  isVisible?: boolean;
+  onClose?: () => void;
   onSuccess: () => void;
 }
  
 export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProps>(
-  ({ onSuccess }, ref) => {
+  ({ isVisible, onClose, onSuccess }, ref) => {
     const createGoalMutation = useCreateGoal();
  
     const [title, setTitle] = useState('');
@@ -50,8 +53,10 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
         setTimeout(() => {
           inputRef.current?.focus();
         }, 150);
+      } else if (index === -1) {
+        onClose?.();
       }
-    }, []);
+    }, [onClose]);
 
     const handleCreate = () => {
       const trimmedTitle = title.trim();
@@ -94,12 +99,17 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
       ),
       []
     );
+
+    if (isVisible !== undefined && !isVisible) {
+      return null;
+    }
  
     return (
       <BottomSheet
         ref={sheetRef}
-        index={-1}
-        snapPoints={['75%']}
+        index={isVisible !== undefined ? 0 : -1}
+        snapPoints={SNAP_POINTS}
+        enableDynamicSizing={false}
         enablePanDownToClose={true}
         backdropComponent={renderBackdrop}
         keyboardBehavior="interactive"

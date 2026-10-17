@@ -86,11 +86,17 @@ type TabType = 'syllabus' | 'notes' | 'flashcards';
 type FilterType = string;
 type StudySessionState = 'idle' | 'active' | 'complete';
 
+const ADD_TOPIC_SNAP_POINTS = ['55%'];
+
 export default function LearnScreen(): React.JSX.Element {
   const router = useRouter();
   const [selectedTab, setSelectedTab] = useState<TabType>('syllabus');
   const [activeFilter, setActiveFilter] = useState<FilterType>('All');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Sheet visibility states to prevent auto-opening on tab mount
+  const [isAddTopicOpen, setIsAddTopicOpen] = useState(false);
+  const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
 
   // Custom review mode for flashcards (reviewing all notes vs only due ones)
   const [reviewAllFlashcards, setReviewAllFlashcards] = useState(false);
@@ -279,7 +285,7 @@ export default function LearnScreen(): React.JSX.Element {
     setNewSubject('');
     setNewChapter('');
     setNewTopic('');
-    addTopicSheetRef.current?.expand();
+    setIsAddTopicOpen(true);
   }, []);
 
   const handleAddTopicSubmit = useCallback(() => {
@@ -296,6 +302,7 @@ export default function LearnScreen(): React.JSX.Element {
       },
       {
         onSuccess: () => {
+          setIsAddTopicOpen(false);
           addTopicSheetRef.current?.close();
           Keyboard.dismiss();
           const subName = newSubject.trim();
@@ -909,6 +916,7 @@ export default function LearnScreen(): React.JSX.Element {
       },
       {
         onSuccess: (newNote) => {
+          setIsQuickCaptureOpen(false);
           quickCaptureSheetRef.current?.close();
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           router.push(`/note/${newNote.id}`);
@@ -1821,78 +1829,88 @@ export default function LearnScreen(): React.JSX.Element {
 
       {/* Floating Action Button (Always Visible across tabs) */}
       <QuickCaptureButton
-        onPress={() => quickCaptureSheetRef.current?.expand()}
+        onPress={() => setIsQuickCaptureOpen(true)}
         style={selectedTab === 'flashcards' && studySessionState === 'active' ? { display: 'none' } : undefined}
       />
 
       {/* Quick Capture Bottom Sheet Modal */}
       <QuickCaptureSheet
         ref={quickCaptureSheetRef}
+        isVisible={isQuickCaptureOpen}
+        onClose={() => setIsQuickCaptureOpen(false)}
         subjects={subjectsList}
         lastUsedSubject={lastUsedSubject}
         onSave={handleQuickCaptureSave}
         isSaving={createNoteMutation.isPending}
       />
 
-      {/* Add Topic bottom sheet form */}
-      <BottomSheet
-        ref={addTopicSheetRef}
-        index={-1}
-        snapPoints={['55%']}
-        enablePanDownToClose
-        backdropComponent={renderBackdrop}
-        keyboardBehavior="interactive"
-      >
-        <BottomSheetView style={styles.addSheetContent}>
-          <Text style={styles.addSheetTitle}>Add Syllabus Topic</Text>
+      {/* Add Topic bottom sheet form (guarded so it never auto-opens on mount) */}
+      {isAddTopicOpen && (
+        <BottomSheet
+          ref={addTopicSheetRef}
+          index={0}
+          snapPoints={ADD_TOPIC_SNAP_POINTS}
+          enableDynamicSizing={false}
+          enablePanDownToClose
+          backdropComponent={renderBackdrop}
+          keyboardBehavior="interactive"
+          onChange={(idx) => {
+            if (idx === -1) {
+              setIsAddTopicOpen(false);
+            }
+          }}
+        >
+          <BottomSheetView style={styles.addSheetContent}>
+            <Text style={styles.addSheetTitle}>Add Syllabus Topic</Text>
 
-          <Text style={styles.sheetInputLabel}>SUBJECT</Text>
-          <BottomSheetTextInput
-            style={styles.sheetInput}
-            value={newSubject}
-            onChangeText={setNewSubject}
-            placeholder="e.g. Physics"
-            placeholderTextColor="#9B9BAF"
-            maxLength={40}
-          />
+            <Text style={styles.sheetInputLabel}>SUBJECT</Text>
+            <BottomSheetTextInput
+              style={styles.sheetInput}
+              value={newSubject}
+              onChangeText={setNewSubject}
+              placeholder="e.g. Physics"
+              placeholderTextColor="#9B9BAF"
+              maxLength={40}
+            />
 
-          <Text style={styles.sheetInputLabel}>CHAPTER</Text>
-          <BottomSheetTextInput
-            style={styles.sheetInput}
-            value={newChapter}
-            onChangeText={setNewChapter}
-            placeholder="e.g. Kinematics"
-            placeholderTextColor="#9B9BAF"
-            maxLength={50}
-          />
+            <Text style={styles.sheetInputLabel}>CHAPTER</Text>
+            <BottomSheetTextInput
+              style={styles.sheetInput}
+              value={newChapter}
+              onChangeText={setNewChapter}
+              placeholder="e.g. Kinematics"
+              placeholderTextColor="#9B9BAF"
+              maxLength={50}
+            />
 
-          <Text style={styles.sheetInputLabel}>TOPIC</Text>
-          <BottomSheetTextInput
-            style={styles.sheetInput}
-            value={newTopic}
-            onChangeText={setNewTopic}
-            placeholder="e.g. Projectile Motion"
-            placeholderTextColor="#9B9BAF"
-            maxLength={60}
-          />
+            <Text style={styles.sheetInputLabel}>TOPIC</Text>
+            <BottomSheetTextInput
+              style={styles.sheetInput}
+              value={newTopic}
+              onChangeText={setNewTopic}
+              placeholder="e.g. Projectile Motion"
+              placeholderTextColor="#9B9BAF"
+              maxLength={60}
+            />
 
-          <TouchableOpacity
-            style={[
-              styles.sheetSubmitBtn,
-              createTopicMutation.isPending && styles.sheetSubmitBtnDisabled,
-            ]}
-            onPress={handleAddTopicSubmit}
-            disabled={createTopicMutation.isPending}
-            activeOpacity={0.8}
-          >
-            {createTopicMutation.isPending ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.sheetSubmitBtnText}>Create Topic</Text>
-            )}
-          </TouchableOpacity>
-        </BottomSheetView>
-      </BottomSheet>
+            <TouchableOpacity
+              style={[
+                styles.sheetSubmitBtn,
+                createTopicMutation.isPending && styles.sheetSubmitBtnDisabled,
+              ]}
+              onPress={handleAddTopicSubmit}
+              disabled={createTopicMutation.isPending}
+              activeOpacity={0.8}
+            >
+              {createTopicMutation.isPending ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.sheetSubmitBtnText}>Create Topic</Text>
+              )}
+            </TouchableOpacity>
+          </BottomSheetView>
+        </BottomSheet>
+      )}
 
       {/* Loading Overlay spinner when syllabus is being loaded in batch */}
       {setupSyllabusMutation.isPending && (

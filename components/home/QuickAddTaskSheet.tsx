@@ -40,6 +40,8 @@ const PRIORITY_OPTIONS = [
   { label: 'Normal', value: 'normal' },
 ];
 
+const SNAP_POINTS = ['50%'];
+
 export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
   isVisible,
   onClose,
@@ -111,7 +113,8 @@ export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
     <BottomSheet
       ref={sheetRef}
       index={0}
-      snapPoints={['50%']}
+      snapPoints={SNAP_POINTS}
+      enableDynamicSizing={false}
       enablePanDownToClose={true}
       backdropComponent={renderBackdrop}
       onChange={handleSheetChange}

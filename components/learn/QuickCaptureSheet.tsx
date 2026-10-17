@@ -16,7 +16,11 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 import { SubjectPicker } from '@/components/shared/SubjectPicker';
 
+const SNAP_POINTS = ['42%'];
+
 interface QuickCaptureSheetProps {
+  isVisible?: boolean;
+  onClose?: () => void;
   subjects: string[];
   lastUsedSubject: string | null;
   onSave: (content: string, subject: string) => void;
@@ -29,7 +33,7 @@ export interface QuickCaptureSheetRef {
 }
 
 export const QuickCaptureSheet = forwardRef<QuickCaptureSheetRef, QuickCaptureSheetProps>(
-  ({ subjects, lastUsedSubject, onSave, isSaving }, ref) => {
+  ({ isVisible, onClose, subjects, lastUsedSubject, onSave, isSaving }, ref) => {
     const bottomSheetRef = useRef<BottomSheet>(null);
     const [content, setContent] = useState('');
     const [selectedSubject, setSelectedSubject] = useState<string>('Other');
@@ -78,14 +82,24 @@ export const QuickCaptureSheet = forwardRef<QuickCaptureSheetRef, QuickCaptureSh
 
     const mergedSubjects = Array.from(new Set([...subjects, 'Other']));
 
+    if (isVisible !== undefined && !isVisible) {
+      return null;
+    }
+
     return (
       <BottomSheet
         ref={bottomSheetRef}
-        index={-1}
-        snapPoints={['42%']}
+        index={isVisible !== undefined ? 0 : -1}
+        snapPoints={SNAP_POINTS}
+        enableDynamicSizing={false}
         enablePanDownToClose
         backdropComponent={renderBackdrop}
         keyboardBehavior="interactive"
+        onChange={(idx) => {
+          if (idx === -1) {
+            onClose?.();
+          }
+        }}
       >
         <BottomSheetView style={styles.sheetContent}>
           <Text style={styles.sheetTitle}>Quick Note</Text>

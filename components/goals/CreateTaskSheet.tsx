@@ -37,15 +37,18 @@ const PRIORITIES: { val: TaskPriority; label: string; color: string }[] = [
 ];
 
 const BORDER_COLOR = '#E8E7E3';
+const SNAP_POINTS = ['75%'];
 
 interface CreateTaskSheetProps {
+  isVisible?: boolean;
+  onClose?: () => void;
   milestones: Milestone[];
   defaultMilestoneId?: string | null;
   onSuccess: () => void;
 }
 
 export const CreateTaskSheet = React.forwardRef<BottomSheet, CreateTaskSheetProps>(
-  ({ milestones, defaultMilestoneId, onSuccess }, ref) => {
+  ({ isVisible, onClose, milestones, defaultMilestoneId, onSuccess }, ref) => {
     const createTaskMutation = useCreateTask();
 
     const [title, setTitle] = useState('');
@@ -77,8 +80,10 @@ export const CreateTaskSheet = React.forwardRef<BottomSheet, CreateTaskSheetProp
         setTimeout(() => {
           inputRef.current?.focus();
         }, 150);
+      } else if (index === -1) {
+        onClose?.();
       }
-    }, []);
+    }, [onClose]);
 
     const handleCreate = () => {
       const trimmedTitle = title.trim();
@@ -136,11 +141,16 @@ export const CreateTaskSheet = React.forwardRef<BottomSheet, CreateTaskSheetProp
 
     const selectedMilestone = milestones.find((m) => m.id === milestoneId);
 
+    if (isVisible !== undefined && !isVisible) {
+      return null;
+    }
+
     return (
       <BottomSheet
         ref={sheetRef}
-        index={-1}
-        snapPoints={['75%']}
+        index={isVisible !== undefined ? 0 : -1}
+        snapPoints={SNAP_POINTS}
+        enableDynamicSizing={false}
         enablePanDownToClose={true}
         backdropComponent={renderBackdrop}
         keyboardBehavior="interactive"

@@ -43,6 +43,9 @@ const MOOD_ICONS: { Icon: LucideIcon; val: number }[] = [
   { Icon: Zap, val: 5 },
 ];
 
+const STRICT_SNAP_POINTS = ['62%'];
+const NORMAL_SNAP_POINTS = ['55%'];
+
 // Sub-component for an animated mood selector
 const MoodEmoji: React.FC<{
   Icon: LucideIcon;
@@ -148,11 +151,14 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
     []
   );
 
+  if (!isVisible) return null;
+
   return (
     <BottomSheet
       ref={sheetRef}
-      index={-1}
-      snapPoints={isStrictMode ? ['62%'] : ['55%']}
+      index={0}
+      snapPoints={isStrictMode ? STRICT_SNAP_POINTS : NORMAL_SNAP_POINTS}
+      enableDynamicSizing={false}
       enablePanDownToClose={false} // Force action choice
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={styles.handleIndicator}

@@ -31,6 +31,7 @@ const ROOM_TYPES = [
   { value: 'discussion', icon: MessageSquare, label: 'Discussion', description: 'Chat during breaks' },
 ];
 const TIMERS: (25 | 50 | 90)[] = [25, 50, 90];
+const SNAP_POINTS = ['75%'];
 
 export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
   isVisible,
@@ -119,7 +120,8 @@ export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
     <BottomSheet
       ref={sheetRef}
       index={0}
-      snapPoints={['75%']}
+      snapPoints={SNAP_POINTS}
+      enableDynamicSizing={false}
       enablePanDownToClose={true}
       backdropComponent={renderBackdrop}
       onChange={handleSheetChange}

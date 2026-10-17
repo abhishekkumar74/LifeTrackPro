@@ -54,6 +54,8 @@ const REPEAT_OPTIONS = [
   { label: 'Weekdays', value: 'weekdays' },
 ];
 
+const SNAP_POINTS = ['65%'];
+
 export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
   isVisible,
   onClose,
@@ -275,7 +277,8 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
     <BottomSheet
       ref={sheetRef}
       index={0}
-      snapPoints={['65%']}
+      snapPoints={SNAP_POINTS}
+      enableDynamicSizing={false}
       enablePanDownToClose={true}
       backdropComponent={renderBackdrop}
       onChange={handleSheetChange}

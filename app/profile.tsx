@@ -1079,6 +1079,7 @@ export default function ProfileScreen(): React.JSX.Element {
           ref={subCategorySheetRef}
           index={0}
           snapPoints={['75%']}
+          enableDynamicSizing={false}
           enablePanDownToClose
           backdropComponent={renderBackdrop}
           keyboardBehavior="interactive"

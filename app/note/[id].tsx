@@ -64,6 +64,9 @@ const NOTE_TEMPLATES = {
   },
 };
 
+const PICKER_SNAP_POINTS = ['52%'];
+const FLASHCARD_SNAP_POINTS = ['50%'];
+
 export default function NoteEditorScreen(): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -103,6 +106,10 @@ export default function NoteEditorScreen(): React.JSX.Element {
   const pickerSheetRef = useRef<BottomSheet>(null);
   const flashcardSheetRef = useRef<BottomSheet>(null);
   const scrollRef = useRef<ScrollView>(null);
+
+  // Sheet visibility states to prevent auto-opening on mount
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [isFlashcardOpen, setIsFlashcardOpen] = useState(false);
 
   // Picker search filter state
   const [pickerMode, setPickerMode] = useState<'subject' | 'chapter' | null>(null);
@@ -322,7 +329,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
     Keyboard.dismiss();
     setPickerMode(mode);
     setPickerSearch('');
-    pickerSheetRef.current?.expand();
+    setIsPickerOpen(true);
   };
 
   const handleSelectOption = (option: string) => {
@@ -332,6 +339,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
     } else if (pickerMode === 'chapter') {
       setChapter(option);
     }
+    setIsPickerOpen(false);
     pickerSheetRef.current?.close();
   };
 
@@ -463,7 +471,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
     if (id === 'new') return;
     setFcFront(title || '');
     setFcBack(content ? content.substring(0, 100) : '');
-    flashcardSheetRef.current?.expand();
+    setIsFlashcardOpen(true);
   };
 
   // Create Linked Flashcard
@@ -487,6 +495,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
       {
         onSuccess: () => {
           setIsCreatingFlashcard(false);
+          setIsFlashcardOpen(false);
           flashcardSheetRef.current?.close();
           Alert.alert('Success', 'Flashcard created successfully! Linked to this note.');
         },
@@ -767,127 +776,143 @@ export default function NoteEditorScreen(): React.JSX.Element {
       </SafeAreaView>
 
       {/* Selector Bottom Sheet (Subject/Chapter Autocomplete Dropdown) */}
-      <BottomSheet
-        ref={pickerSheetRef}
-        index={-1}
-        snapPoints={['52%']}
-        enablePanDownToClose
-        backdropComponent={renderBackdrop}
-        keyboardBehavior="interactive"
-      >
-        <BottomSheetView style={styles.pickerSheet}>
-          <Text style={styles.pickerSheetTitle}>
-            {pickerMode === 'subject' ? 'Select Subject' : 'Select Chapter'}
-          </Text>
+      {isPickerOpen && (
+        <BottomSheet
+          ref={pickerSheetRef}
+          index={0}
+          snapPoints={PICKER_SNAP_POINTS}
+          enableDynamicSizing={false}
+          enablePanDownToClose
+          backdropComponent={renderBackdrop}
+          keyboardBehavior="interactive"
+          onChange={(idx) => {
+            if (idx === -1) {
+              setIsPickerOpen(false);
+            }
+          }}
+        >
+          <BottomSheetView style={styles.pickerSheet}>
+            <Text style={styles.pickerSheetTitle}>
+              {pickerMode === 'subject' ? 'Select Subject' : 'Select Chapter'}
+            </Text>
 
-          {/* Autocomplete Input Search */}
-          <BottomSheetTextInput
-            style={styles.pickerSearchInput}
-            value={pickerSearch}
-            onChangeText={setPickerSearch}
-            placeholder={`Search or enter custom ${pickerMode}...`}
-            placeholderTextColor="#9B9BAF"
-          />
+            {/* Autocomplete Input Search */}
+            <BottomSheetTextInput
+              style={styles.pickerSearchInput}
+              value={pickerSearch}
+              onChangeText={setPickerSearch}
+              placeholder={`Search or enter custom ${pickerMode}...`}
+              placeholderTextColor="#9B9BAF"
+            />
 
-          <ScrollView contentContainerStyle={styles.pickerOptionsScroll} keyboardShouldPersistTaps="handled">
-            {/* Custom add item option if search string doesn't match */}
-            {showCustomAddOption && (
-              <TouchableOpacity
-                style={[styles.pickerOptionItem, styles.pickerOptionCustom]}
-                onPress={() => handleSelectOption(pickerSearch.trim())}
-                activeOpacity={0.7}
-              >
-                <Plus size={14} color="#5B4FE8" />
-                <Text style={styles.pickerOptionCustomText}>
-                  Use Custom: "{pickerSearch.trim()}"
-                </Text>
-              </TouchableOpacity>
-            )}
+            <ScrollView contentContainerStyle={styles.pickerOptionsScroll} keyboardShouldPersistTaps="handled">
+              {/* Custom add item option if search string doesn't match */}
+              {showCustomAddOption && (
+                <TouchableOpacity
+                  style={[styles.pickerOptionItem, styles.pickerOptionCustom]}
+                  onPress={() => handleSelectOption(pickerSearch.trim())}
+                  activeOpacity={0.7}
+                >
+                  <Plus size={14} color="#5B4FE8" />
+                  <Text style={styles.pickerOptionCustomText}>
+                    Use Custom: "{pickerSearch.trim()}"
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-            {filteredPickerOptions.length > 0 ? (
-              filteredPickerOptions.map((opt) => {
-                const active = pickerMode === 'subject' ? subject === opt : chapter === opt;
-                return (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[styles.pickerOptionItem, active && styles.pickerOptionActive]}
-                    onPress={() => handleSelectOption(opt)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.pickerOptionText,
-                        active && styles.pickerOptionTextActive,
-                      ]}
+              {filteredPickerOptions.length > 0 ? (
+                filteredPickerOptions.map((opt) => {
+                  const active = pickerMode === 'subject' ? subject === opt : chapter === opt;
+                  return (
+                    <TouchableOpacity
+                      key={opt}
+                      style={[styles.pickerOptionItem, active && styles.pickerOptionActive]}
+                      onPress={() => handleSelectOption(opt)}
+                      activeOpacity={0.7}
                     >
-                      {opt}
-                    </Text>
-                    {active && <Check size={14} color="#5B4FE8" />}
-                  </TouchableOpacity>
-                );
-              })
-            ) : (
-              !showCustomAddOption && (
-                <View style={styles.emptyChaptersContainer}>
-                  <Text style={styles.emptyChaptersText}>No matches found.</Text>
-                </View>
-              )
-            )}
-          </ScrollView>
-        </BottomSheetView>
-      </BottomSheet>
+                      <Text
+                        style={[
+                          styles.pickerOptionText,
+                          active && styles.pickerOptionTextActive,
+                        ]}
+                      >
+                        {opt}
+                      </Text>
+                      {active && <Check size={14} color="#5B4FE8" />}
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                !showCustomAddOption && (
+                  <View style={styles.emptyChaptersContainer}>
+                    <Text style={styles.emptyChaptersText}>No matches found.</Text>
+                  </View>
+                )
+              )}
+            </ScrollView>
+          </BottomSheetView>
+        </BottomSheet>
+      )}
 
       {/* Linked Flashcard Creator Sheet */}
-      <BottomSheet
-        ref={flashcardSheetRef}
-        index={-1}
-        snapPoints={['50%']}
-        enablePanDownToClose
-        backdropComponent={renderBackdrop}
-        keyboardBehavior="interactive"
-      >
-        <BottomSheetView style={styles.pickerSheet}>
-          <Text style={styles.pickerSheetTitle}>Create Linked Flashcard</Text>
-          <Text style={styles.sheetInstructions}>
-            Add a study card. Answers are stored in a serialized JSON structure under notes.
-          </Text>
+      {isFlashcardOpen && (
+        <BottomSheet
+          ref={flashcardSheetRef}
+          index={0}
+          snapPoints={FLASHCARD_SNAP_POINTS}
+          enableDynamicSizing={false}
+          enablePanDownToClose
+          backdropComponent={renderBackdrop}
+          keyboardBehavior="interactive"
+          onChange={(idx) => {
+            if (idx === -1) {
+              setIsFlashcardOpen(false);
+            }
+          }}
+        >
+          <BottomSheetView style={styles.pickerSheet}>
+            <Text style={styles.pickerSheetTitle}>Create Linked Flashcard</Text>
+            <Text style={styles.sheetInstructions}>
+              Add a study card. Answers are stored in a serialized JSON structure under notes.
+            </Text>
 
-          <Text style={styles.inputLabel}>CARD FRONT (QUESTION)</Text>
-          <BottomSheetTextInput
-            style={styles.fcInput}
-            value={fcFront}
-            onChangeText={setFcFront}
-            placeholder="e.g. What is gravity?"
-            placeholderTextColor="#9B9BAF"
-            maxLength={100}
-          />
+            <Text style={styles.inputLabel}>CARD FRONT (QUESTION)</Text>
+            <BottomSheetTextInput
+              style={styles.fcInput}
+              value={fcFront}
+              onChangeText={setFcFront}
+              placeholder="e.g. What is gravity?"
+              placeholderTextColor="#9B9BAF"
+              maxLength={100}
+            />
 
-          <Text style={styles.inputLabel}>CARD BACK (ANSWER)</Text>
-          <BottomSheetTextInput
-            style={[styles.fcInput, styles.fcInputMultiline]}
-            value={fcBack}
-            onChangeText={setFcBack}
-            placeholder="e.g. Fundamental force that attracts objects of mass."
-            placeholderTextColor="#9B9BAF"
-            multiline
-            numberOfLines={3}
-            maxLength={300}
-          />
+            <Text style={styles.inputLabel}>CARD BACK (ANSWER)</Text>
+            <BottomSheetTextInput
+              style={[styles.fcInput, styles.fcInputMultiline]}
+              value={fcBack}
+              onChangeText={setFcBack}
+              placeholder="e.g. Fundamental force that attracts objects of mass."
+              placeholderTextColor="#9B9BAF"
+              multiline
+              numberOfLines={3}
+              maxLength={300}
+            />
 
-          <TouchableOpacity
-            style={[styles.fcSubmitBtn, isCreatingFlashcard && styles.saveBtnDisabled]}
-            onPress={handleCreateFlashcardSubmit}
-            disabled={isCreatingFlashcard}
-            activeOpacity={0.8}
-          >
-            {isCreatingFlashcard ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.fcSubmitBtnText}>Create Card</Text>
-            )}
-          </TouchableOpacity>
-        </BottomSheetView>
-      </BottomSheet>
+            <TouchableOpacity
+              style={[styles.fcSubmitBtn, isCreatingFlashcard && styles.saveBtnDisabled]}
+              onPress={handleCreateFlashcardSubmit}
+              disabled={isCreatingFlashcard}
+              activeOpacity={0.8}
+            >
+              {isCreatingFlashcard ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.fcSubmitBtnText}>Create Card</Text>
+              )}
+            </TouchableOpacity>
+          </BottomSheetView>
+        </BottomSheet>
+      )}
     </View>
   );
 }

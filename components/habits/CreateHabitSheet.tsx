@@ -36,6 +36,8 @@ const DAYS_OF_WEEK = [
   { label: 'S', value: 0 },
 ];
 
+const SNAP_POINTS = ['70%'];
+
 export const CreateHabitSheet: React.FC<CreateHabitSheetProps> = ({
   isVisible,
   onClose,
@@ -195,7 +197,8 @@ export const CreateHabitSheet: React.FC<CreateHabitSheetProps> = ({
     <BottomSheet
       ref={sheetRef}
       index={0}
-      snapPoints={['70%']}
+      snapPoints={SNAP_POINTS}
+      enableDynamicSizing={false}
       enablePanDownToClose={true}
       backdropComponent={renderBackdrop}
       onChange={handleSheetChange}

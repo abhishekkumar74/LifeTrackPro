@@ -73,6 +73,8 @@ export default function GoalsScreen(): React.JSX.Element {
 
   const [selectedTab, setSelectedTab] = useState<TabType>('active');
   const [defaultMilestoneId, setDefaultMilestoneId] = useState<string | null>(null);
+  const [isGoalSheetVisible, setIsGoalSheetVisible] = useState(false);
+  const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
   const [isMilestoneSheetVisible, setIsMilestoneSheetVisible] = useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -178,12 +180,12 @@ export default function GoalsScreen(): React.JSX.Element {
 
   // Open Sheets
   const handleOpenCreateGoal = useCallback(() => {
-    createGoalSheetRef.current?.expand();
+    setIsGoalSheetVisible(true);
   }, []);
 
   const handleOpenCreateTask = useCallback((milestoneId: string | null = null) => {
     setDefaultMilestoneId(milestoneId);
-    createTaskSheetRef.current?.expand();
+    setIsTaskSheetVisible(true);
   }, []);
 
   const handleReschedule = useCallback((taskId: string, milestoneId?: string | null) => {
@@ -470,7 +472,7 @@ export default function GoalsScreen(): React.JSX.Element {
           <Text style={styles.emptySubText}>Set your first big goal and break it into daily steps</Text>
           <TouchableOpacity
             style={styles.emptyButton}
-            onPress={() => createGoalSheetRef.current?.expand()}
+            onPress={handleOpenCreateGoal}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel="Create First Goal"
@@ -734,18 +736,22 @@ export default function GoalsScreen(): React.JSX.Element {
       {/* Goal Creation Bottom Sheet */}
       <CreateGoalSheet
         ref={createGoalSheetRef}
+        isVisible={isGoalSheetVisible}
+        onClose={() => setIsGoalSheetVisible(false)}
         onSuccess={() => {
-          createGoalSheetRef.current?.close();
+          setIsGoalSheetVisible(false);
         }}
       />
 
       {/* Task Creation Bottom Sheet */}
       <CreateTaskSheet
         ref={createTaskSheetRef}
+        isVisible={isTaskSheetVisible}
         milestones={flatActiveMilestones}
         defaultMilestoneId={defaultMilestoneId}
+        onClose={() => setIsTaskSheetVisible(false)}
         onSuccess={() => {
-          createTaskSheetRef.current?.close();
+          setIsTaskSheetVisible(false);
         }}
       />
 
