@@ -65,6 +65,10 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 // Ensure the splash screen stays visible during bootstrapping
 SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({
+  duration: 300,
+  fade: true,
+});
 
 
 import { AppLogo } from '@/components/ui/AppLogo';
