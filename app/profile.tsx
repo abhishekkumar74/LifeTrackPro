@@ -26,6 +26,7 @@ import { router, Href } from 'expo-router';
 import { CONFIG } from '@/constants/config';
 import { resetUser } from '@/lib/posthog';
 import * as Haptics from 'expo-haptics';
+import { LEGAL_CONFIG } from '@/lib/constants/legal';
 import {
   ArrowLeft,
   Bell,
@@ -794,7 +795,7 @@ export default function ProfileScreen(): React.JSX.Element {
       if (__DEV__) console.error('Error scheduling account deletion:', err);
       Alert.alert(
         'Action Failed',
-        'Could not schedule account deletion. Please check your internet connection or contact support@lifetrackpro.com.'
+        `Could not schedule account deletion. Please check your internet connection or contact ${LEGAL_CONFIG.supportEmail}.`
       );
     } finally {
       setIsDeletingAccount(false);
@@ -1209,7 +1210,7 @@ export default function ProfileScreen(): React.JSX.Element {
 
           <TouchableOpacity
             style={styles.row}
-            onPress={() => Linking.openURL('mailto:support@lifetrackpro.com')}
+            onPress={() => Linking.openURL(`mailto:${LEGAL_CONFIG.supportEmail}`)}
             activeOpacity={0.7}
           >
             <View style={styles.rowLabelCol}>

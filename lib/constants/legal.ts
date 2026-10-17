@@ -4,7 +4,7 @@
  */
 export const LEGAL_CONFIG = {
   developerName: 'Abhishek Kumar',
-  supportEmail: 'support@lifetrackpro.com',
+  supportEmail: 'abhishekkumar86448@gmail.com',
   appName: 'LifeTrack Pro',
-  lastUpdated: 'June 23, 2026',
+  lastUpdated: 'October 18, 2026',
 };
