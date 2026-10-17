@@ -10,6 +10,7 @@ import {
   Dimensions,
   Share,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRef, useEffect } from 'react';
@@ -39,7 +40,7 @@ import Svg, {
 
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { AdBanner } from '@/components/ads';
+import { AdBanner, AdRewarded } from '@/components/ads';
 
 // Custom Hooks & Stats Data Hooks
 import {
@@ -79,7 +80,25 @@ export default function StatsScreen(): React.JSX.Element {
 
   const handleExportReport = async () => {
     if (!isPremium) {
-      router.push('/paywall');
+      Alert.alert(
+        'Export Study Report 📄',
+        'Upgrade to Gold for unlimited instant exports, or watch a quick video ad to export your report for free.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Upgrade to Gold 👑',
+            onPress: () => router.push('/paywall'),
+          },
+          {
+            text: 'Watch Ad & Export 🎬',
+            onPress: () => {
+              AdRewarded.showRewardAd(() => {
+                setShareProgressModalVisible(true);
+              });
+            },
+          },
+        ]
+      );
       return;
     }
     setShareProgressModalVisible(true);

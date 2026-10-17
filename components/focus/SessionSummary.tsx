@@ -19,9 +19,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Frown, Meh, Smile, SmilePlus, Zap, LucideIcon } from 'lucide-react-native';
-import { AdInterstitial } from '@/components/ads';
+import { Frown, Meh, Smile, SmilePlus, Zap, LucideIcon, Sparkles } from 'lucide-react-native';
+import { AdInterstitial, AdRewarded } from '@/components/ads';
 import { calculateSessionXP } from '@/lib/utils/focus-rewards';
+import { useAuthStore } from '@/lib/store/auth.store';
 
 interface SessionSummaryProps {
   isVisible: boolean;
@@ -44,8 +45,8 @@ const MOOD_ICONS: { Icon: LucideIcon; val: number }[] = [
   { Icon: Zap, val: 5 },
 ];
 
-const STRICT_SNAP_POINTS = ['62%'];
-const NORMAL_SNAP_POINTS = ['55%'];
+const STRICT_SNAP_POINTS = ['72%'];
+const NORMAL_SNAP_POINTS = ['65%'];
 
 // Sub-component for an animated mood selector
 const MoodEmoji: React.FC<{
@@ -142,6 +143,31 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
     } catch (e) {
       setIsSaving(false);
     }
+  };
+
+  const isPremium = useAuthStore((state) => state.profile?.is_premium ?? false);
+
+  const handleSaveWithDoubleXp = async () => {
+    if (isSaving) return;
+    Keyboard.dismiss();
+
+    const moodVal = isStrictMode
+      ? selectedAccuracy === 'fully_focused'
+        ? 5
+        : selectedAccuracy === 'partially_distracted'
+        ? 3
+        : 1
+      : selectedMood || 4;
+
+    setIsSaving(true);
+    AdRewarded.showRewardAd(async () => {
+      try {
+        const doubleXP = calculatedXP * 2;
+        await onSave(moodVal, note, isStrictMode ? selectedAccuracy : null, doubleXP);
+      } catch (e) {
+        setIsSaving(false);
+      }
+    });
   };
 
   const handleDiscardPress = () => {
@@ -257,6 +283,25 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
           numberOfLines={2}
         />
 
+        {/* Rewarded Ad 2x XP Booster Button (Non-Premium users) */}
+        {!isPremium && (
+          <TouchableOpacity
+            style={[
+              styles.doubleXpButton,
+              (isSaving || (!isStrictMode && selectedMood === null)) && styles.saveButtonDisabled,
+              (isStrictMode && selectedAccuracy === null) && styles.saveButtonDisabled,
+            ]}
+            onPress={handleSaveWithDoubleXp}
+            disabled={isSaving || (isStrictMode ? selectedAccuracy === null : selectedMood === null)}
+            activeOpacity={0.8}
+          >
+            <Sparkles size={16} color="#FFFFFF" />
+            <Text style={styles.doubleXpButtonText}>
+              {isSaving ? 'Claiming 2x XP...' : `Watch Ad for 2x XP (+${calculatedXP * 2} XP) 🎬`}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* Save Session CTA */}
         <TouchableOpacity
           style={[
@@ -271,7 +316,11 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
           {isSaving ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text style={styles.saveButtonText}>Save Session</Text>
+            <Text style={styles.saveButtonText}>
+              {isPremium
+                ? `Save Session (+${calculatedXP * 2} XP VIP)`
+                : `Save Standard (+${calculatedXP} XP)`}
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -380,6 +429,28 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     height: 68,
     marginBottom: 24,
+  },
+  doubleXpButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#E8A020',
+    height: 50,
+    borderRadius: 12,
+    marginBottom: 10,
+    shadowColor: '#E8A020',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  doubleXpButtonText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   saveButton: {
     backgroundColor: '#5B4FE8',

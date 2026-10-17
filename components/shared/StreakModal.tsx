@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -8,9 +8,11 @@ import {
   ScrollView,
   Dimensions,
 } from 'react-native';
-import { Flame, X, ShieldCheck, Trophy, Calendar, ArrowRight, Zap, Check } from 'lucide-react-native';
+import { Flame, X, ShieldCheck, Shield, Trophy, Calendar, ArrowRight, Zap, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { router, Href } from 'expo-router';
+import { AdRewarded } from '@/components/ads';
+import { getStreakShieldCount, setStreakShieldCount, MAX_STREAK_SHIELDS } from '@/lib/utils/focus-rewards';
 
 interface StreakModalProps {
   isVisible: boolean;
@@ -27,6 +29,27 @@ export const StreakModal: React.FC<StreakModalProps> = ({
   weeklyActivity,
   onClose,
 }) => {
+  const [shieldsCount, setShieldsCount] = useState<number>(1);
+  const [isClaiming, setIsClaiming] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isVisible) {
+      getStreakShieldCount().then((count) => setShieldsCount(count));
+    }
+  }, [isVisible]);
+
+  const handleClaimAdShield = () => {
+    if (isClaiming || shieldsCount >= MAX_STREAK_SHIELDS) return;
+    setIsClaiming(true);
+    AdRewarded.showRewardAd(async () => {
+      const nextCount = shieldsCount + 1;
+      setShieldsCount(nextCount);
+      await setStreakShieldCount(nextCount);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setIsClaiming(false);
+    });
+  };
+
   const handleAction = async (target: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     onClose();
@@ -137,10 +160,35 @@ export const StreakModal: React.FC<StreakModalProps> = ({
 
               <View style={styles.statBox}>
                 <ShieldCheck size={18} color="#00B894" />
-                <Text style={styles.statVal}>Active</Text>
+                <Text style={styles.statVal}>{shieldsCount} Active</Text>
                 <Text style={styles.statLabel}>Streak Protection</Text>
               </View>
             </View>
+
+            {/* Rewarded Ad Free Shield Banner */}
+            {shieldsCount < MAX_STREAK_SHIELDS && (
+              <TouchableOpacity
+                style={styles.adShieldCard}
+                onPress={handleClaimAdShield}
+                disabled={isClaiming}
+                activeOpacity={0.8}
+              >
+                <View style={styles.adShieldLeft}>
+                  <Shield size={22} color="#0284C7" fill="rgba(2, 132, 199, 0.18)" />
+                  <View style={{ marginLeft: 10, flex: 1 }}>
+                    <Text style={styles.adShieldTitle}>Protect Your Daily Streak</Text>
+                    <Text style={styles.adShieldSub}>
+                      {shieldsCount} of {MAX_STREAK_SHIELDS} shields active · Watch ad to get +1
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.adShieldBadge}>
+                  <Text style={styles.adShieldBadgeText}>
+                    {isClaiming ? 'Loading...' : '+1 Free 🎬'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
 
             {/* Motivational Quote */}
             <View style={styles.tipBox}>
@@ -368,5 +416,47 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans',
     fontSize: 12,
     color: '#9B9BAF',
+  },
+  adShieldCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F0F9FF',
+    borderColor: '#BAE6FD',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    width: '100%',
+    marginBottom: 14,
+  },
+  adShieldLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  adShieldTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0369A1',
+  },
+  adShieldSub: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#0284C7',
+    marginTop: 1,
+  },
+  adShieldBadge: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  adShieldBadgeText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 });

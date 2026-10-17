@@ -94,12 +94,12 @@ export { calculateFocusLevel };
 
 const REWARD_THEMES = [
   { id: 'default', name: 'Indigo Core', color: '#5B4FE8', requiredLevel: 1, requiredXp: 0, desc: 'Clean default indigo focus theme' },
-  { id: 'mint', name: 'Emerald Calm', color: '#00B894', requiredLevel: 2, requiredXp: 100, desc: 'Soothing mint green for calm focus' },
-  { id: 'sunset', name: 'Warm Ember', color: '#FF5E62', requiredLevel: 3, requiredXp: 250, desc: 'Energizing sunset gradient vibe' },
-  { id: 'rose_gold', name: 'Rose Elegance', color: '#FDA4AF', requiredLevel: 4, requiredXp: 500, desc: 'Sophisticated aesthetic rose-gold hue' },
-  { id: 'gold', name: 'Golden Prestige', color: '#E8A020', requiredLevel: 5, requiredXp: 900, desc: 'Elite gold theme for master focusers' },
-  { id: 'nebula', name: 'Cosmic Nebula', color: '#D946EF', requiredLevel: 6, requiredXp: 1400, desc: 'Deep ultraviolet nebula glow' },
-  { id: 'obsidian', name: 'Stealth Obsidian', color: '#475569', requiredLevel: 7, requiredXp: 2000, desc: 'Ultimate monochrome deep focus theme' },
+  { id: 'mint', name: 'Emerald Calm', color: '#00B894', requiredLevel: 2, requiredXp: 300, desc: 'Soothing mint green for calm focus' },
+  { id: 'sunset', name: 'Warm Ember', color: '#FF5E62', requiredLevel: 3, requiredXp: 750, desc: 'Energizing sunset gradient vibe' },
+  { id: 'rose_gold', name: 'Rose Elegance', color: '#FDA4AF', requiredLevel: 4, requiredXp: 1500, desc: 'Sophisticated aesthetic rose-gold hue' },
+  { id: 'gold', name: 'Golden Prestige', color: '#E8A020', requiredLevel: 5, requiredXp: 3000, desc: 'Elite gold theme for master focusers' },
+  { id: 'nebula', name: 'Cosmic Nebula', color: '#D946EF', requiredLevel: 6, requiredXp: 6000, desc: 'Deep ultraviolet nebula glow' },
+  { id: 'obsidian', name: 'Stealth Obsidian', color: '#475569', requiredLevel: 7, requiredXp: 12000, desc: 'Ultimate monochrome deep focus theme' },
 ] as const;
 
 // Custom Components
@@ -411,6 +411,22 @@ export default function FocusScreen(): React.JSX.Element {
     } finally {
       setIsForgingShield(false);
     }
+  };
+
+  const handleAdFreeShield = async () => {
+    if (isForgingShield) return;
+    if (streakShields >= MAX_STREAK_SHIELDS) {
+      useUiStore.getState().showToast('Shield Vault Full! You have maximum 3/3 shields.', 'info');
+      return;
+    }
+
+    AdRewarded.showRewardAd(async () => {
+      const newShields = streakShields + 1;
+      setStreakShields(newShields);
+      await setStreakShieldCount(newShields);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      useUiStore.getState().showToast('🛡️ Streak Shield Claimed via Ad! Streak is safe.', 'success');
+    });
   };
 
   // AppState listener for Strict focus mode accountability
@@ -1591,26 +1607,39 @@ export default function FocusScreen(): React.JSX.Element {
             <View style={styles.vaultFooterRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                 <Zap size={14} color="#F59E0B" />
-                <Text style={styles.vaultCostText}>{STREAK_SHIELD_XP_COST} XP per shield</Text>
+                <Text style={styles.vaultCostText}>{STREAK_SHIELD_XP_COST} XP</Text>
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.forgeShieldBtn,
-                  (streakShields >= MAX_STREAK_SHIELDS || (profile?.xp_points || 0) < STREAK_SHIELD_XP_COST) &&
-                    styles.forgeShieldBtnDisabled,
-                ]}
-                onPress={handleBuyStreakShield}
-                disabled={isForgingShield || streakShields >= MAX_STREAK_SHIELDS}
-                activeOpacity={0.8}
-              >
-                {isForgingShield ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.forgeShieldBtnText}>
-                    {streakShields >= MAX_STREAK_SHIELDS ? 'Vault Full' : 'Forge Shield 🛡️'}
-                  </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {/* Rewarded Ad Free Shield Button */}
+                {!isPremium && streakShields < MAX_STREAK_SHIELDS && (
+                  <TouchableOpacity
+                    style={styles.adShieldBtn}
+                    onPress={handleAdFreeShield}
+                    disabled={isForgingShield}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.adShieldBtnText}>Free with Ad 🎬</Text>
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.forgeShieldBtn,
+                    (streakShields >= MAX_STREAK_SHIELDS || (profile?.xp_points || 0) < STREAK_SHIELD_XP_COST) &&
+                      styles.forgeShieldBtnDisabled,
+                  ]}
+                  onPress={handleBuyStreakShield}
+                  disabled={isForgingShield || streakShields >= MAX_STREAK_SHIELDS}
+                  activeOpacity={0.8}
+                >
+                  {isForgingShield ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.forgeShieldBtnText}>
+                      {streakShields >= MAX_STREAK_SHIELDS ? 'Full' : 'Forge 🛡️'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
@@ -1764,10 +1793,10 @@ export default function FocusScreen(): React.JSX.Element {
             </View>
             <View style={styles.milestoneInfo}>
               <Text style={styles.milestoneTitle}>Focus Time Duration</Text>
-              <Text style={styles.milestoneDesc}>Earn +2 XP for every focused minute of deep work</Text>
+              <Text style={styles.milestoneDesc}>Earn +1 XP for every 2 focused minutes (0.5 XP / min)</Text>
             </View>
             <View style={[styles.milestoneTag, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)' }]}>
-              <Text style={[styles.milestoneTagText, { color: '#34D399' }]}>+2 XP / min</Text>
+              <Text style={[styles.milestoneTagText, { color: '#34D399' }]}>Base XP</Text>
             </View>
           </View>
 
@@ -1776,11 +1805,11 @@ export default function FocusScreen(): React.JSX.Element {
               <Award size={16} color="#38BDF8" />
             </View>
             <View style={styles.milestoneInfo}>
-              <Text style={styles.milestoneTitle}>Completion Milestone Bonus</Text>
-              <Text style={styles.milestoneDesc}>5m: +5 XP · 15m: +15 XP · 25m: +25 XP · 45m+: +40 XP</Text>
+              <Text style={styles.milestoneTitle}>Completion Milestones</Text>
+              <Text style={styles.milestoneDesc}>10m: +2 XP · 25m: +4 XP · 45m+: +8 XP bonus</Text>
             </View>
             <View style={[styles.milestoneTag, { backgroundColor: 'rgba(56, 189, 248, 0.15)', borderColor: 'rgba(56, 189, 248, 0.3)' }]}>
-              <Text style={[styles.milestoneTagText, { color: '#38BDF8' }]}>Up to +40 XP</Text>
+              <Text style={[styles.milestoneTagText, { color: '#38BDF8' }]}>Up to +8 XP</Text>
             </View>
           </View>
 
@@ -1790,10 +1819,10 @@ export default function FocusScreen(): React.JSX.Element {
             </View>
             <View style={styles.milestoneInfo}>
               <Text style={styles.milestoneTitle}>Strict Focus Mode Bonus</Text>
-              <Text style={styles.milestoneDesc}>Scaled accountability bonus when completed without leaving app</Text>
+              <Text style={styles.milestoneDesc}>Accountability bonus when completed without app switches</Text>
             </View>
             <View style={[styles.milestoneTag, { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)' }]}>
-              <Text style={[styles.milestoneTagText, { color: '#FBBF24' }]}>Up to +35 XP</Text>
+              <Text style={[styles.milestoneTagText, { color: '#FBBF24' }]}>Up to +5 XP</Text>
             </View>
           </View>
 
@@ -1802,11 +1831,24 @@ export default function FocusScreen(): React.JSX.Element {
               <Target size={16} color="#A78BFA" />
             </View>
             <View style={styles.milestoneInfo}>
-              <Text style={styles.milestoneTitle}>Deep Flow State Reflection</Text>
+              <Text style={styles.milestoneTitle}>Mindfulness Reflection</Text>
               <Text style={styles.milestoneDesc}>Reflect honestly as "Fully Focused" in session summary</Text>
             </View>
             <View style={[styles.milestoneTag, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
-              <Text style={[styles.milestoneTagText, { color: '#C4B5FD' }]}>Up to +15 XP</Text>
+              <Text style={[styles.milestoneTagText, { color: '#C4B5FD' }]}>Up to +2 XP</Text>
+            </View>
+          </View>
+
+          <View style={[styles.milestoneCard, { borderColor: 'rgba(234, 179, 8, 0.4)', backgroundColor: 'rgba(234, 179, 8, 0.08)' }]}>
+            <View style={[styles.milestoneIconWrap, { backgroundColor: 'rgba(234, 179, 8, 0.2)' }]}>
+              <Sparkles size={16} color="#FACC15" />
+            </View>
+            <View style={styles.milestoneInfo}>
+              <Text style={[styles.milestoneTitle, { color: '#FEF08A' }]}>2x XP Video Boost 🎬</Text>
+              <Text style={styles.milestoneDesc}>Watch a quick video ad after any session to DOUBLE your XP</Text>
+            </View>
+            <View style={[styles.milestoneTag, { backgroundColor: 'rgba(234, 179, 8, 0.2)', borderColor: 'rgba(234, 179, 8, 0.5)' }]}>
+              <Text style={[styles.milestoneTagText, { color: '#FACC15' }]}>2x XP</Text>
             </View>
           </View>
         </BottomSheetScrollView>
@@ -3342,6 +3384,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#FBBF24',
+  },
+  adShieldBtn: {
+    backgroundColor: 'rgba(234, 179, 8, 0.15)',
+    borderColor: 'rgba(234, 179, 8, 0.4)',
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  adShieldBtnText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FACC15',
   },
   forgeShieldBtn: {
     backgroundColor: '#0284C7',
