@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -25,6 +26,7 @@ import {
   BellOff,
   X,
   ShieldCheck,
+  RefreshCw,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { router, Href } from 'expo-router';
@@ -33,7 +35,11 @@ import {
   AppNotification,
   NotificationType,
 } from '@/lib/store/notification.store';
-import { requestNotificationPermission } from '@/lib/notifications';
+import {
+  requestNotificationPermission,
+  syncNotificationSchedules,
+  sendTestNotification,
+} from '@/lib/notifications';
 import { COLORS } from '@/constants/theme';
 
 type FilterCategory = 'all' | 'brief' | 'streak' | 'revision' | 'milestone';
@@ -47,10 +53,32 @@ export default function NotificationsScreen() {
     deleteNotification,
     clearAll,
     updateSetting,
+    refreshDailyNudges,
   } = useNotificationStore();
 
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('all');
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Auto-generate today's activity & nudges if inbox is empty
+  useEffect(() => {
+    refreshDailyNudges();
+  }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    refreshDailyNudges();
+    await syncNotificationSchedules();
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 450);
+  };
+
+  const handleToggleSetting = async <K extends keyof typeof settings>(key: K, val: (typeof settings)[K]) => {
+    updateSetting(key, val);
+    await syncNotificationSchedules();
+  };
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
@@ -222,7 +250,18 @@ export default function NotificationsScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.violet}
+            colors={[COLORS.violet]}
+          />
+        }
+      >
         {/* Category Filters Bar */}
         <View style={styles.filterSection}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
@@ -272,6 +311,14 @@ export default function NotificationsScreen() {
                 ? 'No pending notifications right now. Operating at peak focus!'
                 : `No ${activeFilter} alerts to display.`}
             </Text>
+            <TouchableOpacity
+              style={styles.refreshNudgesBtn}
+              onPress={handleRefresh}
+              activeOpacity={0.8}
+            >
+              <RefreshCw size={15} color="#FFFFFF" />
+              <Text style={styles.refreshNudgesBtnText}>Generate Today's Nudges</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.feedWrapper}>
@@ -330,7 +377,7 @@ export default function NotificationsScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
               <View style={styles.settingItem}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.settingLabel}>Daily Morning Brief</Text>
@@ -338,7 +385,7 @@ export default function NotificationsScreen() {
                 </View>
                 <Switch
                   value={settings.morningBriefEnabled}
-                  onValueChange={(val) => updateSetting('morningBriefEnabled', val)}
+                  onValueChange={(val) => handleToggleSetting('morningBriefEnabled', val)}
                   trackColor={{ false: COLORS.border, true: COLORS.violet }}
                   thumbColor="#FFFFFF"
                 />
@@ -351,7 +398,7 @@ export default function NotificationsScreen() {
                 </View>
                 <Switch
                   value={settings.streakAlertsEnabled}
-                  onValueChange={(val) => updateSetting('streakAlertsEnabled', val)}
+                  onValueChange={(val) => handleToggleSetting('streakAlertsEnabled', val)}
                   trackColor={{ false: COLORS.border, true: COLORS.violet }}
                   thumbColor="#FFFFFF"
                 />
@@ -360,11 +407,11 @@ export default function NotificationsScreen() {
               <View style={styles.settingItem}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.settingLabel}>Habit Tracking Nudges</Text>
-                  <Text style={styles.settingSub}>Smart afternoon habit check-in reminders</Text>
+                  <Text style={styles.settingSub}>Smart afternoon habit check-in reminders (2:30 PM)</Text>
                 </View>
                 <Switch
                   value={settings.habitRemindersEnabled}
-                  onValueChange={(val) => updateSetting('habitRemindersEnabled', val)}
+                  onValueChange={(val) => handleToggleSetting('habitRemindersEnabled', val)}
                   trackColor={{ false: COLORS.border, true: COLORS.violet }}
                   thumbColor="#FFFFFF"
                 />
@@ -377,7 +424,7 @@ export default function NotificationsScreen() {
                 </View>
                 <Switch
                   value={settings.revisionAlertsEnabled}
-                  onValueChange={(val) => updateSetting('revisionAlertsEnabled', val)}
+                  onValueChange={(val) => handleToggleSetting('revisionAlertsEnabled', val)}
                   trackColor={{ false: COLORS.border, true: COLORS.violet }}
                   thumbColor="#FFFFFF"
                 />
@@ -386,22 +433,41 @@ export default function NotificationsScreen() {
               <View style={styles.settingItem}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.settingLabel}>Quiet Mode (Do Not Disturb)</Text>
-                  <Text style={styles.settingSub}>Pause all push alerts temporarily</Text>
+                  <Text style={styles.settingSub}>Pause all scheduled push alerts</Text>
                 </View>
                 <Switch
                   value={settings.doNotDisturb}
-                  onValueChange={(val) => updateSetting('doNotDisturb', val)}
+                  onValueChange={(val) => handleToggleSetting('doNotDisturb', val)}
                   trackColor={{ false: COLORS.border, true: COLORS.violet }}
                   thumbColor="#FFFFFF"
                 />
               </View>
+
+              {/* Instant Test Alert Button */}
+              <TouchableOpacity
+                style={styles.testAlertBtn}
+                onPress={async () => {
+                  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                  const ok = await sendTestNotification();
+                  if (ok) {
+                    Alert.alert(
+                      'Test Alert Dispatched 🔔',
+                      'Check your device notification shade! An alert has also been added to your in-app notification center.'
+                    );
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Bell size={16} color={COLORS.violet} />
+                <Text style={styles.testAlertBtnText}>Send Instant Test Notification</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.permCheckBtn}
                 onPress={async () => {
                   const granted = await requestNotificationPermission();
                   if (granted) {
-                    Alert.alert('Permission Active', 'Device notifications are enabled for LifeTrack Pro.');
+                    Alert.alert('Permission Active', 'Device notifications are active and enabled for LifeTrack Pro.');
                   }
                 }}
                 activeOpacity={0.8}
@@ -787,5 +853,42 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans-Bold',
     fontSize: 14,
     color: '#FFFFFF',
+  },
+  refreshNudgesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.violet,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 18,
+    shadowColor: COLORS.violet,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  refreshNudgesBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+  testAlertBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.violetSoft,
+    borderRadius: 14,
+    padding: 12,
+    marginVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(91, 79, 232, 0.2)',
+  },
+  testAlertBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
+    color: COLORS.violet,
   },
 });

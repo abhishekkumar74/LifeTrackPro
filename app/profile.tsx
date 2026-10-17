@@ -6,6 +6,7 @@ import {
   cancelScheduledNotification,
   scheduleMorningBrief,
   scheduleStreakAlert,
+  scheduleHabitReminder,
 } from '@/lib/notifications';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useUiStore } from '@/lib/store/ui.store';
@@ -599,6 +600,11 @@ export default function ProfileScreen(): React.JSX.Element {
     }
     setHabitRemindersEnabled(value);
     await AsyncStorage.setItem('pref_habit_reminders', String(value));
+    if (value) {
+      await scheduleHabitReminder(14, 30);
+    } else {
+      await cancelScheduledNotification('afternoon_habit');
+    }
   };
 
   // Export User Data

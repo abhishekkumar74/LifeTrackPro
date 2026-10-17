@@ -37,6 +37,7 @@ interface NotificationState {
   clearAll: () => void;
   addNotification: (notification: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'>) => void;
   updateSetting: <K extends keyof NotificationSettings>(key: K, value: NotificationSettings[K]) => void;
+  refreshDailyNudges: () => void;
   resetDefaults: () => void;
 }
 
@@ -130,16 +131,111 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       addNotification: (item) => {
+        const now = Date.now();
+        const existingRecent = get().notifications.find(
+          (n) => n.title === item.title && now - n.timestamp < 1000 * 60 * 60 * 4
+        );
+
+        if (existingRecent) {
+          // Update the recent notification rather than duplicating
+          set((state) => ({
+            notifications: state.notifications.map((n) =>
+              n.id === existingRecent.id
+                ? { ...n, body: item.body, time: 'Just now', timestamp: now, isRead: false }
+                : n
+            ),
+          }));
+          return;
+        }
+
         const newNotif: AppNotification = {
           ...item,
-          id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          timestamp: Date.now(),
+          id: `notif-${now}-${Math.random().toString(36).substr(2, 4)}`,
+          timestamp: now,
           isRead: false,
         };
 
         set((state) => ({
           notifications: [newNotif, ...state.notifications],
         }));
+      },
+
+      refreshDailyNudges: () => {
+        const state = get();
+        const now = Date.now();
+        const currentNotifications = state.notifications || [];
+
+        // Check if we already have today's nudges
+        const hasRecentType = (type: NotificationType) =>
+          currentNotifications.some((n) => n.type === type && now - n.timestamp < 1000 * 60 * 60 * 18);
+
+        const newItems: AppNotification[] = [];
+
+        // 1. Daily Morning Brief (if not created in last 18 hours)
+        if (!hasRecentType('brief') && state.settings.morningBriefEnabled) {
+          newItems.push({
+            id: `notif-brief-${now}`,
+            type: 'brief',
+            title: 'Daily Morning Brief ☀️',
+            body: "Your daily focus targets are set! Plan your deep work sessions and maintain peak momentum today.",
+            time: '8:00 AM',
+            timestamp: now - 1000 * 60 * 60,
+            isRead: false,
+            targetScreen: '/',
+            actionText: "View Today's Plan",
+          });
+        }
+
+        // 2. Streak Saver Alert
+        if (!hasRecentType('streak') && state.settings.streakAlertsEnabled) {
+          newItems.push({
+            id: `notif-streak-${now}`,
+            type: 'streak',
+            title: "Keep Your Streak Alive! 🔥",
+            body: 'Check in on your daily habits today to protect your active streak shield.',
+            time: 'Nudge',
+            timestamp: now - 1000 * 60 * 30,
+            isRead: false,
+            targetScreen: '/habits',
+            actionText: 'Log Habits Now',
+          });
+        }
+
+        // 3. Spaced Repetition Nudge
+        if (!hasRecentType('revision') && state.settings.revisionAlertsEnabled) {
+          newItems.push({
+            id: `notif-revision-${now}`,
+            type: 'revision',
+            title: 'Spaced Repetition Review 🧠',
+            body: 'Active recall time! Review your flashcards and topic notes to maximize retention.',
+            time: 'Active',
+            timestamp: now - 1000 * 60 * 15,
+            isRead: false,
+            targetScreen: '/(tabs)/learn',
+            actionText: 'Review Cards',
+          });
+        }
+
+        // 4. Milestone / Deep Work Nudge
+        if (!hasRecentType('milestone')) {
+          newItems.push({
+            id: `notif-milestone-${now}`,
+            type: 'milestone',
+            title: 'Deep Work Milestone 🏆',
+            body: 'Commit to at least 25 minutes of uninterrupted deep focus block today to level up your XP.',
+            time: 'Goal',
+            timestamp: now - 1000 * 60 * 5,
+            isRead: false,
+            targetScreen: '/(tabs)/focus',
+            actionText: 'Start Focus Block',
+          });
+        }
+
+        if (newItems.length > 0 || currentNotifications.length === 0) {
+          set({
+            notifications: [...newItems, ...currentNotifications],
+          });
+        }
       },
 
       updateSetting: (key, value) => {

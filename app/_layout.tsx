@@ -30,7 +30,8 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Toast } from '@/components/shared/Toast';
 import { Platform, UIManager, View, Text, ActivityIndicator, LogBox, Alert } from 'react-native';
 import { UserProfile } from '@/types/app.types';
-import { requestNotificationPermission, useNotificationResponse, scheduleMorningBrief } from '@/lib/notifications';
+import { requestNotificationPermission, useNotificationResponse, syncNotificationSchedules } from '@/lib/notifications';
+import { useNotificationStore } from '@/lib/store/notification.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
 import { AdManager } from '@/components/ads';
@@ -124,22 +125,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
         const timer = setTimeout(async () => {
           try {
             await requestNotificationPermission();
-            
-            // Schedule daily brief if enabled
-            const mb = await AsyncStorage.getItem('pref_morning_brief');
-            if (mb === null || mb === 'true') {
-              const { data: tasks } = await supabase
-                .from('tasks')
-                .select('title')
-                .is('completed_at', null)
-                .limit(1);
-              const topTitle = tasks && tasks[0] ? tasks[0].title : 'Complete your daily habits';
-              await scheduleMorningBrief(topTitle);
-            }
+            await syncNotificationSchedules();
+            useNotificationStore.getState().refreshDailyNudges();
           } catch (err) {
-            if (__DEV__) console.warn('Failed requesting notification permission:', err);
+            if (__DEV__) console.warn('Failed bootstrapping notifications:', err);
           }
-        }, 2000);
+        }, 1500);
         return () => clearTimeout(timer);
       }
     }

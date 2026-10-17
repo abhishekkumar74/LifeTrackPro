@@ -28,6 +28,7 @@ import {
   AppNotification,
   NotificationType,
 } from '@/lib/store/notification.store';
+import { syncNotificationSchedules } from '@/lib/notifications';
 
 interface NotificationSheetProps {
   isVisible: boolean;
@@ -38,7 +39,7 @@ export const NotificationSheet: React.FC<NotificationSheetProps> = ({
   isVisible,
   onClose,
 }) => {
-  const { notifications, settings, markAsRead, markAllAsRead, updateSetting } =
+  const { notifications, settings, markAsRead, markAllAsRead, updateSetting, refreshDailyNudges } =
     useNotificationStore();
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
@@ -158,7 +159,10 @@ export const NotificationSheet: React.FC<NotificationSheetProps> = ({
             </View>
             <Switch
               value={settings.morningBriefEnabled}
-              onValueChange={(val) => updateSetting('morningBriefEnabled', val)}
+              onValueChange={async (val) => {
+                updateSetting('morningBriefEnabled', val);
+                await syncNotificationSchedules();
+              }}
               trackColor={{ false: '#E7E5E4', true: '#5B4FE8' }}
               thumbColor="#FFFFFF"
             />
@@ -176,6 +180,24 @@ export const NotificationSheet: React.FC<NotificationSheetProps> = ({
                 </View>
                 <Text style={styles.emptyTitle}>All Caught Up!</Text>
                 <Text style={styles.emptySub}>No active notifications right now.</Text>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#5B4FE8',
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 16,
+                    marginTop: 12,
+                  }}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    refreshDailyNudges();
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ fontFamily: 'DMSans-Bold', fontSize: 12, color: '#FFFFFF' }}>
+                    Generate Today's Nudges
+                  </Text>
+                </TouchableOpacity>
               </View>
             ) : (
               notifications.slice(0, 5).map((item) => {

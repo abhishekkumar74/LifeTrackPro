@@ -36,7 +36,8 @@ import { useFocusStore, SoundKey, FocusPreset } from '@/lib/store/focus.store';
 import { useAmbientSound } from '@/lib/hooks/use-ambient-sound';
 import { useFocusSessions } from '@/lib/hooks/use-focus-sessions';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
-import { scheduleRevisionAlert } from '@/lib/notifications';
+import { scheduleRevisionAlert, triggerLocalFocusCompleteNotification } from '@/lib/notifications';
+import { useNotificationStore } from '@/lib/store/notification.store';
 import {
   Settings,
   Maximize2,
@@ -762,12 +763,22 @@ export default function FocusScreen(): React.JSX.Element {
           rank_title: newLevelInfo.title,
           duration_min: dbDuration,
         });
-      }
 
-      // Schedule spaced-repetition reminders
-      if (status === 'completed' && subjectTag) {
-        scheduleRevisionAlert(subjectTag, 1).catch(() => {});
-        scheduleRevisionAlert(subjectTag, 3).catch(() => {});
+        // Trigger local push notification & record in notification center
+        triggerLocalFocusCompleteNotification(dbDuration, earned).catch(() => {});
+        useNotificationStore.getState().addNotification({
+          type: 'milestone',
+          title: 'Focus Session Completed! 🏆',
+          body: `You logged ${dbDuration}m of deep work${subjectTag ? ` on "${subjectTag}"` : ''} (+${earned} XP earned).`,
+          time: 'Just now',
+          targetScreen: '/(tabs)/focus',
+          actionText: 'View Focus Stats',
+        });
+
+        if (subjectTag) {
+          scheduleRevisionAlert(subjectTag, 1).catch(() => {});
+          scheduleRevisionAlert(subjectTag, 3).catch(() => {});
+        }
       }
 
       // Refetch history list
