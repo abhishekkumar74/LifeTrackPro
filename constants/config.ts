@@ -8,8 +8,8 @@ import Constants from 'expo-constants';
 export const CONFIG = {
   app: {
     name: 'LifeTrack Pro',
-    version: '1.0.0',
-    buildNumber: '1',
+    version: Constants.expoConfig?.version || '1.0.5',
+    buildNumber: Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode?.toString() || '6',
     bundleId: 'com.lifetrackpro.app',
     environment: (__DEV__ ? 'development' : 'production') as 'development' | 'production',
   },

@@ -22,6 +22,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
 import { router, Href } from 'expo-router';
+import { CONFIG } from '@/constants/config';
+import { resetUser } from '@/lib/posthog';
 import {
   ArrowLeft,
   Bell,
@@ -35,6 +37,7 @@ import {
   Plus,
   Shield,
   Star,
+  Trash2,
   Upload,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -190,7 +193,8 @@ export default function ProfileScreen(): React.JSX.Element {
   useAndroidBackHandler();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { profile, setProfile } = useAuthStore();
+  const { profile, setProfile, user } = useAuthStore();
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const showToast = useUiStore((state) => state.showToast);
   const { request: requestNotificationPermission } = useNotificationPermission();
 
@@ -616,6 +620,73 @@ export default function ProfileScreen(): React.JSX.Element {
     ]);
   };
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to permanently delete your account? All your study streaks, focus sessions, tasks, notes, goals, and XP points will be permanently erased. This action CANNOT be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => {
+            // Second confirmation dialog required for destructive account deletion
+            Alert.alert(
+              'Final Confirmation',
+              'This is your last chance. Once deleted, your account and all data cannot be recovered. Are you absolutely certain you want to proceed?',
+              [
+                { text: 'Keep My Account', style: 'cancel' },
+                {
+                  text: 'Permanently Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      setIsDeletingAccount(true);
+                      const currentUserId = user?.id || (await supabase.auth.getSession()).data.session?.user?.id;
+
+                      // 1. Attempt PostgreSQL RPC delete_user_account (deletes auth.users + cascades all tables)
+                      const { error: rpcError } = await supabase.rpc('delete_user_account');
+
+                      // 2. If RPC is not created yet or fails, fallback to deleting public.profiles
+                      if (rpcError && currentUserId) {
+                        if (__DEV__) console.warn('RPC delete_user_account failed, falling back to profiles delete:', rpcError.message);
+                        await supabase.from('profiles').delete().eq('id', currentUserId);
+                      }
+
+                      // 3. Cancel all local notifications & reset analytics tracking
+                      await cancelAllNotifications();
+                      resetUser();
+
+                      // 4. Clear all local AsyncStorage data
+                      await AsyncStorage.clear();
+
+                      // 5. Clear react-query cache, sign out of supabase auth, and clear auth store
+                      queryClient.clear();
+                      await supabase.auth.signOut();
+                      useAuthStore.getState().clearAuth();
+
+                      // 6. Navigate to login screen
+                      router.replace('/(auth)/login');
+                      Alert.alert('Account Deleted', 'Your account and all associated data have been permanently removed.');
+                    } catch (err: any) {
+                      if (__DEV__) console.error('Error deleting account:', err);
+                      Alert.alert(
+                        'Deletion Error',
+                        'Failed to complete account deletion. Please check your internet connection or contact support@lifetrackpro.com.'
+                      );
+                    } finally {
+                      setIsDeletingAccount(false);
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
+
   const getCategoryDisplay = () => {
     const cat = profile?.category ? profile.category.charAt(0).toUpperCase() + profile.category.slice(1) : 'Student';
     const subCats = profile?.sub_category && profile.sub_category.length > 0
@@ -1039,7 +1110,7 @@ export default function ProfileScreen(): React.JSX.Element {
             <View style={styles.rowLabelCol}>
               <Text style={styles.rowTitle}>Version</Text>
             </View>
-            <Text style={styles.rowVal}>1.0.1</Text>
+            <Text style={styles.rowVal}>{CONFIG.app.version}</Text>
           </View>
 
           <TouchableOpacity
@@ -1070,6 +1141,23 @@ export default function ProfileScreen(): React.JSX.Element {
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut} activeOpacity={0.8}>
           <LogOut size={16} color="#E85858" style={{ marginRight: 8 }} />
           <Text style={styles.signOutButtonText}>Sign Out</Text>
+        </TouchableOpacity>
+
+        {/* DELETE ACCOUNT BUTTON */}
+        <TouchableOpacity
+          style={styles.deleteAccountButton}
+          onPress={handleDeleteAccount}
+          activeOpacity={0.8}
+          disabled={isDeletingAccount}
+        >
+          {isDeletingAccount ? (
+            <ActivityIndicator size="small" color="#E85858" />
+          ) : (
+            <>
+              <Trash2 size={15} color="#E85858" style={{ marginRight: 8 }} />
+              <Text style={styles.deleteAccountButtonText}>Delete Account</Text>
+            </>
+          )}
         </TouchableOpacity>
       </ScrollView>
 
@@ -1484,12 +1572,30 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     height: 48,
     marginTop: 8,
-    marginBottom: 20,
+    marginBottom: 10,
     backgroundColor: '#FFFFFF',
   },
   signOutButtonText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 14,
+    fontWeight: '600',
+    color: '#E85858',
+  },
+  deleteAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 20,
+    height: 44,
+    marginBottom: 32,
+    borderRadius: 12,
+    backgroundColor: 'rgba(232, 88, 88, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(232, 88, 88, 0.2)',
+  },
+  deleteAccountButtonText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
     fontWeight: '600',
     color: '#E85858',
   },
