@@ -1,69 +1,56 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Svg, { Polygon, Circle } from 'react-native-svg';
+import Svg, { G, Path, Circle } from 'react-native-svg';
 
-interface AppLogoProps {
-  size?: number;           // star mark size
+export interface AppLogoProps {
+  size?: number;           // logo mark height
   showWordmark?: boolean;  // show "LifeTrack Pro" text
   variant?: 'dark' | 'light' | 'violet';
+  color?: string;
+  accent?: string;
 }
 
-const VIOLET = '#5B5CF0';
-const TEAL   = '#14B8A6';
+const INDIGO = '#5B5CF0';
 const NAVY   = '#0F172A';
-const VIOLET_DIM = '#3B3BA8';
+const WHITE  = '#FFFFFF';
 
 export function AppLogo({
   size = 40,
   showWordmark = false,
   variant = 'dark',
+  color,
+  accent,
 }: AppLogoProps) {
-  const s  = size;
-  const cx = s / 2;
-  const cy = s * 0.47;
+  let effectiveColor = color;
+  let effectiveAccent = accent;
 
-  // spike proportions
-  const topY    = cy - s * 0.32;
-  const botY    = cy + s * 0.32 * 0.60;
-  const rX      = cx + s * 0.32 * 0.60;
-  const lX      = cx - s * 0.32 * 0.60;
-  const hw      = s * 0.032;   // half-width of spike base
-  const ol      = s * 0.042;   // overlap past center
-  const jr      = Math.max(2, s * 0.085); // jewel radius
-  const wr      = Math.max(1, jr * 0.45); // white inner
+  if (!effectiveColor) {
+    if (variant === 'light') {
+      effectiveColor = NAVY;
+    } else {
+      effectiveColor = WHITE;
+    }
+  }
 
-  const strokeColor = variant === 'violet' ? '#fff' : VIOLET;
-  const dimColor    = variant === 'violet' ? 'rgba(255,255,255,0.5)' : VIOLET_DIM;
+  if (!effectiveAccent) {
+    if (variant === 'violet') {
+      effectiveAccent = WHITE;
+    } else {
+      effectiveAccent = INDIGO;
+    }
+  }
+
+  // Aspect ratio of the Spark i mark: 356.45 / 444.09
+  const width = size * (356.45 / 444.09);
 
   return (
     <View style={styles.container}>
-      <Svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
-        {/* Top spike */}
-        <Polygon
-          points={`${cx},${topY} ${cx+hw},${cy-ol} ${cx},${cy+s*0.04} ${cx-hw},${cy-ol}`}
-          fill={strokeColor}
-        />
-        {/* Bottom spike */}
-        <Polygon
-          points={`${cx},${botY} ${cx+hw},${cy+ol} ${cx},${cy-s*0.03} ${cx-hw},${cy+ol}`}
-          fill={dimColor}
-        />
-        {/* Right spike */}
-        <Polygon
-          points={`${rX},${cy} ${cx+ol},${cy-hw} ${cx-s*0.03},${cy} ${cx+ol},${cy+hw}`}
-          fill={strokeColor}
-          opacity={0.82}
-        />
-        {/* Left spike */}
-        <Polygon
-          points={`${lX},${cy} ${cx-ol},${cy+hw} ${cx+s*0.03},${cy} ${cx-ol},${cy-hw}`}
-          fill={dimColor}
-          opacity={0.85}
-        />
-        {/* Teal jewel */}
-        <Circle cx={cx} cy={cy} r={jr} fill={TEAL} />
-        {/* White inner */}
-        <Circle cx={cx} cy={cy} r={wr} fill="#fff" opacity={0.9} />
+      <Svg width={width} height={size} viewBox="0 0 356.45 444.09">
+        <G transform="translate(-16.35 427.64)">
+          <Path d="M32.8 0V-292H98.4V-57.6H212.8V0Z" fill={effectiveColor} />
+          <Path d="M258.8 0V-172H229.6V-219.2H322.8V0Z" fill={effectiveColor} />
+          <Circle cx="276.20" cy="-331.04" r="80.15" fill={effectiveAccent} />
+        </G>
       </Svg>
 
       {showWordmark && (
@@ -81,6 +68,8 @@ export function AppLogo({
     </View>
   );
 }
+
+export default AppLogo;
 
 const styles = StyleSheet.create({
   container: {

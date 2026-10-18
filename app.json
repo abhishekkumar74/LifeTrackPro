@@ -63,7 +63,13 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#5B5CF0"
+        }
+      ],
       "@sentry/react-native/expo",
       [
         "expo-build-properties",
