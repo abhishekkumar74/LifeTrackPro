@@ -26,9 +26,10 @@ import { CONFIG } from '@/constants/config';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import LoadingScreen from '@/components/shared/LoadingScreen';
+import AnimatedSplash from '@/components/splash/AnimatedSplash';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Toast } from '@/components/shared/Toast';
-import { Platform, UIManager, View, Text, ActivityIndicator, LogBox, Alert } from 'react-native';
+import { Platform, UIManager, View, Text, ActivityIndicator, LogBox, Alert, StyleSheet } from 'react-native';
 import { UserProfile } from '@/types/app.types';
 import { requestNotificationPermission, useNotificationResponse, syncNotificationSchedules } from '@/lib/notifications';
 import { useNotificationStore } from '@/lib/store/notification.store';
@@ -512,61 +513,77 @@ function RootLayout() {
     };
   }, []);
 
-  // Dismiss splash screen once typography has loaded and session is checked
+  const [splashAnimationDone, setSplashAnimationDone] = useState(false);
+
+  // Dismiss native splash screen immediately so AnimatedSplash takes over smoothly
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (fontsLoaded && authInitialized) {
-      SplashScreen.hideAsync().catch(() => {});
       markEnd('app_boot');
     }
-
-    // Safety fallback: ensure splash screen always hides within 2.5s
-    const timer = setTimeout(() => {
-      SplashScreen.hideAsync().catch(() => {});
-    }, 2500);
-
-    return () => clearTimeout(timer);
   }, [fontsLoaded, authInitialized]);
 
-  if (!fontsLoaded || !authInitialized) {
-    return null;
-  }
+  const handleSplashFinish = () => {
+    if (fontsLoaded && authInitialized) {
+      setSplashAnimationDone(true);
+    } else {
+      // If fonts or auth still loading, wait briefly until ready before revealing app
+      const checkTimer = setInterval(() => {
+        if (useAuthStore.getState().isLoading === false) {
+          clearInterval(checkTimer);
+          setSplashAnimationDone(true);
+        }
+      }, 80);
+    }
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <PostHogProvider
-        client={posthog}
-        autocapture={{
-          captureScreens: false,
-          captureTouches: true,
-        }}
-      >
-        <QueryClientProvider client={queryClient}>
-          <InnerApp>
-            <SafeAreaProvider>
-              <AuthGuard>
-                <ErrorBoundary>
-                  <OfflineBanner />
-                  <Stack screenOptions={{ headerShown: false }}>
-                    <Stack.Screen name="(auth)/login" options={{ gestureEnabled: false }} />
-                    <Stack.Screen name="(auth)/onboarding/index" options={{ gestureEnabled: false }} />
-                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                    <Stack.Screen name="rooms/index" options={{ headerShown: false }} />
-                    <Stack.Screen name="rooms/[id]" options={{ headerShown: false }} />
-                    <Stack.Screen name="notifications" options={{ headerShown: false }} />
-                    <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_left' }} />
-                    <Stack.Screen name="paywall" options={{ presentation: 'modal', headerShown: false }} />
-                    <Stack.Screen name="habit/[id]" options={{ headerShown: false }} />
-                    <Stack.Screen name="habits/index" options={{ headerShown: false }} />
-                    <Stack.Screen name="routine_analytics" options={{ headerShown: false }} />
-                    <Stack.Screen name="routine_detail" options={{ headerShown: false }} />
-                  </Stack>
-                  <Toast />
-                </ErrorBoundary>
-              </AuthGuard>
-            </SafeAreaProvider>
-          </InnerApp>
-        </QueryClientProvider>
-      </PostHogProvider>
+      {fontsLoaded && authInitialized ? (
+        <PostHogProvider
+          client={posthog}
+          autocapture={{
+            captureScreens: false,
+            captureTouches: true,
+          }}
+        >
+          <QueryClientProvider client={queryClient}>
+            <InnerApp>
+              <SafeAreaProvider>
+                <AuthGuard>
+                  <ErrorBoundary>
+                    <OfflineBanner />
+                    <Stack screenOptions={{ headerShown: false }}>
+                      <Stack.Screen name="(auth)/login" options={{ gestureEnabled: false }} />
+                      <Stack.Screen name="(auth)/onboarding/index" options={{ gestureEnabled: false }} />
+                      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                      <Stack.Screen name="rooms/index" options={{ headerShown: false }} />
+                      <Stack.Screen name="rooms/[id]" options={{ headerShown: false }} />
+                      <Stack.Screen name="notifications" options={{ headerShown: false }} />
+                      <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_left' }} />
+                      <Stack.Screen name="paywall" options={{ presentation: 'modal', headerShown: false }} />
+                      <Stack.Screen name="habit/[id]" options={{ headerShown: false }} />
+                      <Stack.Screen name="habits/index" options={{ headerShown: false }} />
+                      <Stack.Screen name="routine_analytics" options={{ headerShown: false }} />
+                      <Stack.Screen name="routine_detail" options={{ headerShown: false }} />
+                    </Stack>
+                    <Toast />
+                  </ErrorBoundary>
+                </AuthGuard>
+              </SafeAreaProvider>
+            </InnerApp>
+          </QueryClientProvider>
+        </PostHogProvider>
+      ) : null}
+
+      {!splashAnimationDone && (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 999 }]} pointerEvents="none">
+          <AnimatedSplash onFinish={handleSplashFinish} />
+        </View>
+      )}
     </GestureHandlerRootView>
   );
 }
