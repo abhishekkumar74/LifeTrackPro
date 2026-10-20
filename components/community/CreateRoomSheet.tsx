@@ -7,7 +7,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Keyboard,
+  TextInput,
+  Platform,
 } from 'react-native';
+import '@/lib/utils/text-input-polyfill';
 import BottomSheet, {
   BottomSheetView,
   BottomSheetTextInput,
@@ -132,15 +135,26 @@ export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
 
         {/* Room Name */}
         <Text style={styles.fieldLabel}>ROOM NAME</Text>
-        <BottomSheetTextInput
-          style={styles.textInput}
-          placeholder="e.g. NEET Biology Session"
-          placeholderTextColor="#9B9BAF"
-          value={roomName}
-          onChangeText={setRoomName}
-          maxLength={50}
-          autoFocus={isVisible}
-        />
+        {Platform.OS === 'web' ? (
+          <TextInput
+            style={styles.textInput}
+            placeholder="e.g. NEET Biology Session"
+            placeholderTextColor="#9B9BAF"
+            value={roomName}
+            onChangeText={setRoomName}
+            maxLength={50}
+          />
+        ) : (
+          <BottomSheetTextInput
+            style={styles.textInput}
+            placeholder="e.g. NEET Biology Session"
+            placeholderTextColor="#9B9BAF"
+            value={roomName}
+            onChangeText={setRoomName}
+            maxLength={50}
+            autoFocus={isVisible}
+          />
+        )}
 
         {/* Subject Select */}
         <Text style={styles.fieldLabel}>SUBJECT</Text>

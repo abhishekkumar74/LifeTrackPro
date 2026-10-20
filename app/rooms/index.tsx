@@ -122,9 +122,16 @@ export default function RoomsScreen(): React.JSX.Element {
         return false;
       }
 
+      const cleanSearch = searchQuery.trim().toLowerCase().replace('#', '');
+      const cleanId = room.id.replace(/-/g, '').toLowerCase();
+      const shortCode = cleanId.slice(0, 6);
+
       const matchesSearch =
-        room.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (room.subject && room.subject.toLowerCase().includes(searchQuery.toLowerCase()));
+        room.name.toLowerCase().includes(cleanSearch) ||
+        (room.subject && room.subject.toLowerCase().includes(cleanSearch)) ||
+        room.id.toLowerCase().includes(cleanSearch) ||
+        shortCode.includes(cleanSearch) ||
+        cleanId.startsWith(cleanSearch);
 
       const matchesCategory =
         selectedCategory === 'all' || room.room_type === selectedCategory;
@@ -204,7 +211,7 @@ export default function RoomsScreen(): React.JSX.Element {
         <View style={styles.searchFilterContainer}>
           <TextInput
             style={styles.searchBar}
-            placeholder="Search rooms or subjects..."
+            placeholder="Search rooms or enter Room Code (e.g. C87F39)..."
             placeholderTextColor="#9B9BAF"
             value={searchQuery}
             onChangeText={setSearchQuery}

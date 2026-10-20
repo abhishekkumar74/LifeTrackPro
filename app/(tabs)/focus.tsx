@@ -183,11 +183,12 @@ export default function FocusScreen(): React.JSX.Element {
   const [isManualLandscape, setIsManualLandscape] = useState(false);
   const [isDismissedInLandscape, setIsDismissedInLandscape] = useState(false);
 
-  // When device returns to physical portrait, reset dismissed flag and manual lock
+  // When device returns to physical portrait, reset dismissed flag, manual lock, and unlock orientation
   useEffect(() => {
     if (!isPhysicalLandscape) {
       setIsDismissedInLandscape(false);
       setIsManualLandscape(false);
+      ScreenOrientation.unlockAsync().catch(() => {});
     }
   }, [isPhysicalLandscape]);
 
@@ -199,7 +200,7 @@ export default function FocusScreen(): React.JSX.Element {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setIsDismissedInLandscape(false);
       setIsManualLandscape(true);
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
     } catch {
       setIsManualLandscape(true);
     }
@@ -210,8 +211,12 @@ export default function FocusScreen(): React.JSX.Element {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setIsManualLandscape(false);
       setIsDismissedInLandscape(true);
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-      await ScreenOrientation.unlockAsync();
+      try {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      } catch {}
+      try {
+        await ScreenOrientation.unlockAsync();
+      } catch {}
     } catch {
       setIsManualLandscape(false);
       setIsDismissedInLandscape(true);

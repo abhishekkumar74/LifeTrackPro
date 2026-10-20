@@ -1,6 +1,8 @@
 import { markStart, markEnd } from '../lib/utils/startup-perf';
 markStart('app_boot');
 
+import '@/lib/utils/text-input-polyfill';
+
 import * as Sentry from '@sentry/react-native';
 import { initSentry, setSentryUser, clearSentryUser } from '@/lib/sentry';
 import { checkForUpdate } from '@/lib/update-checker';

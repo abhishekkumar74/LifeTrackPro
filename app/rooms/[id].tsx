@@ -5,6 +5,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { useUiStore } from '@/lib/store/ui.store';
 import { supabase } from '@/lib/supabase/client';
 import { StudyRoom } from '@/types/app.types';
+import { CONFIG } from '@/constants/config';
 import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 
@@ -148,6 +149,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   useAndroidBackHandler();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const shortCode = typeof id === 'string' ? id.replace(/-/g, '').slice(0, 6).toUpperCase() : '';
   const { profile } = useAuthStore();
   const currentUserId = profile?.id || '';
 
@@ -554,10 +556,11 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       try {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       } catch (e) { }
-      const roomUrl = `lifetrackpro://rooms/${id}`;
+      const playStoreUrl = Platform.OS === 'ios' ? CONFIG.storeUrls.ios : CONFIG.storeUrls.android;
+      const shareMessage = `🔥 Aaja bhai, sath me padhte hain!\n\nMaine LifeTrack Pro par live study session start kiya hai: "${room.name}"\n⏱️ Duration: ${room.timer_minutes} mins\n\n🔑 Room Code: ${shortCode}\n\n📲 Free App Download karo:\n${playStoreUrl}\n\n(App open karke Study Rooms me Room Code enter karo!)`;
       await Share.share({
-        message: `Join my live study session "${room.name}" on LifeTrack Pro! Click here to join: ${roomUrl}`,
-        url: roomUrl,
+        message: shareMessage,
+        title: `Study with me on LifeTrack Pro: ${room.name}`,
       });
     } catch (error) {
       if (__DEV__) console.warn('Share error:', error);
@@ -994,6 +997,23 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                     {room.subject || 'General'}
                   </Text>
                 </View>
+                <Text style={styles.headerSubDot}>·</Text>
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                      const clipboard = require('expo-clipboard');
+                      if (clipboard?.setStringAsync) {
+                        await clipboard.setStringAsync(shortCode);
+                      }
+                      Alert.alert('Room Code Copied!', `Code: #${shortCode}\nShare this with friends to let them join.`);
+                    } catch (e) {}
+                  }}
+                  activeOpacity={0.7}
+                  style={styles.codeBadge}
+                >
+                  <Text style={styles.codeBadgeText}>#{shortCode}</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -1708,6 +1728,21 @@ const styles = StyleSheet.create({
     color: '#B8ADFF',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
+    fontWeight: 'bold',
+  },
+  codeBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  codeBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9.5,
+    color: '#FFFFFF',
+    letterSpacing: 0.8,
     fontWeight: 'bold',
   },
   headerRightActions: {
