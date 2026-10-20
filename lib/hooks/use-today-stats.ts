@@ -289,9 +289,10 @@ export function useTodayStats(): TodayStats {
       const tasksTotal = todayTasks.length;
       const tasksDone = todayTasks.filter(t => t.completed_at !== null).length;
 
-      // 4. Habit streak calculation
+      // 4. Habit streak calculation (protected by active Streak Shields)
       const doneDates = new Set((habitLogsRes.data || []).map(l => l.date));
       let habitStreak = 0;
+      let habitShieldsRemaining = streakShields;
 
       const formatDateStr = (d: Date) => d.toLocaleDateString('en-CA');
       const checkDate = new Date();
@@ -299,30 +300,39 @@ export function useTodayStats(): TodayStats {
       checkDate.setDate(checkDate.getDate() - 1);
       const checkDateYesterdayStr = formatDateStr(checkDate);
 
-      if (doneDates.has(checkDateTodayStr)) {
-        habitStreak = 1;
+      const calcHabitStreakFrom = (startOffset: number) => {
+        let count = 0;
+        let skippedWithShield = 0;
         const curr = new Date();
+        curr.setDate(curr.getDate() - startOffset);
+
         while (true) {
-          curr.setDate(curr.getDate() - 1);
           const dateStr = formatDateStr(curr);
           if (doneDates.has(dateStr)) {
-            habitStreak++;
+            count++;
+          } else if (habitShieldsRemaining > 0 && count > 0 && skippedWithShield === 0) {
+            // Shield absorbs 1 missed gap day in an active streak
+            habitShieldsRemaining--;
+            skippedWithShield++;
           } else {
             break;
           }
+          curr.setDate(curr.getDate() - 1);
         }
+        return count;
+      };
+
+      if (doneDates.has(checkDateTodayStr)) {
+        habitStreak = calcHabitStreakFrom(0);
       } else if (doneDates.has(checkDateYesterdayStr)) {
-        habitStreak = 1;
-        const curr = new Date();
-        curr.setDate(curr.getDate() - 1);
-        while (true) {
-          curr.setDate(curr.getDate() - 1);
-          const dateStr = formatDateStr(curr);
-          if (doneDates.has(dateStr)) {
-            habitStreak++;
-          } else {
-            break;
-          }
+        habitStreak = calcHabitStreakFrom(1);
+      } else if (habitShieldsRemaining > 0) {
+        // Yesterday was missed, but if active 2 days ago, shield protects the streak!
+        const twoDaysAgo = new Date();
+        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+        if (doneDates.has(formatDateStr(twoDaysAgo))) {
+          habitShieldsRemaining--;
+          habitStreak = calcHabitStreakFrom(2);
         }
       }
 

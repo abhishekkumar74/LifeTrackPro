@@ -7,10 +7,13 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
+  Alert,
 } from 'react-native';
-import { Flame, X, ShieldCheck, Shield, Trophy, Calendar, ArrowRight, Zap, Check } from 'lucide-react-native';
+import { Flame, X, ShieldCheck, Shield, Trophy, Calendar, ArrowRight, Zap, Check, RotateCcw } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { router, Href } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/client';
 import { AdRewarded } from '@/components/ads';
 import { getStreakShieldCount, setStreakShieldCount, MAX_STREAK_SHIELDS } from '@/lib/utils/focus-rewards';
 
@@ -29,14 +32,83 @@ export const StreakModal: React.FC<StreakModalProps> = ({
   weeklyActivity,
   onClose,
 }) => {
+  const queryClient = useQueryClient();
   const [shieldsCount, setShieldsCount] = useState<number>(1);
   const [isClaiming, setIsClaiming] = useState<boolean>(false);
+  const [isRestoring, setIsRestoring] = useState<boolean>(false);
 
   useEffect(() => {
     if (isVisible) {
       getStreakShieldCount().then((count) => setShieldsCount(count));
     }
   }, [isVisible]);
+
+  const handleRestoreStreak = async () => {
+    if (isRestoring || shieldsCount <= 0) return;
+    setIsRestoring(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Please Sign In', 'You need to be logged in to restore your streak.');
+        return;
+      }
+
+      // Get user's active habits
+      const { data: habits } = await supabase
+        .from('habits')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .limit(1);
+
+      const habitId = habits?.[0]?.id;
+      if (!habitId) {
+        Alert.alert('No Active Habit', 'Please create at least one habit first so we can restore your streak.');
+        return;
+      }
+
+      // Yesterday's date in local YYYY-MM-DD
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yyyy = yesterday.getFullYear();
+      const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
+      const dd = String(yesterday.getDate()).padStart(2, '0');
+      const yesterdayStr = `${yyyy}-${mm}-${dd}`;
+
+      // 1. Deduct 1 shield
+      const nextShields = Math.max(0, shieldsCount - 1);
+      setShieldsCount(nextShields);
+      await setStreakShieldCount(nextShields);
+
+      // 2. Mark yesterday as protected
+      await supabase
+        .from('habit_logs')
+        .upsert(
+          {
+            habit_id: habitId,
+            user_id: user.id,
+            date: yesterdayStr,
+            done: true,
+          },
+          { onConflict: 'habit_id,date' }
+        );
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      queryClient.invalidateQueries({ queryKey: ['todayStats'] });
+      queryClient.invalidateQueries({ queryKey: ['profileHabitStreak'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+
+      Alert.alert(
+        '🔥 Streak Restored!',
+        `1 Streak Shield was used to restore yesterday's missed day.\n\nYour streak is protected! Keep the momentum going today.`,
+        [{ text: 'Awesome!' }]
+      );
+    } catch {
+      Alert.alert('Error', 'Could not restore streak. Please try again.');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   const handleClaimAdShield = () => {
     if (isClaiming || shieldsCount >= MAX_STREAK_SHIELDS) return;
@@ -164,6 +236,44 @@ export const StreakModal: React.FC<StreakModalProps> = ({
                 <Text style={styles.statLabel}>Streak Protection</Text>
               </View>
             </View>
+
+            {/* Streak Shield Status / 1-Tap Restore Card */}
+            {streakCount === 0 && shieldsCount > 0 ? (
+              <View style={styles.restoreCard}>
+                <View style={styles.restoreHeader}>
+                  <Flame size={20} color="#E8A020" fill="#E8A020" />
+                  <Text style={styles.restoreTitle}>Streak Broken? Restore with Shield</Text>
+                </View>
+                <Text style={styles.restoreDesc}>
+                  You have {shieldsCount} active {shieldsCount === 1 ? 'shield' : 'shields'}. You can use 1 shield now to recover yesterday's missed day and bring your streak back alive!
+                </Text>
+                <TouchableOpacity
+                  style={styles.restoreBtn}
+                  onPress={handleRestoreStreak}
+                  disabled={isRestoring}
+                  activeOpacity={0.8}
+                >
+                  <RotateCcw size={16} color="#FFFFFF" />
+                  <Text style={styles.restoreBtnText}>
+                    {isRestoring ? 'Restoring...' : 'Restore Streak (Uses 1 Shield) 🛡️'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.shieldInfoCard}>
+                <ShieldCheck size={20} color="#00B894" style={{ marginTop: 2 }} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.shieldInfoTitle}>
+                    {shieldsCount > 0 ? 'Automatic Streak Insurance Active' : 'No Streak Shields Active'}
+                  </Text>
+                  <Text style={styles.shieldInfoDesc}>
+                    {shieldsCount > 0
+                      ? `Your ${shieldsCount} active ${shieldsCount === 1 ? 'shield automatically absorbs' : 'shields automatically absorb'} a missed day. No manual action needed — your streak is protected!`
+                      : 'You have 0 shields remaining. Get a free shield below so your streak never resets to zero if you miss a day.'}
+                  </Text>
+                </View>
+              </View>
+            )}
 
             {/* Rewarded Ad Free Shield Banner */}
             {shieldsCount < MAX_STREAK_SHIELDS && (
@@ -458,5 +568,72 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
+  },
+  restoreCard: {
+    width: '100%',
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+  },
+  restoreHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  restoreTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  restoreDesc: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#B45309',
+    lineHeight: 17,
+    marginBottom: 12,
+  },
+  restoreBtn: {
+    backgroundColor: '#D97706',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  restoreBtnText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  shieldInfoCard: {
+    width: '100%',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  shieldInfoTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#166534',
+  },
+  shieldInfoDesc: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#15803D',
+    lineHeight: 16,
+    marginTop: 2,
   },
 });

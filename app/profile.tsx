@@ -27,6 +27,7 @@ import { CONFIG } from '@/constants/config';
 import { resetUser } from '@/lib/posthog';
 import * as Haptics from 'expo-haptics';
 import { LEGAL_CONFIG } from '@/lib/constants/legal';
+import { getStreakShieldCount } from '@/lib/utils/focus-rewards';
 import {
   ArrowLeft,
   Bell,
@@ -293,8 +294,10 @@ export default function ProfileScreen(): React.JSX.Element {
         .eq('done', true);
       if (error) throw error;
 
+      const streakShields = await getStreakShieldCount();
       const doneDates = new Set((logs || []).map((l) => l.date));
       let streak = 0;
+      let shieldsRemaining = streakShields;
 
       const formatDateStr = (d: Date) => d.toLocaleDateString('en-CA');
       const checkDate = new Date();
@@ -302,30 +305,37 @@ export default function ProfileScreen(): React.JSX.Element {
       checkDate.setDate(checkDate.getDate() - 1);
       const checkDateYesterdayStr = formatDateStr(checkDate);
 
-      if (doneDates.has(checkDateTodayStr)) {
-        streak = 1;
+      const calcStreakFrom = (startOffset: number) => {
+        let count = 0;
+        let skippedWithShield = 0;
         const curr = new Date();
+        curr.setDate(curr.getDate() - startOffset);
+
         while (true) {
-          curr.setDate(curr.getDate() - 1);
           const dateStr = formatDateStr(curr);
           if (doneDates.has(dateStr)) {
-            streak++;
+            count++;
+          } else if (shieldsRemaining > 0 && count > 0 && skippedWithShield === 0) {
+            shieldsRemaining--;
+            skippedWithShield++;
           } else {
             break;
           }
+          curr.setDate(curr.getDate() - 1);
         }
+        return count;
+      };
+
+      if (doneDates.has(checkDateTodayStr)) {
+        streak = calcStreakFrom(0);
       } else if (doneDates.has(checkDateYesterdayStr)) {
-        streak = 1;
-        const curr = new Date();
-        curr.setDate(curr.getDate() - 1);
-        while (true) {
-          curr.setDate(curr.getDate() - 1);
-          const dateStr = formatDateStr(curr);
-          if (doneDates.has(dateStr)) {
-            streak++;
-          } else {
-            break;
-          }
+        streak = calcStreakFrom(1);
+      } else if (shieldsRemaining > 0) {
+        const twoDaysAgo = new Date();
+        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+        if (doneDates.has(formatDateStr(twoDaysAgo))) {
+          shieldsRemaining--;
+          streak = calcStreakFrom(2);
         }
       }
       return streak;
