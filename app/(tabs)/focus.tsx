@@ -15,7 +15,7 @@ import {
   Switch,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
@@ -179,6 +179,8 @@ const HistoryItemCard = React.memo<{ session: any }>(({ session }) => {
 
 export default function FocusScreen(): React.JSX.Element {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const androidTopExtra = Platform.OS === 'android' && insets.top === 0 ? (StatusBar.currentHeight || 28) : 0;
   const isPhysicalLandscape = width > height;
   const [isManualLandscape, setIsManualLandscape] = useState(false);
   const [isDismissedInLandscape, setIsDismissedInLandscape] = useState(false);
@@ -211,6 +213,11 @@ export default function FocusScreen(): React.JSX.Element {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setIsManualLandscape(false);
       setIsDismissedInLandscape(true);
+      if (Platform.OS === 'android') {
+        StatusBar.setBarStyle('light-content', true);
+        StatusBar.setBackgroundColor('#111013', true);
+        StatusBar.setTranslucent(false);
+      }
       try {
         await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       } catch {}
@@ -220,6 +227,11 @@ export default function FocusScreen(): React.JSX.Element {
     } catch {
       setIsManualLandscape(false);
       setIsDismissedInLandscape(true);
+      if (Platform.OS === 'android') {
+        StatusBar.setBarStyle('light-content', true);
+        StatusBar.setBackgroundColor('#111013', true);
+        StatusBar.setTranslucent(false);
+      }
       ScreenOrientation.unlockAsync().catch(() => {});
     }
   }, []);
@@ -1135,7 +1147,7 @@ export default function FocusScreen(): React.JSX.Element {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <SafeAreaView style={[styles.safeArea, { paddingTop: Math.max(0, androidTopExtra) }]} edges={['top']}>
           {/* Top bar with back button, centered TODAY 0 min, and action buttons */}
           <View style={styles.topBar}>
             <TouchableOpacity

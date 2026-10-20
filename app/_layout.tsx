@@ -22,7 +22,7 @@ import * as Linking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { queryClient } from '@/lib/query-client';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { theme } from '@/constants/theme';
 import { CONFIG } from '@/constants/config';
 import { supabase } from '@/lib/supabase/client';
@@ -554,7 +554,7 @@ function RootLayout() {
         >
           <QueryClientProvider client={queryClient}>
             <InnerApp>
-              <SafeAreaProvider>
+              <SafeAreaProvider initialMetrics={initialWindowMetrics}>
                 <AuthGuard>
                   <ErrorBoundary>
                     <OfflineBanner />

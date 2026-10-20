@@ -8,6 +8,7 @@ import {
   StatusBar,
   useWindowDimensions,
   BackHandler,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -99,18 +100,34 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
   const progress = totalSeconds > 0 ? (totalSeconds - secondsLeft) / totalSeconds : 0;
   const progressPercent = Math.min(100, Math.max(0, Math.round(progress * 100)));
 
+  // On Android, insets.top inside translucent modals is often 0 or less than the physical status bar.
+  // We guarantee effectiveTopInset is at least the physical Android status bar height.
+  const androidStatusBar = Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0;
+  const effectiveTopInset = Math.max(insets.top, androidStatusBar);
+
+  const safeLeft = isLandscape
+    ? Math.max(32, insets.left, androidStatusBar)
+    : Math.max(20, insets.left);
+  const safeRight = isLandscape
+    ? Math.max(32, insets.right, androidStatusBar)
+    : Math.max(20, insets.right);
+  const safeTop = isLandscape
+    ? Math.max(16, insets.top)
+    : Math.max(effectiveTopInset + 8, 24);
+  const safeBottom = Math.max(isLandscape ? 16 : 24, insets.bottom);
+
   // Responsive dial size:
   // In landscape: height is constrained, dial fits in left section.
   // In portrait: width is constrained, dial fits comfortably centered.
   const dialSize = isLandscape
     ? Math.min(
-        Math.floor((rawHeight - Math.max(14, insets.top) - Math.max(14, insets.bottom)) * 0.88),
-        Math.floor((rawWidth - Math.max(28, insets.left) - Math.max(28, insets.right)) * 0.42),
+        Math.floor((rawHeight - safeTop - safeBottom) * 0.88),
+        Math.floor((rawWidth - safeLeft - safeRight) * 0.42),
         320
       )
     : Math.min(
-        Math.floor((rawWidth - Math.max(20, insets.left) - Math.max(20, insets.right)) * 0.68),
-        Math.floor((rawHeight - Math.max(18, insets.top) - Math.max(20, insets.bottom)) * 0.35),
+        Math.floor((rawWidth - safeLeft - safeRight) * 0.68),
+        Math.floor((rawHeight - safeTop - safeBottom) * 0.35),
         260
       );
 
@@ -305,17 +322,21 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <StatusBar hidden />
+      <StatusBar
+        barStyle="light-content"
+        translucent
+        backgroundColor="transparent"
+      />
       <View
         style={[
           styles.container,
           isLandscape ? styles.containerLandscape : styles.containerPortrait,
           nightMode && styles.containerNight,
           {
-            paddingLeft: Math.max(isLandscape ? 28 : 20, insets.left),
-            paddingRight: Math.max(isLandscape ? 28 : 20, insets.right),
-            paddingTop: Math.max(isLandscape ? 14 : 18, insets.top),
-            paddingBottom: Math.max(isLandscape ? 14 : 20, insets.bottom),
+            paddingLeft: safeLeft,
+            paddingRight: safeRight,
+            paddingTop: safeTop,
+            paddingBottom: safeBottom,
           },
         ]}
       >
