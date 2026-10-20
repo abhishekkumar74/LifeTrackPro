@@ -179,7 +179,16 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
   const auraGradId = `innerAura_${isNightMode ? 'night' : 'day'}_${accentColor.replace('#', '')}`;
 
   return (
-    <View style={[styles.container, { width: size, height: size }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+        },
+      ]}
+    >
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <Defs>
           {/* Main Dial Face Gradient with subtle indigo-obsidian tint or StandBy deep night phosphor */}
@@ -409,11 +418,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.55,
-    shadowRadius: 24,
-    elevation: 12,
+    backgroundColor: 'transparent',
   },
   centerReadout: {
     flex: 1,

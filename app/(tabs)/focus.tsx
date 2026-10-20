@@ -2277,6 +2277,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 6,
+    backgroundColor: 'transparent',
   },
   presetsSection: {
     alignItems: 'center',
