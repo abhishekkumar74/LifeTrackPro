@@ -22,6 +22,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import BottomSheet, {
   BottomSheetView,
   BottomSheetTextInput,
@@ -121,6 +122,27 @@ export default function LearnScreen(): React.JSX.Element {
   // Multi-select state for bulk syllabus actions
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+
+  useAndroidBackHandler(() => {
+    if (isQuickCaptureOpen) {
+      setIsQuickCaptureOpen(false);
+      return true;
+    }
+    if (isAddTopicOpen) {
+      setIsAddTopicOpen(false);
+      return true;
+    }
+    if (isMultiSelectMode) {
+      setIsMultiSelectMode(false);
+      setSelectedTopicIds([]);
+      return true;
+    }
+    if (studySessionState === 'active') {
+      setStudySessionState('idle');
+      return true;
+    }
+    return false;
+  });
 
   // Note sorting state
   const [sortOption, setSortOption] = useState<'recent' | 'oldest' | 'subject' | 'due'>('recent');

@@ -18,7 +18,7 @@ export const SafeScreen: React.FC<SafeScreenProps> = ({
 }) => {
   return (
     <SafeAreaView style={[styles.container, style]}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} translucent={false} />
       {mode === 'scroll' ? (
         <ScrollView
           style={styles.flex}

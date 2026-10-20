@@ -297,7 +297,7 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
           value={title}
           onChangeText={setTitle}
           maxLength={100}
-          autoFocus={isVisible}
+          autoFocus={Platform.OS !== 'android' && isVisible}
         />
 
         {/* Subject Select */}

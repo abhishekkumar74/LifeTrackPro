@@ -11,8 +11,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router';
 import { ArrowLeft, Shield } from 'lucide-react-native';
 import { LEGAL_CONFIG } from '@/lib/constants/legal';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 export default function PrivacyScreen(): React.JSX.Element {
+  useAndroidBackHandler();
   const insets = useSafeAreaInsets();
 
   return (

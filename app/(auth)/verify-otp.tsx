@@ -11,6 +11,7 @@ import {
   Dimensions,
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
+  StatusBar,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -236,11 +237,12 @@ export default function VerifyOtpScreen(): React.JSX.Element {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}
+      style={[styles.container, { paddingTop: Platform.OS === 'android' ? 12 : Math.max(insets.top, 16) }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       {/* TOP HEADER SECTION */}
-      <View style={[styles.headerSection, { paddingTop: insets.top + SPACING.md }]}>
+      <View style={[styles.headerSection, { paddingTop: Platform.OS === 'android' ? SPACING.xs : insets.top + SPACING.md }]}>
         <Pressable
           style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
           onPress={() => router.back()}

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Keyboard,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import BottomSheet, {
   BottomSheetTextInput,
@@ -131,7 +132,7 @@ export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
           value={title}
           onChangeText={setTitle}
           maxLength={100}
-          autoFocus={isVisible}
+          autoFocus={Platform.OS !== 'android' && isVisible}
         />
 
         {/* Subject Select */}

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
+import { StatusBar } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -235,7 +235,7 @@ export default function HabitsManagementScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <StatusBar style="dark" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
 
       {/* Header */}
       <View style={styles.header}>

@@ -41,6 +41,7 @@ import {
   sendTestNotification,
 } from '@/lib/notifications';
 import { COLORS } from '@/constants/theme';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 type FilterCategory = 'all' | 'brief' | 'streak' | 'revision' | 'milestone';
 
@@ -59,6 +60,14 @@ export default function NotificationsScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('all');
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  useAndroidBackHandler(() => {
+    if (settingsModalVisible) {
+      setSettingsModalVisible(false);
+      return true;
+    }
+    return false;
+  });
 
   // Auto-generate today's activity & nudges if inbox is empty
   useEffect(() => {
@@ -197,7 +206,7 @@ export default function NotificationsScreen() {
 
   return (
     <SafeAreaView style={styles.safeContainer}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} translucent={false} />
 
       {/* Premium Header */}
       <View style={styles.header}>

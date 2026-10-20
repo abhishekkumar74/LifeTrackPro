@@ -27,6 +27,7 @@ export default function TabLayout(): React.JSX.Element {
           fontSize: 10,
           fontWeight: '500',
         },
+        tabBarHideOnKeyboard: Platform.OS === 'android',
         tabBarStyle: {
           backgroundColor: TAB_BG_COLOR,
           borderTopWidth: 1,

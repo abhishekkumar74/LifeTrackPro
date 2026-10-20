@@ -7,6 +7,7 @@ import {
   Keyboard,
   ActivityIndicator,
   ScrollView,
+  Platform,
 } from 'react-native';
 import BottomSheet, {
   BottomSheetView,
@@ -264,7 +265,7 @@ export const CreateHabitSheet: React.FC<CreateHabitSheetProps> = ({
             value={title}
             onChangeText={setTitle}
             maxLength={40}
-            autoFocus={isVisible && !editHabit}
+            autoFocus={Platform.OS !== 'android' && isVisible && !editHabit}
           />
 
           {/* Frequency pills */}

@@ -18,11 +18,20 @@ import { ArrowLeft, Plus, AlertCircle } from 'lucide-react-native';
 import { QuickAddScheduleSheet } from '@/components/home/QuickAddScheduleSheet';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 export default function ManageRoutinesScreen() {
   const router = useRouter();
   const [editingBlock, setEditingBlock] = useState<ScheduleBlock | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
+
+  useAndroidBackHandler(() => {
+    if (sheetVisible) {
+      setSheetVisible(false);
+      return true;
+    }
+    return false;
+  });
   const { data = { blocks: [], doneBlockIds: [], skippedBlockIds: [], skipsLog: [] }, isLoading, refetch } = useQuery({
     queryKey: ['manageRoutinesList'],
     queryFn: async () => {
@@ -170,7 +179,7 @@ export default function ManageRoutinesScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       
       {/* Header */}
       <View style={styles.header}>

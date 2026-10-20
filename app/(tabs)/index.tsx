@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Flame, Timer, AlertCircle, AlertTriangle } from 'lucide-react-native';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useTodayStats } from '@/lib/hooks/use-today-stats';
@@ -46,6 +47,27 @@ export default function HomeDashboardScreen(): React.JSX.Element {
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false);
   const [streakModalVisible, setStreakModalVisible] = useState(false);
   const [notificationSheetVisible, setNotificationSheetVisible] = useState(false);
+
+  useAndroidBackHandler(() => {
+    if (taskSheetVisible) {
+      setTaskSheetVisible(false);
+      return true;
+    }
+    if (scheduleSheetVisible) {
+      setScheduleSheetVisible(false);
+      return true;
+    }
+    if (streakModalVisible) {
+      setStreakModalVisible(false);
+      return true;
+    }
+    if (notificationSheetVisible) {
+      setNotificationSheetVisible(false);
+      return true;
+    }
+    return false;
+  });
+
   const [editingScheduleBlock, setEditingScheduleBlock] = useState<ScheduleBlock | null>(null);
   const [todayScheduleSnapshot, setTodayScheduleSnapshot] = useState<ScheduleBlock[]>([]);
   const completeTaskMutation = useCompleteTask();

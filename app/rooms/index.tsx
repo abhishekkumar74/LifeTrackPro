@@ -24,7 +24,6 @@ import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import { Skeleton } from '@/components/shared/Skeleton';
 
 export default function RoomsScreen(): React.JSX.Element {
-  useAndroidBackHandler();
   const { profile } = useAuthStore();
   const currentUserId = profile?.id || '';
 
@@ -49,6 +48,14 @@ export default function RoomsScreen(): React.JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'silent' | 'music' | 'discussion'>('all');
+
+  useAndroidBackHandler(() => {
+    if (isSheetVisible) {
+      setIsSheetVisible(false);
+      return true;
+    }
+    return false;
+  });
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -154,7 +161,7 @@ export default function RoomsScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       {/* HEADER */}
       <View style={styles.header}>

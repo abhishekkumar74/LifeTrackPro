@@ -11,10 +11,12 @@ import {
   Alert,
   Dimensions,
   Platform,
-  RefreshControl
+  RefreshControl,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import {
   Plus,
   Image as ImageIcon,
@@ -62,6 +64,18 @@ export default function TransactionsScreen(): React.JSX.Element {
   const [smsModalVisible, setSmsModalVisible] = useState(false);
   const [parsingLoaderVisible, setParsingLoaderVisible] = useState(false);
   const [parsingMessage, setParsingMessage] = useState('');
+
+  useAndroidBackHandler(() => {
+    if (manualModalVisible) {
+      setManualModalVisible(false);
+      return true;
+    }
+    if (smsModalVisible) {
+      setSmsModalVisible(false);
+      return true;
+    }
+    return false;
+  });
 
   // Form states
   const [amount, setAmount] = useState('');
@@ -359,6 +373,7 @@ export default function TransactionsScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>

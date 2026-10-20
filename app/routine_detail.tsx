@@ -17,10 +17,12 @@ import { supabase } from '@/lib/supabase/client';
 import { COLORS, TYPOGRAPHY, SHADOWS, SPACING, RADIUS } from '@/constants/theme';
 import { ScheduleBlock, ScheduleLog } from '@/types/app.types';
 import { getTodayLocal } from '@/lib/utils/date';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 export default function RoutineDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  useAndroidBackHandler();
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   // 1. Fetch Routine Block Details
@@ -231,7 +233,7 @@ export default function RoutineDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
 
       {/* Header */}
       <View style={styles.header}>

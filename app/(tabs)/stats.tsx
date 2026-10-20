@@ -13,6 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import { useRef, useEffect } from 'react';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
 import {
@@ -75,6 +76,14 @@ export default function StatsScreen(): React.JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [focusToggle, setFocusToggle] = useState<'today' | 'week'>('week');
   const [shareProgressModalVisible, setShareProgressModalVisible] = useState(false);
+
+  useAndroidBackHandler(() => {
+    if (shareProgressModalVisible) {
+      setShareProgressModalVisible(false);
+      return true;
+    }
+    return false;
+  });
   const queryClient = useQueryClient();
 
   const { profile, user } = useAuthStore();

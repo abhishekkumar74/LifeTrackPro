@@ -151,7 +151,7 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
             value={title}
             onChangeText={setTitle}
             maxLength={80}
-            autoFocus={isVisible}
+            autoFocus={Platform.OS !== 'android' && isVisible}
           />
 
           {/* Subject Link */}

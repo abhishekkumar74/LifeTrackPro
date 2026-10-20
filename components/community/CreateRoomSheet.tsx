@@ -152,7 +152,7 @@ export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
             value={roomName}
             onChangeText={setRoomName}
             maxLength={50}
-            autoFocus={isVisible}
+            autoFocus={Platform.OS !== 'android' && isVisible}
           />
         )}
 

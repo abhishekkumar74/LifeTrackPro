@@ -18,11 +18,13 @@ import { supabase } from '@/lib/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { Sparkles, X, CheckCircle, Volume2, Palette, Users } from 'lucide-react-native';
 import { trackEvent, identifyUser } from '@/lib/posthog';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 const { width } = Dimensions.get('window');
 
 export default function PaywallScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  useAndroidBackHandler();
   const queryClient = useQueryClient();
   const { profile, setProfile } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
@@ -109,7 +111,7 @@ export default function PaywallScreen(): React.JSX.Element {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#12121e" animated />
+      <StatusBar barStyle="light-content" backgroundColor="#12121e" translucent={false} animated />
       {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>LifeTrack Gold</Text>

@@ -37,6 +37,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import Svg, { Polygon } from 'react-native-svg';
 
 const DIARY_FONT_KEY = 'diary_font_theme_preference';
@@ -220,6 +221,14 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
   );
   const [showFontModal, setShowFontModal] = useState<boolean>(false);
 
+  useAndroidBackHandler(() => {
+    if (showFontModal) {
+      setShowFontModal(false);
+      return true;
+    }
+    return false;
+  });
+
   // Load saved font theme preference
   useEffect(() => {
     AsyncStorage.getItem(DIARY_FONT_KEY).then((savedFont) => {
@@ -398,7 +407,7 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.outerStage} edges={['top', 'left', 'right', 'bottom']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#C9BEA9" />
+      <StatusBar barStyle="dark-content" backgroundColor="#C9BEA9" translucent={false} />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}

@@ -235,7 +235,7 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
   if (!isUnlocked) {
     return (
       <SafeAreaView style={styles.stageContainer} edges={['top', 'left', 'right', 'bottom']}>
-        <StatusBar barStyle="dark-content" backgroundColor="#EFE6CE" />
+        <StatusBar barStyle="dark-content" backgroundColor="#EFE6CE" translucent={false} />
 
         <View style={styles.paperTopBar}>
           <TouchableOpacity
@@ -407,7 +407,7 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
   // UNLOCKED SECRET VAULT DASHBOARD (MATCHING secret-vault-ui.html)
   return (
     <SafeAreaView style={styles.stageContainer} edges={['top', 'left', 'right', 'bottom']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#EFE6CE" />
+      <StatusBar barStyle="dark-content" backgroundColor="#EFE6CE" translucent={false} />
 
       {/* HEADER */}
       <View style={styles.paperTopBar}>

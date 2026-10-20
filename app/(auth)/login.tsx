@@ -23,6 +23,7 @@ import {
   Text,
   TextInput,
   View,
+  StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -381,10 +382,11 @@ export default function LoginScreen(): React.JSX.Element {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}
+      style={[styles.container, { paddingTop: Platform.OS === 'android' ? 16 : Math.max(insets.top, 16) }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       <ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { Plus, Mountain, Target, Trophy, CheckCircle2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -76,6 +77,23 @@ export default function GoalsScreen(): React.JSX.Element {
   const [isGoalSheetVisible, setIsGoalSheetVisible] = useState(false);
   const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
   const [isMilestoneSheetVisible, setIsMilestoneSheetVisible] = useState(false);
+
+  useAndroidBackHandler(() => {
+    if (isGoalSheetVisible) {
+      setIsGoalSheetVisible(false);
+      return true;
+    }
+    if (isTaskSheetVisible) {
+      setIsTaskSheetVisible(false);
+      return true;
+    }
+    if (isMilestoneSheetVisible) {
+      setIsMilestoneSheetVisible(false);
+      return true;
+    }
+    return false;
+  });
+
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
