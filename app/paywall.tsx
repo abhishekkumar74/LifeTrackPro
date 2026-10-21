@@ -9,6 +9,7 @@ import {
   Dimensions,
   Platform,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -85,6 +86,34 @@ export default function PaywallScreen(): React.JSX.Element {
       router.back();
     } catch (e) {
       if (__DEV__) console.warn('Downgrade failed:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setIsLoading(true);
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        Alert.alert('Sign In Required', 'Please sign in to your LifeTrack Pro account to restore purchases.');
+        return;
+      }
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+      if (data?.is_premium) {
+        setProfile(data as any);
+        queryClient.invalidateQueries({ queryKey: ['profile'] });
+        Alert.alert('Purchases Restored', 'Your LifeTrack Gold subscription has been successfully restored.');
+      } else {
+        Alert.alert('No Active Subscription', 'We could not find an active Gold subscription linked to this account.');
+      }
+    } catch (e) {
+      Alert.alert('Restore Failed', 'Unable to verify purchases right now. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -215,9 +244,19 @@ export default function PaywallScreen(): React.JSX.Element {
             </TouchableOpacity>
           )}
 
-          <Text style={styles.footerLegal}>
-            Secured checkout. By upgrading, you agree to our Terms of Use and Privacy Policy.
-          </Text>
+          <View style={styles.legalLinksRow}>
+            <TouchableOpacity onPress={() => router.push('/terms')} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.legalLink}>Terms of Use</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalDivider}>•</Text>
+            <TouchableOpacity onPress={handleRestore} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.legalLink}>Restore Purchases</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalDivider}>•</Text>
+            <TouchableOpacity onPress={() => router.push('/privacy')} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.legalLink}>Privacy Policy</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -399,13 +438,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#5B4FE8',
   },
-  footerLegal: {
-    fontFamily: 'DMSans',
+  legalLinksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    paddingHorizontal: 16,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  legalLink: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.65)',
+    textDecorationLine: 'underline',
+  },
+  legalDivider: {
+    color: 'rgba(255,255,255,0.25)',
     fontSize: 10,
-    color: 'rgba(255,255,255,0.4)',
-    textAlign: 'center',
-    lineHeight: 14,
-    paddingHorizontal: 20,
   },
   successContainer: {
     justifyContent: 'center',

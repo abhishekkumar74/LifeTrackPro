@@ -31,9 +31,21 @@ export class ErrorBoundary extends React.Component<Props, State> {
     this.setState({ errorInfo });
   }
 
-  private handleRestart = () => {
-    // Restarts the JS bundle
-    DevSettings.reload();
+  private handleRestart = async () => {
+    try {
+      if (__DEV__ && DevSettings?.reload) {
+        DevSettings.reload();
+        return;
+      }
+      const Updates = require('expo-updates');
+      if (Updates?.reloadAsync) {
+        await Updates.reloadAsync();
+        return;
+      }
+    } catch (e) {
+      // Fallback: recover by resetting error state
+    }
+    this.setState({ hasError: false, error: null, errorInfo: null });
   };
 
   public render() {
