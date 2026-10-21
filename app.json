@@ -96,7 +96,6 @@
       "expo-sharing",
       "expo-asset",
       "expo-localization",
-      "posthog-react-native/expo",
       "expo-updates"
     ],
     "experiments": {
