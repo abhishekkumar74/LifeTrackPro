@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import * as AuthSession from 'expo-auth-session';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { AppLogo } from '@/components/ui/AppLogo';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -30,6 +31,19 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 // Ensure the browser closes the session correctly on web redirect
 WebBrowser.maybeCompleteAuthSession();
+
+// Configure Native In-App Google Sign-In if client ID is set
+if (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) {
+  try {
+    GoogleSignin.configure({
+      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+      offlineAccess: true,
+    });
+  } catch (e) {
+    console.warn('[Google Auth] Failed to configure GoogleSignin:', e);
+  }
+}
 
 const screenHeight = Dimensions.get('window').height;
 
@@ -299,13 +313,55 @@ export default function LoginScreen(): React.JSX.Element {
     };
   }, []);
 
-  // Google OAuth redirect/native login handler
+  // Google OAuth redirect / pure in-app native login handler
   const handleGoogleSignIn = async (): Promise<void> => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
+      const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+
+      // 1. PURE IN-APP NATIVE LOGIN (No browser opened, native Google bottom sheet)
+      if (Platform.OS !== 'web' && webClientId) {
+        try {
+          await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+          const response = await GoogleSignin.signIn();
+          const idToken = response.data?.idToken;
+
+          if (idToken) {
+            console.log('[Google Auth] Native in-app ID token received, signing into Supabase...');
+            const { data: sessionData, error: sessionErr } = await supabase.auth.signInWithIdToken({
+              provider: 'google',
+              token: idToken,
+            });
+
+            if (sessionErr) {
+              console.error('[Google Auth] signInWithIdToken error:', sessionErr);
+              setErrorMessage(sessionErr.message);
+              return;
+            }
+
+            if (sessionData?.session) {
+              console.log('[Google Auth] Native in-app session established!');
+              useAuthStore.getState().setSession(sessionData.session);
+              router.replace('/(tabs)');
+              return;
+            }
+          }
+        } catch (nativeErr: any) {
+          if (nativeErr.code === statusCodes.SIGN_IN_CANCELLED) {
+            console.log('[Google Auth] Native sign-in cancelled by user');
+            return;
+          } else if (nativeErr.code === statusCodes.IN_PROGRESS) {
+            console.log('[Google Auth] Sign in already in progress');
+            return;
+          }
+          console.warn('[Google Auth] Native sign-in failed, attempting browser session:', nativeErr);
+        }
+      }
+
+      // 2. Browser OAuth session fallback
       const redirectTo = Platform.OS === 'web'
         ? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081')
         : 'lifetrackpro://google-auth';
@@ -326,8 +382,10 @@ export default function LoginScreen(): React.JSX.Element {
       }
 
       if (Platform.OS !== 'web' && data?.url) {
-        console.log('[Google Auth] Opening WebBrowser with URL:', data.url);
-        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        console.log('[Google Auth] Opening in-app browser session with URL:', data.url);
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
+          showInRecents: false,
+        });
         console.log('[Google Auth] WebBrowser result type:', result.type);
         if (result.type === 'success' && result.url) {
           await processAuthUrl(result.url);

@@ -96,7 +96,8 @@
       "expo-sharing",
       "expo-asset",
       "expo-localization",
-      "expo-updates"
+      "expo-updates",
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true
