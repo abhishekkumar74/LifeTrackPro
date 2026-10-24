@@ -61,7 +61,13 @@ import {
   Waves,
   Music,
   Radio,
+  Play,
+  Pause,
+  Square,
+  Headphones,
+  Tag,
 } from 'lucide-react-native';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import { trackEvent } from '@/lib/posthog';
 import { FocusLiveActivity } from '@/lib/native/live-activity';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -401,6 +407,27 @@ export default function FocusScreen(): React.JSX.Element {
   const lastActiveSoundRef = useRef<SoundKey>('rain');
   const backgroundStartTimestampRef = useRef<number | null>(null);
 
+  // Android back button closes open sheets first
+  useAndroidBackHandler(() => {
+    if (rewardsModalOpen) {
+      setRewardsModalOpen(false);
+      return true;
+    }
+    if (settingsOpen) {
+      setSettingsOpen(false);
+      return true;
+    }
+    if (soundSheetOpen) {
+      setSoundSheetOpen(false);
+      return true;
+    }
+    if (historySheetOpen) {
+      setHistorySheetOpen(false);
+      return true;
+    }
+    return false;
+  });
+
   // Load streak shields from storage
   useEffect(() => {
     getStreakShieldCount().then((count) => setStreakShields(count));
@@ -653,7 +680,7 @@ export default function FocusScreen(): React.JSX.Element {
 
   const renderTopicBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} pressBehavior="close" />
     ),
     []
   );
@@ -1249,6 +1276,7 @@ export default function FocusScreen(): React.JSX.Element {
             scrollEnabled={scrollEnabled}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContainer}
+            keyboardShouldPersistTaps="handled"
           >
             {/* Header: What are you focusing on? */}
             <Text style={styles.mainHeading}>What are you focusing on?</Text>
@@ -1329,8 +1357,9 @@ export default function FocusScreen(): React.JSX.Element {
                 {/* Subject Tag Pill if present */}
                 {subjectTag && (
                   <View style={styles.activeSubjectPill}>
+                    <Tag size={11} color="#A89EF8" />
                     <Text style={styles.activeSubjectText} numberOfLines={1}>
-                      🏷  {subjectTag}
+                      {subjectTag}
                     </Text>
                   </View>
                 )}
@@ -1404,8 +1433,9 @@ export default function FocusScreen(): React.JSX.Element {
                         }}
                         activeOpacity={0.8}
                       >
+                        <Tag size={12} color="rgba(255, 255, 255, 0.75)" />
                         <Text style={styles.optionGlassPillText} numberOfLines={1}>
-                          🏷  {subjectTag || 'General'}
+                          {subjectTag || 'General'}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -1421,8 +1451,9 @@ export default function FocusScreen(): React.JSX.Element {
                     }}
                     activeOpacity={0.8}
                   >
+                    <Headphones size={13} color={activeSound ? '#A89EF8' : 'rgba(255, 255, 255, 0.75)'} />
                     <Text style={[styles.optionGlassPillText, activeSound ? styles.optionGlassPillTextActive : null]}>
-                      🎧  {activeSound ? activeSound.replace('_', ' ') : 'Sound off'}
+                      {activeSound ? activeSound.replace('_', ' ') : 'Sound off'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -1439,9 +1470,16 @@ export default function FocusScreen(): React.JSX.Element {
                   isRunning ? 'Pause Focus' : isPaused ? 'Resume Focus' : 'Start Focus'
                 }
               >
-                <Text style={styles.prominentActionText}>
-                  {isRunning ? '⏸  Pause Focus' : isPaused ? '▶  Resume Focus' : '▶  Start Focus'}
-                </Text>
+                <View style={styles.prominentActionContent}>
+                  {isRunning ? (
+                    <Pause size={18} color="#FFFFFF" strokeWidth={2.8} />
+                  ) : (
+                    <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
+                  )}
+                  <Text style={styles.prominentActionText}>
+                    {isRunning ? 'Pause Focus' : isPaused ? 'Resume Focus' : 'Start Focus'}
+                  </Text>
+                </View>
               </TouchableOpacity>
 
               {/* Running/Paused secondary actions */}
@@ -1452,7 +1490,10 @@ export default function FocusScreen(): React.JSX.Element {
                     onPress={handleReset}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.endSessionText}>⏹  End Session</Text>
+                    <View style={styles.endSessionContent}>
+                      <Square size={12} color="#FF7070" fill="#FF7070" />
+                      <Text style={styles.endSessionText}>End Session</Text>
+                    </View>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1460,7 +1501,7 @@ export default function FocusScreen(): React.JSX.Element {
           </ScrollView>
 
           {/* Floating Bottom Segmented Pill Bar: [ Focus | History ] */}
-          <View style={styles.bottomFloatingNav}>
+          <View style={styles.bottomFloatingNav} pointerEvents="box-none">
             <View style={styles.bottomNavCapsule}>
               {/* Focus Tab (Active) */}
               <TouchableOpacity
@@ -1506,35 +1547,37 @@ export default function FocusScreen(): React.JSX.Element {
       />
 
       {/* FOCUS REWARDS & ACHIEVEMENTS SHEET */}
-      <BottomSheet
-        ref={rewardsSheetRef}
-        index={-1}
-        snapPoints={['75%', '92%']}
-        enableDynamicSizing={false}
-        enablePanDownToClose={true}
-        backdropComponent={renderTopicBackdrop}
-        backgroundStyle={styles.bottomSheetDarkBackground}
-        handleIndicatorStyle={styles.bottomSheetDarkIndicator}
-        onChange={(idx) => {
-          setRewardsModalOpen(idx !== -1);
-        }}
-      >
-        <BottomSheetScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.rewardsContentContainer}
-          showsVerticalScrollIndicator={false}
+      {rewardsModalOpen && (
+        <BottomSheet
+          ref={rewardsSheetRef}
+          index={0}
+          snapPoints={['75%', '92%']}
+          enableDynamicSizing={false}
+          enablePanDownToClose={true}
+          backdropComponent={renderTopicBackdrop}
+          backgroundStyle={styles.bottomSheetDarkBackground}
+          handleIndicatorStyle={styles.bottomSheetDarkIndicator}
+          onClose={() => setRewardsModalOpen(false)}
+          onChange={(idx) => {
+            if (idx === -1) setRewardsModalOpen(false);
+          }}
         >
-          {/* Header pill & Title */}
-          <View style={styles.rewardsHeaderSection}>
-            <View style={styles.rewardsHeaderBadge}>
-              <Trophy size={13} color="#FBBF24" />
-              <Text style={styles.rewardsHeaderBadgeText}>FOCUS MASTERY & REWARDS</Text>
+          <BottomSheetScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.rewardsContentContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Header pill & Title */}
+            <View style={styles.rewardsHeaderSection}>
+              <View style={styles.rewardsHeaderBadge}>
+                <Trophy size={13} color="#FBBF24" />
+                <Text style={styles.rewardsHeaderBadgeText}>FOCUS MASTERY & REWARDS</Text>
+              </View>
+              <Text style={styles.rewardsTitle}>Focus Rewards</Text>
+              <Text style={styles.rewardsSubtitle}>
+                Earn XP for every minute of deep work. Level up your rank and unlock custom timer ring themes.
+              </Text>
             </View>
-            <Text style={styles.rewardsTitle}>Focus Rewards</Text>
-            <Text style={styles.rewardsSubtitle}>
-              Earn XP for every minute of deep work. Level up your rank and unlock custom timer ring themes.
-            </Text>
-          </View>
 
           {/* Level & XP Hero Card (VIP Cyber Rank Pass) */}
           {(() => {
@@ -1911,19 +1954,24 @@ export default function FocusScreen(): React.JSX.Element {
           </View>
         </BottomSheetScrollView>
       </BottomSheet>
+      )}
 
       {/* TIMER SETTINGS SHEET */}
-      <BottomSheet
-        ref={settingsSheetRef}
-        index={-1}
-        snapPoints={['35%']}
-        enableDynamicSizing={false}
-        enablePanDownToClose={true}
-        backdropComponent={renderTopicBackdrop}
-        onChange={(idx) => {
-          if (idx === -1) setSettingsOpen(false);
-        }}
-      >
+      {settingsOpen && (
+        <BottomSheet
+          ref={settingsSheetRef}
+          index={0}
+          snapPoints={['35%']}
+          enableDynamicSizing={false}
+          enablePanDownToClose={true}
+          backdropComponent={renderTopicBackdrop}
+          backgroundStyle={styles.bottomSheetDarkBackground}
+          handleIndicatorStyle={styles.bottomSheetDarkIndicator}
+          onClose={() => setSettingsOpen(false)}
+          onChange={(idx) => {
+            if (idx === -1) setSettingsOpen(false);
+          }}
+        >
         <BottomSheetView style={styles.settingsSheetContent}>
           <Text style={styles.settingsSheetTitle}>Timer Options</Text>
 
@@ -1982,6 +2030,7 @@ export default function FocusScreen(): React.JSX.Element {
           </View>
         </BottomSheetView>
       </BottomSheet>
+      )}
 
       {/* CSE Topic Selection Bottom Sheet */}
       {topicSelectionActive && (
@@ -2068,90 +2117,96 @@ export default function FocusScreen(): React.JSX.Element {
       />
 
       {/* FOCUS HISTORY BOTTOM SHEET */}
-      <BottomSheet
-        ref={historySheetRef}
-        index={-1}
-        snapPoints={['75%', '92%']}
-        enableDynamicSizing={false}
-        enablePanDownToClose={true}
-        backdropComponent={renderTopicBackdrop}
-        backgroundStyle={styles.bottomSheetDarkBackground}
-        handleIndicatorStyle={styles.bottomSheetDarkIndicator}
-        onChange={(idx) => {
-          setHistorySheetOpen(idx !== -1);
-        }}
-      >
-        <BottomSheetScrollView
-          style={styles.historySheetScrollView}
-          contentContainerStyle={styles.historySheetContent}
-          showsVerticalScrollIndicator={true}
+      {historySheetOpen && (
+        <BottomSheet
+          ref={historySheetRef}
+          index={0}
+          snapPoints={['75%', '92%']}
+          enableDynamicSizing={false}
+          enablePanDownToClose={true}
+          backdropComponent={renderTopicBackdrop}
+          backgroundStyle={styles.bottomSheetDarkBackground}
+          handleIndicatorStyle={styles.bottomSheetDarkIndicator}
+          onClose={() => setHistorySheetOpen(false)}
+          onChange={(idx) => {
+            if (idx === -1) setHistorySheetOpen(false);
+          }}
         >
-          <Text style={styles.historySheetTitle}>Focus History</Text>
-          <Text style={styles.historySheetSubtitle}>
-            Today: {todayMinutes}m focused across {history.filter(s => s.status === 'completed').length} completed sessions.
-          </Text>
+          <BottomSheetScrollView
+            style={styles.historySheetScrollView}
+            contentContainerStyle={styles.historySheetContent}
+            showsVerticalScrollIndicator={true}
+          >
+            <Text style={styles.historySheetTitle}>Focus History</Text>
+            <Text style={styles.historySheetSubtitle}>
+              Today: {todayMinutes}m focused across {history.filter(s => s.status === 'completed').length} completed sessions.
+            </Text>
 
-          {isLoadingHistory ? (
-            <ActivityIndicator color="#5B4FE8" style={{ marginVertical: 32 }} />
-          ) : history.length === 0 ? (
-            <View style={styles.emptyHistoryCard}>
-              <Text style={styles.emptyHistoryText}>No focus sessions logged yet.</Text>
-            </View>
-          ) : (
-            history.map((session) => (
-              <HistoryItemCard key={session.id} session={session} />
-            ))
-          )}
-        </BottomSheetScrollView>
-      </BottomSheet>
+            {isLoadingHistory ? (
+              <ActivityIndicator color="#5B4FE8" style={{ marginVertical: 32 }} />
+            ) : history.length === 0 ? (
+              <View style={styles.emptyHistoryCard}>
+                <Text style={styles.emptyHistoryText}>No focus sessions logged yet.</Text>
+              </View>
+            ) : (
+              history.map((session) => (
+                <HistoryItemCard key={session.id} session={session} />
+              ))
+            )}
+          </BottomSheetScrollView>
+        </BottomSheet>
+      )}
 
       {/* AMBIENT SOUNDSCAPES & MUSIC BOTTOM SHEET */}
-      <BottomSheet
-        ref={soundSheetRef}
-        index={-1}
-        snapPoints={['55%']}
-        enableDynamicSizing={false}
-        enablePanDownToClose={true}
-        backdropComponent={renderTopicBackdrop}
-        backgroundStyle={styles.bottomSheetDarkBackground}
-        handleIndicatorStyle={styles.bottomSheetDarkIndicator}
-        onChange={(idx) => {
-          setSoundSheetOpen(idx !== -1);
-        }}
-      >
-        <BottomSheetView style={styles.soundSheetContent}>
-          <Text style={styles.soundSheetTitle}>Ambient Soundscapes 🎧</Text>
-          <Text style={styles.soundSheetSubtitle}>
-            Choose soothing background soundscapes to deepen your focus and block distractions.
-          </Text>
-
-          <SoundPicker
-            activeSound={activeSound}
-            onSelect={(sound) => handleSoundSelect(sound)}
-            volume={soundVolume}
-            onVolumeChange={handleVolumeChange}
-            isPremium={isPremium}
-            userLevel={profile?.level || 1}
-            userXp={profile?.xp_points || 0}
-            onPremiumTrigger={() => router.push('/paywall')}
-          />
-
-          {/* Quick Mute Action Button */}
-          <TouchableOpacity
-            style={[styles.muteAllButton, !activeSound && styles.muteAllButtonActive]}
-            onPress={async () => {
-              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              handleSoundSelect(null);
-            }}
-            activeOpacity={0.7}
-          >
-            <VolumeX size={15} color={!activeSound ? '#5B4FE8' : 'rgba(255, 255, 255, 0.5)'} />
-            <Text style={[styles.muteAllText, !activeSound && styles.muteAllTextActive]}>
-              {!activeSound ? 'Audio Muted' : 'Turn Off Sound'}
+      {soundSheetOpen && (
+        <BottomSheet
+          ref={soundSheetRef}
+          index={0}
+          snapPoints={['55%']}
+          enableDynamicSizing={false}
+          enablePanDownToClose={true}
+          backdropComponent={renderTopicBackdrop}
+          backgroundStyle={styles.bottomSheetDarkBackground}
+          handleIndicatorStyle={styles.bottomSheetDarkIndicator}
+          onClose={() => setSoundSheetOpen(false)}
+          onChange={(idx) => {
+            if (idx === -1) setSoundSheetOpen(false);
+          }}
+        >
+          <BottomSheetView style={styles.soundSheetContent}>
+            <Text style={styles.soundSheetTitle}>Ambient Soundscapes 🎧</Text>
+            <Text style={styles.soundSheetSubtitle}>
+              Choose soothing background soundscapes to deepen your focus and block distractions.
             </Text>
-          </TouchableOpacity>
-        </BottomSheetView>
-      </BottomSheet>
+
+            <SoundPicker
+              activeSound={activeSound}
+              onSelect={(sound) => handleSoundSelect(sound)}
+              volume={soundVolume}
+              onVolumeChange={handleVolumeChange}
+              isPremium={isPremium}
+              userLevel={profile?.level || 1}
+              userXp={profile?.xp_points || 0}
+              onPremiumTrigger={() => router.push('/paywall')}
+            />
+
+            {/* Quick Mute Action Button */}
+            <TouchableOpacity
+              style={[styles.muteAllButton, !activeSound && styles.muteAllButtonActive]}
+              onPress={async () => {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                handleSoundSelect(null);
+              }}
+              activeOpacity={0.7}
+            >
+              <VolumeX size={15} color={!activeSound ? '#5B4FE8' : 'rgba(255, 255, 255, 0.5)'} />
+              <Text style={[styles.muteAllText, !activeSound && styles.muteAllTextActive]}>
+                {!activeSound ? 'Audio Muted' : 'Turn Off Sound'}
+              </Text>
+            </TouchableOpacity>
+          </BottomSheetView>
+        </BottomSheet>
+      )}
     </View>
   );
 }
@@ -2330,6 +2385,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   optionGlassPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
@@ -2372,6 +2431,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
+  prominentActionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
   prominentActionText: {
     fontFamily: 'InstrumentSerif',
     fontSize: 22,
@@ -2390,6 +2455,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(232, 88, 88, 0.15)',
     borderWidth: 1,
     borderColor: 'rgba(232, 88, 88, 0.3)',
+  },
+  endSessionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
   endSessionText: {
     fontFamily: 'DMSans-Medium',
@@ -3315,6 +3386,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(91, 79, 232, 0.15)',
   },
   activeSubjectPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',

@@ -22,6 +22,7 @@ import {
   Moon,
   Sun,
   Sparkles,
+  Tag,
 } from 'lucide-react-native';
 import { TimerCircle } from './TimerCircle';
 
@@ -154,8 +155,9 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
             !isLandscape && styles.subjectTagPillPortrait,
           ]}
         >
+          <Tag size={11} color={effectiveThemeColor} />
           <Text style={[styles.subjectTagText, { color: effectiveThemeColor }]} numberOfLines={1}>
-            🏷 {subjectTag}
+            {subjectTag}
           </Text>
         </View>
       ) : null}
@@ -514,6 +516,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   },
   subjectTagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 14,

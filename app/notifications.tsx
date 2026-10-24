@@ -7,11 +7,12 @@ import {
   ScrollView,
   Switch,
   Modal,
-  SafeAreaView,
   StatusBar,
   Alert,
   RefreshControl,
+  Platform,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   Bell,
@@ -204,8 +205,17 @@ export default function NotificationsScreen() {
     );
   };
 
+  const insets = useSafeAreaInsets();
+  const androidTopExtra = Platform.OS === 'android' && insets.top === 0 ? (StatusBar.currentHeight || 28) : 0;
+
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <SafeAreaView
+      style={[
+        styles.safeContainer,
+        { paddingTop: Math.max(0, androidTopExtra) },
+      ]}
+      edges={['top', 'left', 'right']}
+    >
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} translucent={false} />
 
       {/* Premium Header */}
