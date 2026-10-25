@@ -750,8 +750,8 @@ export default function FocusScreen(): React.JSX.Element {
 
       if (error) throw error;
 
-      // Award Focus XP for completed focus session
-      if (status === 'completed') {
+      // Award Focus XP for completed focus session or saved session
+      if (status === 'completed' || (status === 'interrupted' && dbDuration >= 1)) {
         const earned = seedsEarned && seedsEarned > 0
           ? seedsEarned
           : calculateSessionXP({
@@ -948,7 +948,7 @@ export default function FocusScreen(): React.JSX.Element {
       if (isNetworkError) {
         try {
           // Award XP locally so user never loses their reward even when offline
-          if (status === 'completed') {
+          if (status === 'completed' || (status === 'interrupted' && dbDuration >= 1)) {
             const earned = seedsEarned && seedsEarned > 0
               ? seedsEarned
               : calculateSessionXP({
@@ -992,6 +992,7 @@ export default function FocusScreen(): React.JSX.Element {
           setShowSummary(false);
           await ambient.stop();
           resetSession();
+          FocusLiveActivity.endSession().catch(() => {});
 
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           Alert.alert(
@@ -1008,9 +1009,13 @@ export default function FocusScreen(): React.JSX.Element {
       if (__DEV__) {
         console.warn('Failed to save focus session:', err);
       }
+      setShowSummary(false);
+      await ambient.stop().catch(() => {});
+      resetSession();
+      FocusLiveActivity.endSession().catch(() => {});
       Alert.alert(
-        'Failed to save session',
-        'Could not log session. Please check your network and try again.'
+        'Session Ended',
+        'Could not sync session to cloud, but timer and audio have been reset.'
       );
     }
   }, [elapsedSeconds, selectedPreset, customMinutes, sessionGoal, subjectTag, activeSound, resetSession, ambient, refetchHistory, queryClient, isCse]);
@@ -1042,46 +1047,80 @@ export default function FocusScreen(): React.JSX.Element {
   }, [isRunning, isPaused, pause, resume, start, secondsLeft, sessionGoal]);
 
   const handleReset = useCallback(async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (elapsedSeconds >= 300) {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const wasRunning = isRunning;
+    if (isRunning) {
+      pause();
+    }
+
+    const minutesFocused = Math.max(1, Math.floor(elapsedSeconds / 60));
+
+    if (elapsedSeconds >= 60) {
       Alert.alert(
-        'Cancel Focus Session?',
-        'Do you want to end this session early? It will be logged as Interrupted.',
+        'End Focus Session?',
+        `You have focused for ${minutesFocused} minute${minutesFocused > 1 ? 's' : ''}. What would you like to do?`,
         [
           {
-            text: 'Yes, End Session',
+            text: 'Save & Finish',
+            onPress: async () => {
+              try {
+                await handleSaveSession(3, '', 'interrupted');
+              } catch (saveErr) {
+                if (__DEV__) console.warn('Error saving interrupted session:', saveErr);
+              } finally {
+                await ambient.stop().catch(() => {});
+                resetSession();
+                FocusLiveActivity.endSession().catch(() => {});
+              }
+            },
+          },
+          {
+            text: 'Discard',
             style: 'destructive',
             onPress: async () => {
-              await handleSaveSession(3, '', 'interrupted');
-            }
+              await ambient.stop().catch(() => {});
+              resetSession();
+              FocusLiveActivity.endSession().catch(() => {});
+            },
           },
           {
             text: 'Keep Focusing',
-            style: 'cancel'
-          }
+            style: 'cancel',
+            onPress: () => {
+              if (wasRunning) {
+                resume();
+              }
+            },
+          },
         ]
       );
     } else {
       Alert.alert(
-        'Discard Focus Session?',
-        'Sessions under 5 minutes are not saved.',
+        'End Focus Session?',
+        'Session duration is under 1 minute and will not be saved.',
         [
           {
-            text: 'Discard',
+            text: 'Discard & Reset',
             style: 'destructive',
-            onPress: () => {
-              stop();
+            onPress: async () => {
+              await ambient.stop().catch(() => {});
+              resetSession();
               FocusLiveActivity.endSession().catch(() => {});
-            }
+            },
           },
           {
-            text: 'Cancel',
-            style: 'cancel'
-          }
+            text: 'Keep Focusing',
+            style: 'cancel',
+            onPress: () => {
+              if (wasRunning) {
+                resume();
+              }
+            },
+          },
         ]
       );
     }
-  }, [elapsedSeconds, handleSaveSession, stop]);
+  }, [elapsedSeconds, isRunning, pause, resume, handleSaveSession, ambient, resetSession]);
 
   const handleSkipBreak = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1260,24 +1299,24 @@ export default function FocusScreen(): React.JSX.Element {
             </View>
           </View>
 
-          {/* Routine Link Banner if linked from schedule */}
-          {params.routineBlockId && (
-            <View style={styles.routineLinkBanner}>
-              <Text style={styles.routineLinkText}>
-                Linked Routine: {params.suggestedGoal || 'Study Routine'}
-              </Text>
-              <Text style={styles.routineLinkSubtext}>
-                Requires 25m+ focus between {params.routineStartTime} and {params.routineEndTime} to mark done.
-              </Text>
-            </View>
-          )}
-
           <ScrollView
             scrollEnabled={scrollEnabled}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContainer}
             keyboardShouldPersistTaps="handled"
           >
+            {/* Routine Link Banner if linked from schedule */}
+            {params.routineBlockId && (
+              <View style={styles.routineLinkBanner}>
+                <Text style={styles.routineLinkText}>
+                  Linked Routine: {params.suggestedGoal || 'Study Routine'}
+                </Text>
+                <Text style={styles.routineLinkSubtext}>
+                  Requires 25m+ focus between {params.routineStartTime} and {params.routineEndTime} to mark done.
+                </Text>
+              </View>
+            )}
+
             {/* Header: What are you focusing on? */}
             <Text style={styles.mainHeading}>What are you focusing on?</Text>
 
@@ -1460,44 +1499,55 @@ export default function FocusScreen(): React.JSX.Element {
               </View>
             )}
 
-            {/* ONE OBVIOUS PRIMARY ACTION BUTTON */}
-            <View style={styles.primaryActionWrapper}>
-              <TouchableOpacity
-                style={styles.prominentLiquidGlassBtn}
-                onPress={handlePlayPause}
-                activeOpacity={0.85}
-                accessibilityLabel={
-                  isRunning ? 'Pause Focus' : isPaused ? 'Resume Focus' : 'Start Focus'
-                }
-              >
-                <View style={styles.prominentActionContent}>
+            {/* PRIMARY & SECONDARY TIMER ACTIONS */}
+            {!isRunning && !isPaused ? (
+              <View style={styles.primaryActionWrapper}>
+                <TouchableOpacity
+                  style={styles.prominentLiquidGlassBtn}
+                  onPress={handlePlayPause}
+                  activeOpacity={0.85}
+                  accessibilityLabel="Start Focus"
+                >
+                  <View style={styles.prominentActionContent}>
+                    <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+                    <Text style={styles.prominentActionText}>Start Focus</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.runningActionWrapper}>
+                {/* Pause / Resume Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.runningPauseBtn,
+                    isPaused && styles.runningResumeBtnActive,
+                  ]}
+                  onPress={handlePlayPause}
+                  activeOpacity={0.85}
+                  accessibilityLabel={isRunning ? 'Pause Focus' : 'Resume Focus'}
+                >
                   {isRunning ? (
                     <Pause size={18} color="#FFFFFF" strokeWidth={2.8} />
                   ) : (
                     <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
                   )}
-                  <Text style={styles.prominentActionText}>
-                    {isRunning ? 'Pause Focus' : isPaused ? 'Resume Focus' : 'Start Focus'}
+                  <Text style={styles.runningActionText}>
+                    {isRunning ? 'Pause' : 'Resume'}
                   </Text>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
 
-              {/* Running/Paused secondary actions */}
-              {(isRunning || isPaused) && (
-                <View style={styles.activeSecondaryRow}>
-                  <TouchableOpacity
-                    style={styles.endSessionBtn}
-                    onPress={handleReset}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.endSessionContent}>
-                      <Square size={12} color="#FF7070" fill="#FF7070" />
-                      <Text style={styles.endSessionText}>End Session</Text>
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
+                {/* End Session Button */}
+                <TouchableOpacity
+                  style={styles.runningEndBtn}
+                  onPress={handleReset}
+                  activeOpacity={0.8}
+                  accessibilityLabel="End Session"
+                >
+                  <Square size={16} color="#FF7070" fill="#FF7070" />
+                  <Text style={styles.runningEndText}>End Session</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </ScrollView>
 
           {/* Floating Bottom Segmented Pill Bar: [ Focus | History ] */}
@@ -2105,7 +2155,7 @@ export default function FocusScreen(): React.JSX.Element {
             start();
           }
         }}
-        onStop={() => stop()}
+        onStop={handleReset}
         onToggleSound={() => {
           if (activeSound) {
             handleSoundSelect(null);
@@ -2221,7 +2271,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   scrollContainer: {
-    paddingBottom: 90,
+    paddingBottom: 170,
     alignItems: 'center',
   },
   circle1: {
@@ -2443,6 +2493,68 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  runningActionWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 12,
+    width: '100%',
+    paddingHorizontal: 16,
+  },
+  runningPauseBtn: {
+    flex: 1,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.40)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  runningResumeBtnActive: {
+    backgroundColor: 'rgba(91, 79, 232, 0.35)',
+    borderColor: 'rgba(168, 158, 248, 0.6)',
+  },
+  runningActionText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  runningEndBtn: {
+    flex: 1,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: 'rgba(232, 88, 88, 0.18)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(232, 88, 88, 0.45)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#E85858',
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 6,
+  },
+  runningEndText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
+    color: '#FF8A8A',
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   activeSecondaryRow: {
     marginTop: 10,
@@ -2738,27 +2850,30 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   routineLinkBanner: {
-    backgroundColor: 'rgba(91, 79, 232, 0.15)',
-    borderColor: '#5B4FE8',
-    borderWidth: 1,
-    borderRadius: 12,
+    backgroundColor: 'rgba(91, 79, 232, 0.22)',
+    borderColor: 'rgba(91, 79, 232, 0.6)',
+    borderWidth: 1.2,
+    borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    marginTop: 16,
-    marginHorizontal: 4,
+    marginTop: 8,
+    marginBottom: 10,
+    width: '100%',
+    maxWidth: 380,
     alignItems: 'center',
   },
   routineLinkText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    color: '#FFF',
-    fontWeight: '600',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
+    color: '#C4B5FD',
+    fontWeight: '700',
+    textAlign: 'center',
   },
   routineLinkSubtext: {
     fontFamily: 'DMSans',
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: 4,
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.75)',
+    marginTop: 3,
     textAlign: 'center',
   },
   pickerLabel: {
@@ -2898,7 +3013,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   themeDotActive: {
-    borderColor: '#17172A',
+    borderColor: '#FFFFFF',
+    borderWidth: 2,
     transform: [{ scale: 1.25 }],
   },
   themeDotLock: {
@@ -2922,8 +3038,8 @@ const styles = StyleSheet.create({
   },
   settingsSheetTitle: {
     fontFamily: 'InstrumentSerif',
-    fontSize: 24,
-    color: '#17172A',
+    fontSize: 26,
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -2931,21 +3047,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0EFFB',
+    borderBottomColor: 'rgba(255, 255, 255, 0.10)',
   },
   settingsLabel: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 14,
-    color: '#17172A',
+    fontSize: 15,
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   settingsDesc: {
     fontFamily: 'DMSans',
-    fontSize: 11,
-    color: '#9B9BAF',
-    marginTop: 2,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.70)',
+    marginTop: 3,
   },
   settingsThemeSection: {
     marginTop: 20,
@@ -2953,11 +3069,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   settingsThemeLabel: {
-    fontFamily: 'DMSans-Medium',
+    fontFamily: 'DMSans-Bold',
     fontSize: 11,
-    color: '#9B9BAF',
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    color: 'rgba(255, 255, 255, 0.65)',
+    fontWeight: '700',
+    letterSpacing: 1,
     marginBottom: 8,
   },
   rewardsContentContainer: {
