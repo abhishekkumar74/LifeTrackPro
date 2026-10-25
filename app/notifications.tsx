@@ -12,7 +12,7 @@ import {
   RefreshControl,
   Platform,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   Bell,
@@ -206,17 +206,12 @@ export default function NotificationsScreen() {
   };
 
   const insets = useSafeAreaInsets();
-  const androidTopExtra = Platform.OS === 'android' && insets.top === 0 ? (StatusBar.currentHeight || 28) : 0;
+  const statusBarHeight = Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0;
+  const safeTopPadding = Math.max(insets.top, statusBarHeight);
 
   return (
-    <SafeAreaView
-      style={[
-        styles.safeContainer,
-        { paddingTop: Math.max(0, androidTopExtra) },
-      ]}
-      edges={['top', 'left', 'right']}
-    >
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} translucent={false} />
+    <View style={[styles.safeContainer, { paddingTop: safeTopPadding }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} translucent />
 
       {/* Premium Header */}
       <View style={styles.header}>
@@ -506,7 +501,7 @@ export default function NotificationsScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
