@@ -684,28 +684,14 @@ export default function StatsScreen(): React.JSX.Element {
             />
           }
         >
-          {/* SINGLE UNIFIED LIFETRACK WRAPPED & BENCHMARKING HERO CARD */}
+          {/* SINGLE UNIFIED HERO CARD */}
           <View style={styles.unifiedHeroCard}>
-            <View style={styles.unifiedHeroHeader}>
-              <View style={styles.wrappedBadge}>
-                <Sparkles size={11} color="#FBBF24" />
-                <Text style={styles.wrappedBadgeText}>LIFETRACK WRAPPED</Text>
-              </View>
-
-              <View style={styles.unifiedRankBadge}>
-                <TrendingUp size={12} color="#34D399" />
-                <Text style={styles.unifiedRankText}>
-                  TOP 8% {profile?.category ? profile.category.replace('_', ' ').toUpperCase() : 'STUDENT'}
-                </Text>
-              </View>
-            </View>
-
             <Text style={styles.unifiedHeroTitle}>
               {selectedPeriod === 'day'
-                ? "Today's Focus & Momentum ✨"
+                ? "Today's Focus & Momentum"
                 : selectedPeriod === 'month'
-                ? "This Month's Growth & Report ✨"
-                : "This Week's Growth & Report ✨"}
+                ? "This Month's Growth & Report"
+                : "This Week's Growth & Report"}
             </Text>
 
             {selectedPeriod === 'day' ? (
@@ -1378,7 +1364,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1.5,
     borderColor: 'rgba(124, 58, 237, 0.32)',
-    padding: 18,
+    padding: 20,
     marginBottom: 4,
     shadowColor: '#5B4FE8',
     shadowOffset: { width: 0, height: 8 },
@@ -1387,53 +1373,13 @@ const styles = StyleSheet.create({
     elevation: 6,
     overflow: 'hidden',
   },
-  unifiedHeroHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  wrappedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 14,
-  },
-  wrappedBadgeText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 10,
-    color: '#FBBF24',
-    letterSpacing: 0.8,
-  },
-  unifiedRankBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 14,
-  },
-  unifiedRankText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 10,
-    color: '#34D399',
-    letterSpacing: 0.5,
-  },
   unifiedHeroTitle: {
     fontFamily: 'InstrumentSerif',
-    fontSize: 24,
+    fontSize: 26,
     color: '#FFFFFF',
     letterSpacing: -0.3,
-    marginBottom: 6,
-    lineHeight: 30,
+    marginBottom: 8,
+    lineHeight: 32,
   },
   unifiedHeroDesc: {
     fontFamily: 'DMSans',
