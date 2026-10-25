@@ -1,17 +1,18 @@
-import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  useDerivedValue,
   withSpring,
   withTiming,
   Easing,
   runOnJS,
 } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { Note } from '@/types/app.types';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
+import { RotateCw, CheckCircle2, RotateCcw } from 'lucide-react-native';
 
 interface FlashCardProps {
   note: Note;
@@ -28,16 +29,17 @@ export const FlashCard = React.memo<FlashCardProps>(({
 }) => {
   const subject = note.subject || 'General';
   const accentColor = getSubjectColor(subject);
+  const [isFlippedState, setIsFlippedState] = useState(false);
 
   // Parse JSON content if it is a flashcard
   const { frontText, backText } = useMemo(() => {
     const isFlashcardTag = note.tags && note.tags.includes('flashcard');
-    let front = note.title || 'Untitled Note';
-    let back = note.content || 'No content';
+    let front = note.title || 'Untitled';
+    let back = note.content || 'No answer provided.';
 
-    if (isFlashcardTag && note.content) {
+    if (note.content && (isFlashcardTag || note.content.trim().startsWith('{'))) {
       try {
-        const parsed = JSON.parse(note.content);
+        const parsed = JSON.parse(note.content.trim());
         if (parsed && typeof parsed === 'object') {
           front = parsed.front || front;
           back = parsed.back || back;
@@ -61,10 +63,14 @@ export const FlashCard = React.memo<FlashCardProps>(({
     rotatedVal.value = 0;
     translateX.value = 0;
     translateY.value = 0;
+    setIsFlippedState(false);
   }, [note.id]);
 
   const handleFlip = () => {
-    rotatedVal.value = withTiming(rotatedVal.value === 0 ? 180 : 0, {
+    Haptics.selectionAsync().catch(() => {});
+    const willBeFlipped = !isFlippedState;
+    setIsFlippedState(willBeFlipped);
+    rotatedVal.value = withTiming(willBeFlipped ? 180 : 0, {
       duration: 350,
       easing: Easing.out(Easing.quad),
     });
@@ -97,20 +103,26 @@ export const FlashCard = React.memo<FlashCardProps>(({
 
   // Animated styles for card flipping (backface hidden)
   const frontAnimatedStyle = useAnimatedStyle(() => {
-    const rotateValue = rotatedVal.value;
+    const spin = rotatedVal.value;
     return {
-      transform: [{ rotateY: `${rotateValue}deg` }],
-      opacity: rotateValue > 90 ? 0 : 1,
-      zIndex: rotateValue > 90 ? 0 : 1,
+      transform: [
+        { perspective: 1000 },
+        { rotateY: `${spin}deg` },
+      ],
+      opacity: spin >= 90 ? 0 : 1,
+      zIndex: spin >= 90 ? 0 : 1,
     };
   });
 
   const backAnimatedStyle = useAnimatedStyle(() => {
-    const rotateValue = rotatedVal.value + 180;
+    const spin = rotatedVal.value - 180;
     return {
-      transform: [{ rotateY: `${rotateValue}deg` }],
-      opacity: rotateValue > 270 || rotateValue < 90 ? 0 : 1,
-      zIndex: rotateValue > 270 || rotateValue < 90 ? 1 : 0,
+      transform: [
+        { perspective: 1000 },
+        { rotateY: `${spin}deg` },
+      ],
+      opacity: rotatedVal.value >= 90 ? 1 : 0,
+      zIndex: rotatedVal.value >= 90 ? 1 : 0,
     };
   });
 
@@ -120,12 +132,11 @@ export const FlashCard = React.memo<FlashCardProps>(({
       transform: [
         { translateX: translateX.value },
         { translateY: translateY.value },
-        { rotateZ: `${translateX.value / 12}deg` },
+        { rotateZ: `${translateX.value / 14}deg` },
       ],
     };
   });
 
-  // Reveal text hint/buttons depending on flip state
   const hintAnimatedStyle = useAnimatedStyle(() => {
     return {
       opacity: withTiming(rotatedVal.value < 90 ? 1 : 0, { duration: 200 }),
@@ -147,48 +158,95 @@ export const FlashCard = React.memo<FlashCardProps>(({
             onPress={handleFlip}
             activeOpacity={0.95}
           >
-            {/* Front Side */}
-            <Animated.View style={[styles.cardSide, frontAnimatedStyle]}>
+            {/* Front Side: Question */}
+            <Animated.View
+              style={[styles.cardSide, frontAnimatedStyle]}
+              pointerEvents={isFlippedState ? 'none' : 'auto'}
+            >
               <View style={[styles.accentBorder, { backgroundColor: accentColor }]} />
               <View style={styles.sideContent}>
-                <Text style={[styles.subjectTag, { color: accentColor }]}>
-                  {subject}
-                </Text>
-                <Text style={styles.titleText}>
-                  {frontText}
-                </Text>
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.badgePill, { backgroundColor: `${accentColor}18` }]}>
+                    <Text style={[styles.badgeText, { color: accentColor }]}>{subject}</Text>
+                  </View>
+                  <View style={styles.questionLabelWrap}>
+                    <Text style={styles.questionLabelText}>QUESTION</Text>
+                  </View>
+                </View>
+
+                <View style={styles.mainTextContainer}>
+                  <Text style={styles.frontQuestionText} numberOfLines={6}>
+                    {frontText}
+                  </Text>
+                </View>
+
+                <View style={styles.tapPromptRow}>
+                  <RotateCw size={13} color="#9B9BAF" />
+                  <Text style={styles.tapPromptText}>Tap to reveal answer</Text>
+                </View>
               </View>
             </Animated.View>
 
-            {/* Back Side */}
-            <Animated.View style={[styles.cardSide, styles.cardSideBack, backAnimatedStyle]}>
-              <View style={[styles.accentBorder, { backgroundColor: accentColor }]} />
+            {/* Back Side: Answer */}
+            <Animated.View
+              style={[styles.cardSide, styles.cardSideBack, backAnimatedStyle]}
+              pointerEvents={isFlippedState ? 'auto' : 'none'}
+            >
+              <View style={[styles.accentBorder, { backgroundColor: '#00B894' }]} />
               <View style={styles.sideContent}>
-                <Text style={styles.backLabelText}>ANSWER / CONTENT</Text>
-                <Text style={styles.backContentText} numberOfLines={8}>
-                  {backText.substring(0, 220) + (backText.length > 220 ? '...' : '')}
-                </Text>
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.badgePill, { backgroundColor: '#E2F9F3' }]}>
+                    <Text style={[styles.badgeText, { color: '#00B894' }]}>{subject}</Text>
+                  </View>
+                  <View style={[styles.questionLabelWrap, { backgroundColor: '#E2F9F3' }]}>
+                    <Text style={[styles.questionLabelText, { color: '#00B894' }]}>ANSWER</Text>
+                  </View>
+                </View>
+
+                <ScrollView
+                  style={styles.backScrollArea}
+                  contentContainerStyle={styles.backScrollContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text style={styles.backAnswerText}>
+                    {backText}
+                  </Text>
+                </ScrollView>
+
+                <View style={styles.tapPromptRow}>
+                  <RotateCcw size={13} color="#9B9BAF" />
+                  <Text style={styles.tapPromptText}>Tap to flip back</Text>
+                </View>
               </View>
             </Animated.View>
           </TouchableOpacity>
         </Animated.View>
       </GestureDetector>
 
-      {/* Reveal hints or action buttons */}
+      {/* Action Section */}
       <View style={styles.actionSection}>
         {/* Unflipped state hint */}
-        <Animated.View style={[styles.hintWrapper, hintAnimatedStyle]} pointerEvents="none">
-          <Text style={styles.hintText}>Tap card to reveal answer</Text>
+        <Animated.View
+          style={[styles.hintWrapper, hintAnimatedStyle]}
+          pointerEvents={isFlippedState ? 'none' : 'auto'}
+        >
+          <TouchableOpacity onPress={handleFlip} style={styles.hintTouchBtn} activeOpacity={0.7}>
+            <Text style={styles.hintText}>👆 Tap card or button to flip</Text>
+          </TouchableOpacity>
         </Animated.View>
 
         {/* Flipped state buttons */}
-        <Animated.View style={[styles.buttonsWrapper, actionButtonsAnimatedStyle]}>
+        <Animated.View
+          style={[styles.buttonsWrapper, actionButtonsAnimatedStyle]}
+          pointerEvents={isFlippedState ? 'auto' : 'none'}
+        >
           <TouchableOpacity
             style={[styles.actionBtn, styles.againBtn]}
             onPress={onReviewAgain}
             activeOpacity={0.7}
           >
-            <Text style={styles.againBtnText}>🔄 Review Again</Text>
+            <RotateCcw size={16} color="#E85858" />
+            <Text style={styles.againBtnText}>Review Again</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -196,12 +254,13 @@ export const FlashCard = React.memo<FlashCardProps>(({
             onPress={onGotIt}
             activeOpacity={0.7}
           >
-            <Text style={styles.gotItBtnText}>✅ Got it</Text>
+            <CheckCircle2 size={16} color="#FFFFFF" />
+            <Text style={styles.gotItBtnText}>Got it!</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>
 
-      {/* Bottom remaining card count */}
+      {/* Bottom counter */}
       <Text style={styles.counterText}>
         {`${totalRemaining} card${totalRemaining === 1 ? '' : 's'} remaining`}
       </Text>
@@ -217,7 +276,7 @@ const styles = StyleSheet.create({
   },
   swipeContainer: {
     width: '100%',
-    height: 220,
+    height: 270,
     position: 'relative',
     zIndex: 1,
   },
@@ -230,19 +289,20 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: '#E8E7E3',
-    padding: 24,
+    padding: 22,
     shadowColor: '#17172A',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 10,
+    elevation: 5,
     flexDirection: 'row',
+    backfaceVisibility: 'hidden',
   },
   cardSideBack: {
-    transform: [{ rotateY: '180deg' }],
+    backgroundColor: '#FFFFFF',
   },
   accentBorder: {
     position: 'absolute',
@@ -250,47 +310,90 @@ const styles = StyleSheet.create({
     top: 0,
     width: 6,
     height: '100%',
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
+    borderTopLeftRadius: 22,
+    borderBottomLeftRadius: 22,
   },
   sideContent: {
     flex: 1,
-    paddingLeft: 12,
-    justifyContent: 'center',
+    paddingLeft: 10,
+    justifyContent: 'space-between',
   },
-  subjectTag: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 10,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    fontWeight: '600',
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  titleText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 18,
-    color: '#17172A',
-    fontWeight: '600',
-    lineHeight: 24,
+  badgePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  backLabelText: {
+  badgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  questionLabelWrap: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: '#F2F1EE',
+  },
+  questionLabelText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 9,
-    color: '#9B9BAF',
-    letterSpacing: 1,
-    marginBottom: 6,
-  },
-  backContentText: {
-    fontFamily: 'DMSans',
-    fontSize: 13,
+    fontWeight: '700',
     color: '#5C5C70',
-    lineHeight: 20,
+    letterSpacing: 1,
+  },
+  mainTextContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  frontQuestionText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 17,
+    color: '#17172A',
+    fontWeight: '600',
+    lineHeight: 25,
+  },
+  backScrollArea: {
+    flex: 1,
+  },
+  backScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  backAnswerText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 16,
+    color: '#17172A',
+    lineHeight: 24,
+  },
+  tapPromptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F5F4F0',
+  },
+  tapPromptText: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9B9BAF',
   },
   actionSection: {
     height: 60,
     width: '100%',
     justifyContent: 'center',
-    marginTop: 20,
+    marginTop: 18,
     position: 'relative',
   },
   hintWrapper: {
@@ -298,11 +401,17 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
+  hintTouchBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: '#F5F4F0',
+  },
   hintText: {
-    fontFamily: 'DMSans',
+    fontFamily: 'DMSans-Medium',
     fontSize: 12,
-    color: '#9B9BAF',
-    letterSpacing: 0.5,
+    color: '#5C5C70',
+    fontWeight: '600',
   },
   buttonsWrapper: {
     flexDirection: 'row',
@@ -312,37 +421,44 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     flex: 1,
-    height: 48,
-    borderRadius: 12,
+    height: 50,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
+    gap: 8,
   },
   againBtn: {
     borderWidth: 1,
-    borderColor: '#E8E7E3',
-    backgroundColor: '#FFFFFF',
+    borderColor: '#FCDAD7',
+    backgroundColor: '#FFF5F4',
   },
   againBtnText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 13,
-    color: '#5C5C70',
-    fontWeight: '600',
+    fontSize: 14,
+    color: '#E85858',
+    fontWeight: '700',
   },
   gotItBtn: {
     backgroundColor: '#00B894',
+    shadowColor: '#00B894',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   gotItBtnText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 13,
+    fontSize: 14,
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   counterText: {
     fontFamily: 'DMSans',
     fontSize: 12,
     color: '#9B9BAF',
-    marginTop: 16,
+    marginTop: 14,
   },
 });
+
 export default FlashCard;
