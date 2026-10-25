@@ -28,6 +28,7 @@ import { resetUser } from '@/lib/posthog';
 import * as Haptics from 'expo-haptics';
 import { LEGAL_CONFIG } from '@/lib/constants/legal';
 import { getStreakShieldCount } from '@/lib/utils/focus-rewards';
+import { useExams } from '@/lib/hooks/use-exams';
 import {
   ArrowLeft,
   Bell,
@@ -99,46 +100,7 @@ const SUBCATEGORIES: Record<UserCategory, string[]> = {
     'Open Source',
     'Other',
   ],
-  student: [
-    'NEET',
-    'JEE Main',
-    'JEE Advanced',
-    'UPSC CSE',
-    'UPSC CAPF',
-    'SSC CGL',
-    'SSC CHSL',
-    'SSC MTS',
-    'IBPS PO',
-    'IBPS Clerk',
-    'SBI PO',
-    'RBI Grade B',
-    'SEBI',
-    'CAT',
-    'XAT',
-    'GMAT',
-    'GRE',
-    'GATE',
-    'ESE/IES',
-    'CLAT',
-    'AILET',
-    'LSAT',
-    'NDA',
-    'CDS',
-    'AFCAT',
-    'CUET',
-    'Class 10 Boards',
-    'Class 12 Boards',
-    'CA Foundation',
-    'CA Intermediate',
-    'CA Final',
-    'CS Foundation',
-    'CMA',
-    'IELTS',
-    'TOEFL',
-    'PTE',
-    'Coding / DSA',
-    'Other',
-  ],
+  student: [],
   employee: [
     'Corporate / MNC',
     'Government Job',
@@ -368,6 +330,38 @@ export default function ProfileScreen(): React.JSX.Element {
   const [customSubcategoryText, setCustomSubcategoryText] = useState('');
   const [subCategorySearchQuery, setSubCategorySearchQuery] = useState('');
 
+  // Dynamic exams list for students from master database
+  const examsQuery = useExams({ category: 'student' });
+  const studentExams = examsQuery.data || [];
+
+  const getSubcategoryDisplayName = useCallback(
+    (item: string) => {
+      const exam = studentExams.find(
+        (e) => e.slug === item || e.id === item || e.name.toLowerCase() === item.toLowerCase()
+      );
+      return exam ? exam.name : item;
+    },
+    [studentExams]
+  );
+
+  const studentExamOptions = useMemo(() => {
+    const list = studentExams.map((e) => ({
+      key: e.slug,
+      label: e.name,
+    }));
+    return list.length > 0
+      ? [...list, { key: 'Other', label: 'Other' }]
+      : [{ key: 'Other', label: 'Other' }];
+  }, [studentExams]);
+
+  const getSubcategoriesList = useCallback(
+    (cat: UserCategory): { key: string; label: string }[] => {
+      if (cat === 'student') return studentExamOptions;
+      return (SUBCATEGORIES[cat] || []).map((s) => ({ key: s, label: s }));
+    },
+    [studentExamOptions]
+  );
+
   // Notifications toggles
   const [morningBriefEnabled, setMorningBriefEnabled] = useState(true);
   const [streakAlertsEnabled, setStreakAlertsEnabled] = useState(true);
@@ -405,8 +399,8 @@ export default function ProfileScreen(): React.JSX.Element {
       setSelectedSubcategories(subCats);
 
       // Extract custom subcategory if any
-      const predefined = SUBCATEGORIES[profile.category || 'student'] || [];
-      const custom = subCats.find((s) => !predefined.includes(s));
+      const predefined = getSubcategoriesList(profile.category || 'student');
+      const custom = subCats.find((s) => !predefined.some((p) => p.key === s) && !studentExams.some((e) => e.name === s));
       setCustomSubcategoryText(custom || '');
     }
   }, [profile]);
@@ -468,9 +462,13 @@ export default function ProfileScreen(): React.JSX.Element {
   };
 
   const handleOpenSubCategoryPicker = () => {
+    examsQuery.refetch();
     setSelectedSubcategories(profile?.sub_category || []);
-    const predefined = SUBCATEGORIES[category] || [];
-    const custom = (profile?.sub_category || []).find((s) => !predefined.includes(s));
+    const predefined = getSubcategoriesList(category);
+    const predefinedKeys = predefined.map((p) => p.key);
+    const custom = (profile?.sub_category || []).find(
+      (s) => !predefinedKeys.includes(s) && !studentExams.some((e) => e.name === s)
+    );
     setCustomSubcategoryText(custom || '');
     setSubCategorySearchQuery('');
     setIsSubCategoryPickerOpen(true);
@@ -494,19 +492,32 @@ export default function ProfileScreen(): React.JSX.Element {
     );
   };
 
-  const handleToggleSubcategory = (sub: string) => {
+  const handleToggleSubcategory = (itemKey: string) => {
     const isMultiSelect = category === 'student' || category === 'cse_student';
+    const exam = studentExams.find((e) => e.slug === itemKey);
+    const isSelected = selectedSubcategories.some(
+      (s) => s === itemKey || (exam && (s === exam.name || s === exam.id))
+    );
+
     if (isMultiSelect) {
-      if (selectedSubcategories.includes(sub)) {
-        setSelectedSubcategories(selectedSubcategories.filter((x) => x !== sub));
+      if (isSelected) {
+        setSelectedSubcategories(
+          selectedSubcategories.filter(
+            (x) => x !== itemKey && (!exam || (x !== exam.name && x !== exam.id))
+          )
+        );
       } else {
-        setSelectedSubcategories([...selectedSubcategories, sub]);
+        if (selectedSubcategories.length >= 2) {
+          showToast('Maximum 2 exams can be tracked at a time for focus', 'info');
+          return;
+        }
+        setSelectedSubcategories([...selectedSubcategories, itemKey]);
       }
     } else {
-      if (selectedSubcategories.includes(sub)) {
+      if (isSelected) {
         setSelectedSubcategories([]);
       } else {
-        setSelectedSubcategories([sub]);
+        setSelectedSubcategories([itemKey]);
       }
     }
   };
@@ -523,9 +534,10 @@ export default function ProfileScreen(): React.JSX.Element {
     let finalSubcategories = [...selectedSubcategories];
 
     if (hasOther && customSubcategoryText.trim()) {
-      const predefined = SUBCATEGORIES[category] || [];
+      const predefined = getSubcategoriesList(category);
+      const predefinedKeys = predefined.map((p) => p.key);
       finalSubcategories = selectedSubcategories.filter(
-        (s) => predefined.includes(s) || s === 'Other'
+        (s) => predefinedKeys.includes(s) || s === 'Other'
       );
       finalSubcategories.push(customSubcategoryText.trim());
     }
@@ -546,11 +558,11 @@ export default function ProfileScreen(): React.JSX.Element {
   };
 
   const filteredSubCategories = useMemo(() => {
-    const predefined = SUBCATEGORIES[category] || [];
+    const predefined = getSubcategoriesList(category);
     const query = subCategorySearchQuery.trim().toLowerCase();
     if (!query) return predefined;
-    return predefined.filter((sub) => sub.toLowerCase().includes(query));
-  }, [category, subCategorySearchQuery]);
+    return predefined.filter((item) => item.label.toLowerCase().includes(query));
+  }, [category, subCategorySearchQuery, getSubcategoriesList]);
 
   const handlePeakTimeSelect = (pt: 'morning' | 'afternoon' | 'night') => {
     setPeakTime(pt);
@@ -673,8 +685,14 @@ export default function ProfileScreen(): React.JSX.Element {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
-          await cancelAllNotifications();
-          await useAuthStore.getState().signOut();
+          try {
+            await cancelAllNotifications();
+            await useAuthStore.getState().signOut();
+          } catch (err) {
+            if (__DEV__) console.warn('Error during signOut:', err);
+          } finally {
+            router.replace('/(auth)/login');
+          }
         },
       },
     ]);
@@ -815,7 +833,7 @@ export default function ProfileScreen(): React.JSX.Element {
   const getCategoryDisplay = () => {
     const cat = profile?.category ? profile.category.charAt(0).toUpperCase() + profile.category.slice(1) : 'Student';
     const subCats = profile?.sub_category && profile.sub_category.length > 0
-      ? profile.sub_category.join(', ')
+      ? profile.sub_category.map(getSubcategoryDisplayName).join(', ')
       : '';
     return subCats ? `${cat} · ${subCats}` : cat;
   };
@@ -1033,7 +1051,7 @@ export default function ProfileScreen(): React.JSX.Element {
                 ellipsizeMode="tail"
               >
                 {profile?.sub_category && profile.sub_category.length > 0
-                  ? profile.sub_category.join(', ')
+                  ? profile.sub_category.map(getSubcategoryDisplayName).join(', ')
                   : 'None selected'}
               </Text>
               <ChevronRight size={16} color="#9B9BAF" />
@@ -1339,16 +1357,19 @@ export default function ProfileScreen(): React.JSX.Element {
               keyboardShouldPersistTaps="handled"
             >
               <View style={styles.sheetPillsContainer}>
-                {filteredSubCategories.map((sub) => {
-                  const isSelected = selectedSubcategories.includes(sub);
+                {filteredSubCategories.map((item) => {
+                  const exam = studentExams.find((e) => e.slug === item.key);
+                  const isSelected = selectedSubcategories.some(
+                    (s) => s === item.key || (exam && (s === exam.name || s === exam.id))
+                  );
                   return (
                     <TouchableOpacity
-                      key={sub}
+                      key={item.key}
                       style={[
                         styles.sheetPill,
                         isSelected ? styles.sheetPillSelected : styles.sheetPillUnselected,
                       ]}
-                      onPress={() => handleToggleSubcategory(sub)}
+                      onPress={() => handleToggleSubcategory(item.key)}
                       activeOpacity={0.7}
                     >
                       <Text
@@ -1357,7 +1378,7 @@ export default function ProfileScreen(): React.JSX.Element {
                           isSelected ? styles.sheetPillTextSelected : styles.sheetPillTextUnselected,
                         ]}
                       >
-                        {sub}
+                        {item.label}
                       </Text>
                     </TouchableOpacity>
                   );

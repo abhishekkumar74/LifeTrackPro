@@ -6,6 +6,7 @@ import { UserProfile } from '@/types/app.types';
 import { supabase } from '@/lib/supabase/client';
 import { queryClient } from '@/lib/query-client';
 import { resetUser } from '@/lib/posthog';
+import { clearSentryUser } from '@/lib/sentry';
 
 interface AuthState {
   user: User | null;
@@ -80,15 +81,41 @@ export const useAuthStore = create<AuthState>()(
           isLoading: false,
         }),
       signOut: async () => {
-        resetUser();
-        await supabase.auth.signOut();
-        // CRITICAL: clear all cached data
-        queryClient.clear();
-        useAuthStore.setState({
+        try {
+          resetUser();
+          clearSentryUser();
+        } catch (e) {
+          if (__DEV__) console.warn('[AuthStore] resetUser error:', e);
+        }
+
+        try {
+          const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+          if (GoogleSignin) {
+            await GoogleSignin.signOut().catch(() => {});
+          }
+        } catch {}
+
+        try {
+          await supabase.auth.signOut();
+        } catch (err) {
+          if (__DEV__) console.warn('[AuthStore] supabase.auth.signOut warning:', err);
+        }
+
+        // CRITICAL: Always clear cached queries and auth state regardless of network/API errors
+        try {
+          queryClient.clear();
+        } catch {}
+
+        set({
           user: null,
           session: null,
           profile: null,
+          isLoading: false,
         });
+
+        try {
+          await AsyncStorage.removeItem('lifetrack-auth-store');
+        } catch {}
       },
     }),
     {
