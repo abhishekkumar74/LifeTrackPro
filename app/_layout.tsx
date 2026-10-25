@@ -332,6 +332,9 @@ function RootLayout() {
         if (userProf && (userProf.category as string) === 'student' && userProf.sub_category?.includes('cse_student')) {
           userProf.category = 'cse_student';
         }
+        if (userProf?.sub_category) {
+          userProf.sub_category = userProf.sub_category.filter((s) => s !== 'cse_student');
+        }
 
         // Safety: If local cached profile has higher XP (e.g. from offline sessions),
         // preserve the user's progress and sync it back to Supabase

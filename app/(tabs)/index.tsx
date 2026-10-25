@@ -309,9 +309,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
   const userName = profile?.name || 'Achiever';
 
   const isCse = profile?.category === 'cse_student';
-  const subCategory = profile?.sub_category && profile.sub_category.length > 0
-    ? profile.sub_category[0]
-    : '';
+  const subCategory = (profile?.sub_category || []).find((s) => s !== 'cse_student') || '';
 
   // Extract syllabus stats for CSE students
   const syllabusStats = useMemo(() => {

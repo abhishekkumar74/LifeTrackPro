@@ -6,23 +6,9 @@ import { getDefaultSubjectsForProfile } from '@/lib/utils/profile-subjects';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { captureError } from '../sentry';
 
-// Always show these even for new users:
+// Generic fallback when profile is not set yet
 export const DEFAULT_SUBJECTS = [
-  'Physics',
-  'Chemistry',
-  'Biology',
-  'Mathematics',
-  'English',
-  'History',
-  'Geography',
-  'Economics',
-  'Computer Science',
-  'General Studies',
-  'Reasoning / Aptitude',
-  'Current Affairs',
-  'Polity',
-  'Science & Technology',
-  'Environment',
+  'General',
   'Other',
 ];
 
@@ -47,14 +33,35 @@ export function useSubjects() {
     );
   }, [profile]);
 
+  const subCats = useMemo(() => profile?.sub_category || [], [profile?.sub_category]);
+
   return useQuery<string[]>({
-    queryKey: ['subjects', userId, profileSubjects.join(',')],
+    queryKey: ['subjects', userId, profileSubjects.join(','), subCats.join(',')],
     enabled: !!userId,
-    staleTime: 1000 * 60 * 10,
+    staleTime: Infinity, // Action-only: Never refetch on screen focus or mount
+    gcTime: 1000 * 60 * 60 * 24 * 7,
     placeholderData: profileSubjects,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     queryFn: async () => {
       try {
         if (!userId) return profileSubjects;
+
+        const cacheKey = `cached_user_subjects_v4_${userId}_${subCats.sort().join('_')}`;
+
+        // 1. Check local AsyncStorage cache first for instant 0ms offline load
+        try {
+          const cachedRaw = await AsyncStorage.getItem(cacheKey);
+          if (cachedRaw) {
+            const cachedList: string[] = JSON.parse(cachedRaw);
+            if (Array.isArray(cachedList) && cachedList.length > 0) {
+              return cachedList;
+            }
+          }
+        } catch {
+          // Fall through
+        }
 
         const seen = new Set<string>();
         const result: string[] = [];
@@ -67,7 +74,7 @@ export function useSubjects() {
           const lower = trimmed.toLowerCase();
           if (!seen.has(lower)) {
             seen.add(lower);
-            // Format as title-cased
+            // Format clean title-cased
             const formatted = trimmed
               .split(/\s+/)
               .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
@@ -76,8 +83,52 @@ export function useSubjects() {
           }
         };
 
-        // Add profile-based defaults first
-        profileSubjects.forEach(addUniqueSubject);
+        let hasDynamicExamSubjects = false;
+        const activeSubCats = (subCats || []).slice(0, 2);
+
+        // 1. Fetch dynamic subjects from Supabase ONLY when cache was missing
+        for (const subCat of activeSubCats) {
+          try {
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subCat);
+            let examId = isUuid ? subCat : null;
+
+            if (!examId) {
+              const { data: examData } = await supabase
+                .from('exams')
+                .select('id')
+                .or(`slug.eq.${subCat},name.ilike.%${subCat}%`)
+                .maybeSingle();
+              if (examData?.id) {
+                examId = examData.id;
+              }
+            }
+
+            if (examId) {
+              const { data: dbSubjects } = await supabase
+                .from('exam_subjects')
+                .select('display_name, subjects (name)')
+                .eq('exam_id', examId)
+                .order('order_index', { ascending: true });
+
+              if (dbSubjects && dbSubjects.length > 0) {
+                dbSubjects.forEach((s: any) => {
+                  const subjectName = s.display_name || s.subjects?.name;
+                  if (subjectName) {
+                    addUniqueSubject(subjectName);
+                  }
+                });
+                hasDynamicExamSubjects = true;
+              }
+            }
+          } catch (e) {
+            // Silently fall back to profile subjects
+          }
+        }
+
+        // 2. Only add profile-based defaults if no dynamic DB subjects were found
+        if (!hasDynamicExamSubjects) {
+          profileSubjects.forEach(addUniqueSubject);
+        }
 
         // Add custom offline subjects from AsyncStorage
         try {
@@ -92,8 +143,12 @@ export function useSubjects() {
           captureError(err, { context: 'parse_custom_subjects' });
         }
 
-        // Return sorted alphabetically
-        return result.sort((a, b) => a.localeCompare(b));
+        const sorted = result.sort((a, b) => a.localeCompare(b));
+
+        // Persist to local storage so subsequent loads make 0 network requests
+        AsyncStorage.setItem(cacheKey, JSON.stringify(sorted)).catch(() => {});
+
+        return sorted;
       } catch (err) {
         captureError(err, { context: 'useSubjects_queryFn' });
         if (__DEV__) console.warn('Error in useSubjects queryFn:', err);

@@ -1,15 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   LayoutAnimation,
-  Alert,
   ActionSheetIOS,
+  Modal,
+  TouchableWithoutFeedback,
   Platform,
 } from 'react-native';
-import { ChevronRight, ChevronDown } from 'lucide-react-native';
+import { ChevronRight, ChevronDown, Check, BookOpen, RotateCcw, Minus, X } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { SyllabusTopic, SyllabusStatus } from '@/types/app.types';
 
 interface ChapterRowProps {
@@ -129,6 +131,8 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
   subjectColor = '#5B4FE8',
   isCse = false,
 }) => {
+  const [modalTopic, setModalTopic] = useState<SyllabusTopic | null>(null);
+
   const doneCount = topics.filter((t) => t.status === 'done').length;
   const totalCount = topics.length;
   const completionPercent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
@@ -157,24 +161,30 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
         },
         (buttonIndex) => {
           if (buttonIndex > 0) {
-            onTopicStatusChange(topic.id, statusValues[buttonIndex - 1]);
+            const nextStatus = statusValues[buttonIndex - 1];
+            if (nextStatus === 'done') {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            } else {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            }
+            onTopicStatusChange(topic.id, nextStatus);
           }
         }
       );
     } else {
-      Alert.alert(
-        'Update Status',
-        `Set progress status for "${topic.topic}":`,
-        [
-          { text: 'Not Started', onPress: () => onTopicStatusChange(topic.id, 'not_started') },
-          { text: 'In Progress', onPress: () => onTopicStatusChange(topic.id, 'in_progress') },
-          { text: 'Done ✓', onPress: () => onTopicStatusChange(topic.id, 'done') },
-          { text: 'Needs Revision ↺', onPress: () => onTopicStatusChange(topic.id, 'needs_revision') },
-          { text: 'Cancel', style: 'cancel' },
-        ],
-        { cancelable: true }
-      );
+      setModalTopic(topic);
     }
+  };
+
+  const handleSelectStatusFromModal = (newStatus: SyllabusStatus) => {
+    if (!modalTopic) return;
+    if (newStatus === 'done') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    onTopicStatusChange(modalTopic.id, newStatus);
+    setModalTopic(null);
   };
 
   return (
@@ -198,7 +208,8 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
               style={styles.chapterText}
             />
           </View>
-          <Text style={styles.countText}>{`${doneCount} / ${totalCount} topics complete`}</Text>
+
+          <Text style={styles.countText}>{`${doneCount} / ${totalCount}`}</Text>
         </View>
 
         {/* Mini progress bar */}
@@ -225,21 +236,23 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
             const statusBorderColor = getStatusBorderColor(topic.status as SyllabusStatus);
 
             return (
-              <TouchableOpacity
+              <View
                 key={topic.id}
                 style={[styles.topicRow, isSelected && styles.topicRowSelected]}
-                onPress={() => {
-                  if (isMultiSelectMode) {
-                    onToggleSelectTopic(topic.id);
-                  } else {
-                    handleStatusSelectorPress(topic);
-                  }
-                }}
-                onLongPress={() => onLongPressTopic(topic.id)}
-                delayLongPress={500}
-                activeOpacity={0.7}
               >
-                <View style={styles.topicLeft}>
+                <TouchableOpacity
+                  style={styles.topicLeft}
+                  onPress={() => {
+                    if (isMultiSelectMode) {
+                      onToggleSelectTopic(topic.id);
+                    } else {
+                      handleStatusSelectorPress(topic);
+                    }
+                  }}
+                  onLongPress={() => onLongPressTopic(topic.id)}
+                  delayLongPress={500}
+                  activeOpacity={0.7}
+                >
                   {/* Selection Checkbox */}
                   {isMultiSelectMode ? (
                     <View
@@ -261,9 +274,9 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
                     query={searchQuery}
                     style={[styles.topicText, isSelected && styles.topicTextSelected]}
                   />
-                </View>
+                </TouchableOpacity>
 
-                {/* Status indicator pill */}
+                {/* Status indicator pill: tap to open status selection popup */}
                 {!isMultiSelectMode && (
                   <TouchableOpacity
                     style={[
@@ -275,17 +288,120 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
                     ]}
                     onPress={() => handleStatusSelectorPress(topic)}
                     activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Text style={[styles.statusSymbolText, { color: statusTextColor }]}>
                       {getStatusSymbol(topic.status as SyllabusStatus)}
                     </Text>
                   </TouchableOpacity>
                 )}
-              </TouchableOpacity>
+              </View>
             );
           })}
         </View>
       )}
+
+      {/* Cross-Platform Status Selector Modal */}
+      <Modal
+        visible={!!modalTopic}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setModalTopic(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setModalTopic(null)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalCard}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle} numberOfLines={2}>
+                    {modalTopic?.topic || 'Set Status'}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setModalTopic(null)}
+                    style={styles.modalCloseBtn}
+                  >
+                    <X size={18} color="#9B9BAF" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.statusOptionsList}>
+                  <TouchableOpacity
+                    style={[
+                      styles.statusModalOption,
+                      modalTopic?.status === 'done' && styles.statusModalOptionActiveDone,
+                    ]}
+                    onPress={() => handleSelectStatusFromModal('done')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.statusOptionIconCircle, { backgroundColor: '#E2F9F3' }]}>
+                      <Check size={16} color="#00B894" />
+                    </View>
+                    <View style={styles.statusOptionTextWrap}>
+                      <Text style={[styles.statusOptionTitle, { color: '#00B894' }]}>Done</Text>
+                      <Text style={styles.statusOptionSub}>Topic completed and mastered</Text>
+                    </View>
+                    {modalTopic?.status === 'done' && <Check size={18} color="#00B894" />}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.statusModalOption,
+                      modalTopic?.status === 'in_progress' && styles.statusModalOptionActiveProgress,
+                    ]}
+                    onPress={() => handleSelectStatusFromModal('in_progress')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.statusOptionIconCircle, { backgroundColor: '#EAE8FD' }]}>
+                      <BookOpen size={16} color="#5B4FE8" />
+                    </View>
+                    <View style={styles.statusOptionTextWrap}>
+                      <Text style={[styles.statusOptionTitle, { color: '#5B4FE8' }]}>In Progress</Text>
+                      <Text style={styles.statusOptionSub}>Currently studying this topic</Text>
+                    </View>
+                    {modalTopic?.status === 'in_progress' && <Check size={18} color="#5B4FE8" />}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.statusModalOption,
+                      modalTopic?.status === 'needs_revision' && styles.statusModalOptionActiveRevision,
+                    ]}
+                    onPress={() => handleSelectStatusFromModal('needs_revision')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.statusOptionIconCircle, { backgroundColor: '#FEF3DC' }]}>
+                      <RotateCcw size={16} color="#E8A020" />
+                    </View>
+                    <View style={styles.statusOptionTextWrap}>
+                      <Text style={[styles.statusOptionTitle, { color: '#E8A020' }]}>Needs Revision</Text>
+                      <Text style={styles.statusOptionSub}>Need to review concepts again</Text>
+                    </View>
+                    {modalTopic?.status === 'needs_revision' && <Check size={18} color="#E8A020" />}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.statusModalOption,
+                      modalTopic?.status === 'not_started' && styles.statusModalOptionActiveDefault,
+                    ]}
+                    onPress={() => handleSelectStatusFromModal('not_started')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.statusOptionIconCircle, { backgroundColor: '#F2F1EE' }]}>
+                      <Minus size={16} color="#5C5C70" />
+                    </View>
+                    <View style={styles.statusOptionTextWrap}>
+                      <Text style={[styles.statusOptionTitle, { color: '#5C5C70' }]}>Not Started</Text>
+                      <Text style={styles.statusOptionSub}>Reset progress status</Text>
+                    </View>
+                    {modalTopic?.status === 'not_started' && <Check size={18} color="#5C5C70" />}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 };
@@ -326,6 +442,95 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans',
     fontSize: 12,
     color: '#9B9BAF',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 36,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F1EE',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 15,
+    color: '#17172A',
+    flex: 1,
+    marginRight: 12,
+    fontWeight: '700',
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  statusOptionsList: {
+    gap: 8,
+  },
+  statusModalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F2F1EE',
+    backgroundColor: '#FFFFFF',
+    gap: 12,
+  },
+  statusModalOptionActiveDone: {
+    borderColor: '#B3F2E3',
+    backgroundColor: '#F0FDF8',
+  },
+  statusModalOptionActiveProgress: {
+    borderColor: '#D6D1F9',
+    backgroundColor: '#F8F7FF',
+  },
+  statusModalOptionActiveRevision: {
+    borderColor: '#FCE8C3',
+    backgroundColor: '#FFFBF0',
+  },
+  statusModalOptionActiveDefault: {
+    borderColor: '#E8E7E3',
+    backgroundColor: '#F7F6F3',
+  },
+  statusOptionIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statusOptionTextWrap: {
+    flex: 1,
+  },
+  statusOptionTitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  statusOptionSub: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9B9BAF',
+    marginTop: 2,
   },
   miniProgressContainer: {
     height: 3,

@@ -1,8 +1,37 @@
+import { SEED_EXAMS } from '@/lib/constants/exams-seed';
+
 export function getDefaultSubjectsForProfile(
   category: string,
   subCategory: string[]
 ): string[] {
-  const subCatLower = subCategory.map((s) => s.toLowerCase());
+  const cleanSubCats = (subCategory || []).filter((s) => s !== 'cse_student');
+  const activeSubCats = cleanSubCats.slice(0, 2);
+  const matchedExams = activeSubCats
+    .map((s) => {
+      const sLower = s.toLowerCase();
+      return SEED_EXAMS.find(
+        (e) =>
+          e.id === s ||
+          e.slug.toLowerCase() === sLower ||
+          e.name.toLowerCase() === sLower ||
+          sLower.includes(e.name.toLowerCase()) ||
+          sLower.includes(e.slug.toLowerCase())
+      );
+    })
+    .filter(Boolean);
+
+  if (matchedExams.length > 0) {
+    const result: string[] = [];
+    matchedExams.forEach((exam: any) => {
+      exam.subjects.forEach((sub: any) => {
+        const name = sub.name;
+        if (!result.includes(name)) {
+          result.push(name);
+        }
+      });
+    });
+    return result;
+  }
 
   // CSE subjects
   if (category === 'cse_student') {
@@ -16,108 +45,6 @@ export function getDefaultSubjectsForProfile(
       'Interview Preparation',
       'Web Development',
       'Cloud & DevOps',
-    ];
-  }
-
-  // NEET subjects
-  if (subCatLower.some((s) => s.includes('neet'))) {
-    return ['Physics', 'Chemistry', 'Biology', 'Botany', 'Zoology'];
-  }
-
-  // JEE subjects
-  if (subCatLower.some((s) => s.includes('jee'))) {
-    return ['Physics', 'Chemistry', 'Mathematics'];
-  }
-
-  // UPSC subjects
-  if (subCatLower.some((s) => s.includes('upsc'))) {
-    return [
-      'General Studies 1',
-      'General Studies 2',
-      'General Studies 3',
-      'General Studies 4',
-      'CSAT',
-      'Essay',
-      'Optional Subject',
-      'Current Affairs',
-      'Polity',
-      'History',
-      'Geography',
-      'Economy',
-      'Environment',
-      'Science & Technology',
-    ];
-  }
-
-  // SSC subjects
-  if (subCatLower.some((s) => s.includes('ssc'))) {
-    return [
-      'Quantitative Aptitude',
-      'English Language',
-      'General Intelligence / Reasoning',
-      'General Awareness',
-      'Current Affairs',
-    ];
-  }
-
-  // Banking exams
-  if (
-    subCatLower.some(
-      (s) =>
-        s.includes('ibps') ||
-        s.includes('sbi') ||
-        s.includes('rbi') ||
-        s.includes('banking')
-    )
-  ) {
-    return [
-      'Quantitative Aptitude',
-      'Reasoning Ability',
-      'English Language',
-      'General Awareness',
-      'Computer Knowledge',
-      'Professional Knowledge',
-    ];
-  }
-
-  // CAT/MBA
-  if (
-    subCatLower.some(
-      (s) =>
-        s.includes('cat') ||
-        s.includes('xat') ||
-        s.includes('gmat') ||
-        s.includes('mba')
-    )
-  ) {
-    return [
-      'Verbal Ability & Reading Comprehension',
-      'Data Interpretation & Logical Reasoning',
-      'Quantitative Ability',
-    ];
-  }
-
-  // GATE
-  if (subCatLower.some((s) => s.includes('gate'))) {
-    return [
-      'Engineering Mathematics',
-      'General Aptitude',
-      'Core Subject',
-      'Technical Subjects',
-    ];
-  }
-
-  // CA
-  if (subCatLower.some((s) => s === 'ca' || s.startsWith('ca ') || s.includes(' ca'))) {
-    return [
-      'Accounts',
-      'Law',
-      'Taxation',
-      'Audit',
-      'Costing',
-      'Financial Management',
-      'Strategic Management',
-      'Economics',
     ];
   }
 

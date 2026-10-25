@@ -184,20 +184,20 @@ export default function OnboardingScreen(): React.JSX.Element {
 
       // 2. Perform Profile details insertion
       const isCse = state.category === 'cse_student';
-      const finalSubcategories = state.subcategories.includes('Other') && state.customSubcategory
+      const rawSubcategories = state.subcategories.includes('Other') && state.customSubcategory
         ? [...state.subcategories, state.customSubcategory.trim()]
         : [...state.subcategories];
 
-      if (isCse && !finalSubcategories.includes('cse_student')) {
-        finalSubcategories.unshift('cse_student');
+      // Clean out any category role markers from subcategories
+      const finalSubcategories = rawSubcategories.filter((s) => s !== 'cse_student');
+      if (isCse && finalSubcategories.length === 0) {
+        finalSubcategories.push('btech-cse');
       }
-
-      const dbCategory = isCse ? 'student' : state.category!;
 
       const profileData = {
         id: user.id,
         name: state.name.trim(),
-        category: dbCategory,
+        category: state.category!,
         sub_category: finalSubcategories,
         daily_hours: state.hours,
         peak_time: state.peakTime!,
@@ -211,6 +211,27 @@ export default function OnboardingScreen(): React.JSX.Element {
         throw new Error(`Profile setup failed: ${profileError.message}`);
       }
 
+      // 2b. Enroll user into user_exam_enrollments for active exam curriculum tracking
+      for (const slug of finalSubcategories) {
+        if (!slug || slug === 'Other') continue;
+        try {
+          const { data: ex } = await supabase.from('exams').select('id').eq('slug', slug).maybeSingle();
+          if (ex?.id) {
+            await supabase.from('user_exam_enrollments').upsert(
+              {
+                user_id: user.id,
+                exam_id: ex.id,
+                exam_slug: slug,
+                is_primary: true,
+              },
+              { onConflict: 'user_id,exam_id' }
+            );
+          }
+        } catch {
+          // resilient fallback
+        }
+      }
+
       // Fetch the complete profile details from the database and sync the Zustand auth store
       const { data: fullProfile } = await supabase
         .from('profiles')
@@ -220,8 +241,8 @@ export default function OnboardingScreen(): React.JSX.Element {
 
       if (fullProfile) {
         const userProf = fullProfile as UserProfile;
-        if ((userProf.category as string) === 'student' && userProf.sub_category?.includes('cse_student')) {
-          userProf.category = 'cse_student';
+        if (userProf.sub_category) {
+          userProf.sub_category = userProf.sub_category.filter((s) => s !== 'cse_student');
         }
         useAuthStore.getState().setProfile(userProf);
       } else {

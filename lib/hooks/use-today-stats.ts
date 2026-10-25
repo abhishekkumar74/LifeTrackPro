@@ -7,6 +7,14 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getStreakShieldCount } from '@/lib/utils/focus-rewards';
 
+export interface SparklineData {
+  focus: number[];
+  tasks: number[];
+  streak: number[];
+  focusMinutes7d: number[];
+  tasksDone7d: number[];
+}
+
 export interface TodayStats {
   topTask: Task | null;
   focusMinutesToday: number;
@@ -14,7 +22,9 @@ export interface TodayStats {
   tasksDone: number;
   habitStreak: number;
   focusStreak: number;
+  activeStreak: number;
   weeklyActivity: boolean[];
+  sparklines: SparklineData;
   habits: (Habit & { completedToday: boolean })[];
   nextBlocks: ScheduleBlock[];
   primaryGoal: (Goal & {
@@ -41,7 +51,9 @@ export function useTodayStats(): TodayStats {
     tasksDone: number;
     habitStreak: number;
     focusStreak: number;
+    activeStreak: number;
     weeklyActivity: boolean[];
+    sparklines: SparklineData;
     habits: (Habit & { completedToday: boolean })[];
     nextBlocks: ScheduleBlock[];
     primaryGoal: (Goal & { totalTasks: number; doneTasks: number }) | null;
@@ -56,7 +68,15 @@ export function useTodayStats(): TodayStats {
     tasksDone: 0,
     habitStreak: 0,
     focusStreak: 0,
+    activeStreak: 1,
     weeklyActivity: [false, false, false, false, false, false, false],
+    sparklines: {
+      focus: [3, 6, 8, 12, 16, 8, 18],
+      tasks: [4, 8, 6, 12, 16, 10, 18],
+      streak: [5, 8, 10, 12, 14, 16, 18],
+      focusMinutes7d: [0, 0, 0, 0, 0, 0, 0],
+      tasksDone7d: [0, 0, 0, 0, 0, 0, 0],
+    },
     habits: [],
     nextBlocks: [],
     primaryGoal: null,
@@ -115,7 +135,8 @@ export function useTodayStats(): TodayStats {
         primaryGoalRes,
         focusAllSessionsRes,
         todayScheduleLogsRes,
-        thirtyDaysSkipsLogsRes
+        thirtyDaysSkipsLogsRes,
+        allCompletedTasksRes
       ] = await Promise.all([
         // 1. Top priority task
         supabase
@@ -180,10 +201,10 @@ export function useTodayStats(): TodayStats {
           .limit(1)
           .maybeSingle(),
 
-        // 8. All completed focus sessions (for focus streak)
+        // 8. All completed focus sessions (for focus streak & 7-day sparkline)
         supabase
           .from('focus_sessions')
-          .select('started_at')
+          .select('started_at, duration_min')
           .eq('user_id', userId)
           .eq('status', 'completed'),
 
@@ -200,7 +221,14 @@ export function useTodayStats(): TodayStats {
           .select('*')
           .eq('user_id', userId)
           .eq('status', 'skipped')
-          .gte('date', thirtyDaysAgoStr)
+          .gte('date', thirtyDaysAgoStr),
+
+        // 11. All completed tasks (for activity streak & 7-day tasks sparkline)
+        supabase
+          .from('tasks')
+          .select('completed_at')
+          .eq('user_id', userId)
+          .not('completed_at', 'is', null)
       ]);
 
       const streakShields = await getStreakShieldCount();
@@ -217,6 +245,7 @@ export function useTodayStats(): TodayStats {
       if (focusAllSessionsRes.error) throw focusAllSessionsRes.error;
       if (todayScheduleLogsRes.error) throw todayScheduleLogsRes.error;
       if (thirtyDaysSkipsLogsRes.error) throw thirtyDaysSkipsLogsRes.error;
+      if (allCompletedTasksRes.error) throw allCompletedTasksRes.error;
 
       // Extract schedule logs details
       const doneBlockIds = (todayScheduleLogsRes.data || [])
@@ -289,12 +318,99 @@ export function useTodayStats(): TodayStats {
       const tasksTotal = todayTasks.length;
       const tasksDone = todayTasks.filter(t => t.completed_at !== null).length;
 
-      // 4. Habit streak calculation (protected by active Streak Shields)
+      // 4. Active dates aggregation across ALL pillars (Habits, Focus sessions, Tasks, Schedules)
+      const formatDateStr = (d: Date) => d.toLocaleDateString('en-CA');
+      const allActiveDates = new Set<string>();
+
+      // A. Habit dates
       const doneDates = new Set((habitLogsRes.data || []).map(l => l.date));
+      doneDates.forEach(d => { if (d) allActiveDates.add(d); });
+
+      // B. Focus session dates & 7-day focus minutes aggregation
+      const dailyFocusMap: Record<string, number> = {};
+      const completedFocusDates = new Set<string>();
+      ((focusAllSessionsRes?.data || []) as { started_at: string | null; duration_min: number }[]).forEach(fs => {
+        if (fs.started_at) {
+          const dStr = formatDateStr(new Date(fs.started_at));
+          completedFocusDates.add(dStr);
+          allActiveDates.add(dStr);
+          dailyFocusMap[dStr] = (dailyFocusMap[dStr] || 0) + (Number(fs.duration_min) || 0);
+        }
+      });
+      if (focusMinutesToday > 0) {
+        dailyFocusMap[todayStr] = Math.max(dailyFocusMap[todayStr] || 0, focusMinutesToday);
+        allActiveDates.add(todayStr);
+      }
+
+      // C. Completed tasks dates & 7-day tasks aggregation
+      const dailyTasksMap: Record<string, number> = {};
+      ((allCompletedTasksRes?.data || []) as { completed_at: string | null }[]).forEach(t => {
+        if (t.completed_at) {
+          const dStr = formatDateStr(new Date(t.completed_at));
+          allActiveDates.add(dStr);
+          dailyTasksMap[dStr] = (dailyTasksMap[dStr] || 0) + 1;
+        }
+      });
+      if (tasksDone > 0) {
+        dailyTasksMap[todayStr] = Math.max(dailyTasksMap[todayStr] || 0, tasksDone);
+        allActiveDates.add(todayStr);
+      }
+
+      // D. Schedule logs
+      (todayScheduleLogsRes.data || []).forEach(sl => {
+        if (sl.date && sl.status === 'completed') {
+          allActiveDates.add(sl.date);
+        }
+      });
+
+      // 4a. Real 7-day Sparkline calculations (from 6 days ago up to today)
+      const past7Dates: string[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        past7Dates.push(formatDateStr(d));
+      }
+
+      // Focus Sparklines (Height 3 to 18 based on real minutes)
+      const focusMinutes7d = past7Dates.map(dStr => dailyFocusMap[dStr] || 0);
+      const maxFocusFound = Math.max(...focusMinutes7d, 45);
+      const focusSparklines = focusMinutes7d.map(m => {
+        if (m <= 0) return 3;
+        return Math.min(18, Math.max(4, Math.round((m / maxFocusFound) * 18)));
+      });
+
+      // Tasks Sparklines (Height 3 to 18 based on real task completions)
+      const tasksDone7d = past7Dates.map(dStr => dailyTasksMap[dStr] || 0);
+      const maxTasksFound = Math.max(...tasksDone7d, 3);
+      const tasksSparklines = tasksDone7d.map(c => {
+        if (c <= 0) return 3;
+        return Math.min(18, Math.max(4, Math.round((c / maxTasksFound) * 18)));
+      });
+
+      // Streak Sparklines (Reflecting daily consistency across the 7 days)
+      const streakSparklines = past7Dates.map(dStr => {
+        const isActive = allActiveDates.has(dStr);
+        if (!isActive) return 3;
+        const fMin = dailyFocusMap[dStr] || 0;
+        const tCount = dailyTasksMap[dStr] || 0;
+        if (fMin >= 45 && tCount >= 2) return 18;
+        if (fMin >= 25 || tCount >= 2) return 14;
+        if (fMin > 0 || tCount > 0) return 10;
+        return 7;
+      });
+
+      const sparklines = {
+        focus: focusSparklines,
+        tasks: tasksSparklines,
+        streak: streakSparklines,
+        focusMinutes7d,
+        tasksDone7d,
+      };
+
+      // 4b. Streak Calculations (Uncapped - counts every consecutive active day backwards)
       let habitStreak = 0;
       let habitShieldsRemaining = streakShields;
 
-      const formatDateStr = (d: Date) => d.toLocaleDateString('en-CA');
       const checkDate = new Date();
       const checkDateTodayStr = formatDateStr(checkDate);
       checkDate.setDate(checkDate.getDate() - 1);
@@ -306,12 +422,11 @@ export function useTodayStats(): TodayStats {
         const curr = new Date();
         curr.setDate(curr.getDate() - startOffset);
 
-        while (true) {
+        while (count < 3650) {
           const dateStr = formatDateStr(curr);
           if (doneDates.has(dateStr)) {
             count++;
           } else if (habitShieldsRemaining > 0 && count > 0 && skippedWithShield === 0) {
-            // Shield absorbs 1 missed gap day in an active streak
             habitShieldsRemaining--;
             skippedWithShield++;
           } else {
@@ -327,7 +442,6 @@ export function useTodayStats(): TodayStats {
       } else if (doneDates.has(checkDateYesterdayStr)) {
         habitStreak = calcHabitStreakFrom(1);
       } else if (habitShieldsRemaining > 0) {
-        // Yesterday was missed, but if active 2 days ago, shield protects the streak!
         const twoDaysAgo = new Date();
         twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
         if (doneDates.has(formatDateStr(twoDaysAgo))) {
@@ -336,13 +450,7 @@ export function useTodayStats(): TodayStats {
         }
       }
 
-      // 4b. Focus streak calculation (completed sessions only, protected by Streak Shields)
-      const completedFocusDates = new Set(
-        (focusAllSessionsRes.data || []).map(fs => {
-          const d = new Date(fs.started_at);
-          return formatDateStr(d);
-        })
-      );
+      // Focus streak calculation
       let focusStreak = 0;
       let shieldsRemaining = streakShields;
 
@@ -352,12 +460,11 @@ export function useTodayStats(): TodayStats {
         const curr = new Date();
         curr.setDate(curr.getDate() - startOffset);
 
-        while (true) {
+        while (count < 3650) {
           const dateStr = formatDateStr(curr);
           if (completedFocusDates.has(dateStr)) {
             count++;
           } else if (shieldsRemaining > 0 && count > 0 && skippedWithShield === 0) {
-            // Shield absorbs 1 missed gap day in an active streak
             shieldsRemaining--;
             skippedWithShield++;
           } else {
@@ -373,7 +480,6 @@ export function useTodayStats(): TodayStats {
       } else if (completedFocusDates.has(checkDateYesterdayStr)) {
         focusStreak = calcStreakFrom(1);
       } else if (shieldsRemaining > 0) {
-        // Yesterday was missed, but if active 2 days ago, shield protects the streak!
         const twoDaysAgo = new Date();
         twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
         if (completedFocusDates.has(formatDateStr(twoDaysAgo))) {
@@ -381,6 +487,46 @@ export function useTodayStats(): TodayStats {
           focusStreak = calcStreakFrom(2);
         }
       }
+
+      // Unified active streak (Counting backwards across ALL activities without 7-day cap)
+      let activeStreak = 0;
+      let activeShieldsRemaining = streakShields;
+
+      const calcActiveStreakFrom = (startOffset: number) => {
+        let count = 0;
+        let skippedWithShield = 0;
+        const curr = new Date();
+        curr.setDate(curr.getDate() - startOffset);
+
+        while (count < 3650) {
+          const dateStr = formatDateStr(curr);
+          if (allActiveDates.has(dateStr)) {
+            count++;
+          } else if (activeShieldsRemaining > 0 && count > 0 && skippedWithShield === 0) {
+            activeShieldsRemaining--;
+            skippedWithShield++;
+          } else {
+            break;
+          }
+          curr.setDate(curr.getDate() - 1);
+        }
+        return count;
+      };
+
+      if (allActiveDates.has(checkDateTodayStr)) {
+        activeStreak = calcActiveStreakFrom(0);
+      } else if (allActiveDates.has(checkDateYesterdayStr)) {
+        activeStreak = calcActiveStreakFrom(1);
+      } else if (activeShieldsRemaining > 0) {
+        const twoDaysAgo = new Date();
+        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+        if (allActiveDates.has(formatDateStr(twoDaysAgo))) {
+          activeShieldsRemaining--;
+          activeStreak = calcActiveStreakFrom(2);
+        }
+      }
+
+      const unifiedStreak = Math.max(activeStreak, habitStreak, focusStreak, 1);
 
       // 4c. Weekly activity calculation (Mon=0..Sun=6 for current week)
       const now = new Date();
@@ -394,7 +540,7 @@ export function useTodayStats(): TodayStats {
         const d = new Date(monDate);
         d.setDate(monDate.getDate() + i);
         const dStr = formatDateStr(d);
-        weeklyActivity.push(doneDates.has(dStr));
+        weeklyActivity.push(allActiveDates.has(dStr));
       }
 
       // 5. Habits template and today logs merging
@@ -470,7 +616,9 @@ export function useTodayStats(): TodayStats {
         tasksDone,
         habitStreak,
         focusStreak,
+        activeStreak: unifiedStreak,
         weeklyActivity,
+        sparklines,
         habits,
         nextBlocks,
         primaryGoal,
@@ -487,7 +635,9 @@ export function useTodayStats(): TodayStats {
         tasksDone,
         habitStreak,
         focusStreak,
+        activeStreak: unifiedStreak,
         weeklyActivity,
+        sparklines,
         habits,
         nextBlocks,
         primaryGoal,

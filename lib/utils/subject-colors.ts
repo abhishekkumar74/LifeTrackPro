@@ -41,9 +41,24 @@ const COLOR_MAP: Record<string, string> = {
 
 const DEFAULT_COLOR = '#9B9BAF';
 
+const PALETTE = [
+  '#5B4FE8', '#00B894', '#E8A020', '#E85858', '#0EA5E9',
+  '#8B6FE8', '#14B8A6', '#F59E0B', '#6366F1', '#10B981',
+  '#EC4899', '#2563EB', '#7C3AED', '#059669', '#D97706',
+];
+
+function getHashColor(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % PALETTE.length;
+  return PALETTE[index];
+}
+
 /**
  * Returns a hex color string for the given subject.
- * Matches case-insensitively.
+ * Matches case-insensitively or generates a deterministic palette color.
  */
 export function getSubjectColor(subject: string | null | undefined): string {
   if (!subject) return DEFAULT_COLOR;
@@ -80,7 +95,8 @@ export function getSubjectColor(subject: string | null | undefined): string {
   if (normalized.includes('web dev') || normalized.includes('react')) return COLOR_MAP['web development'];
   if (normalized.includes('cloud') || normalized.includes('devops') || normalized.includes('aws') || normalized.includes('docker')) return COLOR_MAP['cloud & devops'];
   
-  return DEFAULT_COLOR;
+  // Deterministic vibrant color for any custom / dynamic subject from DB
+  return getHashColor(normalized);
 }
 
 /**

@@ -23,6 +23,7 @@ import {
 import { ScheduleBlock } from '@/types/app.types';
 import { COLORS, TYPOGRAPHY } from '@/constants/theme';
 import { getTodayLocal } from '@/lib/utils/date';
+import { getSubjectColor } from '@/lib/utils/subject-colors';
 import * as Haptics from 'expo-haptics';
 
 interface QuickAddScheduleSheetProps {
@@ -133,16 +134,6 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
   const createBlockMutation = useCreateScheduleBlock();
   const updateBlockMutation = useUpdateScheduleBlock();
   const deleteBlockMutation = useDeleteScheduleBlock();
-
-  const getSubjectColor = (subject: string | null) => {
-    if (!subject) return '#9B9BAF';
-    const normalized = subject.trim().toLowerCase();
-    if (normalized.includes('phys')) return '#5B4FE8';
-    if (normalized.includes('chem')) return '#00B894';
-    if (normalized.includes('biol')) return '#E8A020';
-    if (normalized.includes('math')) return '#E85858';
-    return '#9B9BAF';
-  };
 
   const handleAddBlock = () => {
     if (!title.trim()) return;
@@ -292,7 +283,7 @@ export const QuickAddScheduleSheet: React.FC<QuickAddScheduleSheetProps> = ({
         {/* Title */}
         <BottomSheetTextInput
           style={styles.textInput}
-          placeholder="Block title (e.g. Chemistry Homework)"
+          placeholder="Block title (e.g. Deep Study Session)"
           placeholderTextColor="#9B9BAF"
           value={title}
           onChangeText={setTitle}

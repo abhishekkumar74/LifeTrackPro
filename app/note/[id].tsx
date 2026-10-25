@@ -37,9 +37,8 @@ import {
   useNotes,
 } from '@/lib/hooks/use-notes';
 import { useSyllabus } from '@/lib/hooks/use-syllabus';
+import { useSubjects } from '@/lib/hooks/use-subjects';
 import { Note } from '@/types/app.types';
-
-const FALLBACK_SUBJECTS = ['Physics', 'Chemistry', 'Biology', 'Math', 'Other'];
 
 const NOTE_TEMPLATES = {
   lecture: {
@@ -77,6 +76,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
   const updateNoteMutation = useUpdateNote();
   const deleteNoteMutation = useDeleteNote();
   const syllabusQuery = useSyllabus();
+  const subjectsQuery = useSubjects();
   
   // Query all notes for related notes logic
   const allNotesQuery = useNotes();
@@ -295,13 +295,17 @@ export default function NoteEditorScreen(): React.JSX.Element {
     return () => clearTimeout(saveTimer);
   }, [title, content, subject, chapter, tags]);
 
-  // Extract subjects and chapters from syllabus topics
+  // Extract subjects and chapters from dynamic user subjects & syllabus topics
   const syllabusData = syllabusQuery.data || {};
   const subjectsList = useMemo(() => {
-    const list = new Set<string>(FALLBACK_SUBJECTS);
+    const list = new Set<string>(subjectsQuery.data || []);
     Object.keys(syllabusData).forEach((sub) => list.add(sub));
+    if (list.size === 0) {
+      list.add('General');
+    }
+    list.add('Other');
     return Array.from(list);
-  }, [syllabusData]);
+  }, [subjectsQuery.data, syllabusData]);
 
   const chaptersList = useMemo(() => {
     if (!subject || !syllabusData[subject]) return [];
@@ -491,6 +495,7 @@ export default function NoteEditorScreen(): React.JSX.Element {
         subject: subject,
         chapter: chapter,
         tags: ['flashcard', `parent:${id}`],
+        next_review: new Date().toLocaleDateString('en-CA'),
       },
       {
         onSuccess: () => {

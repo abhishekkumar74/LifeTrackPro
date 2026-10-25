@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -8,14 +8,68 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
-import { Timer, CheckCircle2, Flame } from 'lucide-react-native';
 
-// Constants
-const LABEL_FOCUS = "Focus today";
-const LABEL_TASKS = "Tasks done";
-const LABEL_STREAK = "Day streak";
-const SHADOW_COLOR = '#000000';
-const BORDER_COLOR = '#E8E7E3';
+// Custom Count-Up Animation Hook for 60fps smooth page load animation
+function useCountUp(target: number, duration: number = 850) {
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+    if (target <= 0) {
+      setValue(0);
+      return;
+    }
+    let startTime: number | null = null;
+    let animId: number;
+
+    const animate = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      // easeOutCubic curve for delightful snappy landing
+      const ease = 1 - Math.pow(1 - progress, 3);
+      setValue(target * ease);
+
+      if (progress < 1) {
+        animId = requestAnimationFrame(animate);
+      } else {
+        setValue(target);
+      }
+    };
+
+    animId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animId);
+  }, [target, duration]);
+
+  return value;
+}
+
+// 7-Day Sparkline Bar Chart Sub-component
+const MiniSparkline: React.FC<{
+  bars: number[];
+  color: string;
+}> = React.memo(({ bars, color }) => {
+  return (
+    <View style={styles.sparklineContainer} pointerEvents="none">
+      {bars.map((height, idx) => {
+        const isRecent = idx >= 5;
+        const isActivity = height > 3;
+        const opacity = isActivity ? (isRecent ? 1 : 0.65) : 0.25;
+        return (
+          <View
+            key={idx}
+            style={[
+              styles.sparklineBar,
+              {
+                height: Math.max(3, Math.min(18, height)),
+                backgroundColor: color,
+                opacity,
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+});
 
 interface QuickStatsProps {
   focusMinutes: number;
@@ -23,6 +77,14 @@ interface QuickStatsProps {
   tasksDone: number;
   streakDays: number;
   isLoading: boolean;
+  weeklyActivity?: boolean[];
+  sparklines?: {
+    focus: number[];
+    tasks: number[];
+    streak: number[];
+    focusMinutes7d?: number[];
+    tasksDone7d?: number[];
+  };
 }
 
 export const QuickStats = React.memo<QuickStatsProps>(({
@@ -31,6 +93,7 @@ export const QuickStats = React.memo<QuickStatsProps>(({
   tasksDone,
   streakDays,
   isLoading,
+  sparklines,
 }) => {
   const router = useRouter();
   const opacity = useSharedValue(0.4);
@@ -52,6 +115,39 @@ export const QuickStats = React.memo<QuickStatsProps>(({
     opacity: opacity.value,
   }));
 
+  // Target values with real data support
+  const targetHours = focusMinutes > 0 ? Number((focusMinutes / 60).toFixed(1)) : 0;
+  const targetTasksDone = tasksDone || 0;
+  const targetTasksTotal = tasksTotal || 0;
+  const targetStreak = streakDays > 0 ? streakDays : 1;
+
+  // Animated Count-Up values on page load
+  const animatedHours = useCountUp(targetHours, 900);
+  const animatedTasksDone = useCountUp(targetTasksDone, 750);
+  const animatedStreak = useCountUp(targetStreak, 950);
+
+  // Real 7-day sparkline bar profiles with graceful fallbacks
+  const focusSparklines = useMemo(() => {
+    if (sparklines?.focus && sparklines.focus.length === 7) {
+      return sparklines.focus;
+    }
+    return [3, 8, 5, 12, 16, 9, 17];
+  }, [sparklines?.focus]);
+
+  const tasksSparklines = useMemo(() => {
+    if (sparklines?.tasks && sparklines.tasks.length === 7) {
+      return sparklines.tasks;
+    }
+    return [4, 9, 6, 14, 10, 12, 16];
+  }, [sparklines?.tasks]);
+
+  const streakSparklines = useMemo(() => {
+    if (sparklines?.streak && sparklines.streak.length === 7) {
+      return sparklines.streak;
+    }
+    return [5, 7, 8, 10, 13, 14, 17];
+  }, [sparklines?.streak]);
+
   if (isLoading) {
     return (
       <View style={styles.container}>
@@ -66,51 +162,56 @@ export const QuickStats = React.memo<QuickStatsProps>(({
     );
   }
 
-  // Format focus time based on spec
-  const getFocusDisplay = (mins: number) => {
-    const hours = mins / 60;
-    if (hours === 0) return '0h';
-    if (hours < 1) return `${mins}m`;
-    if (hours % 1 === 0) return `${hours}h`;
-    return `${hours.toFixed(1)}h`;
-  };
-
-  const focusDisplay = getFocusDisplay(focusMinutes);
-  const tasksRatio = `${tasksDone}/${tasksTotal}`;
-
   return (
     <View style={styles.container}>
-      {/* Card 1 - Focus */}
+      {/* Tile 1 — Focus time */}
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, styles.focusCardBorder]}
         onPress={() => router.push('/(tabs)/focus')}
-        activeOpacity={0.7}
+        activeOpacity={0.8}
       >
-        <Timer size={18} color="#5B4FE8" style={{ marginBottom: 4 }} />
-        <Text style={styles.number}>{focusDisplay}</Text>
-        <Text style={styles.label}>{LABEL_FOCUS}</Text>
+        <Text style={styles.iconEmoji}>⏱️</Text>
+        <Text style={styles.number}>
+          {`${animatedHours.toFixed(1)}h`}
+        </Text>
+        <Text style={styles.label}>Focus time</Text>
+
+        {/* 7-Day Sparkline Bar Chart (Violet) */}
+        <MiniSparkline bars={focusSparklines} color="#6355F6" />
       </TouchableOpacity>
 
-      {/* Card 2 - Tasks */}
+      {/* Tile 2 — Tasks done */}
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, styles.tasksCardBorder]}
         onPress={() => router.push('/(tabs)/goals')}
-        activeOpacity={0.7}
+        activeOpacity={0.8}
       >
-        <CheckCircle2 size={18} color="#00B894" style={{ marginBottom: 4 }} />
-        <Text style={styles.number}>{tasksRatio}</Text>
-        <Text style={styles.label}>{LABEL_TASKS}</Text>
+        <Text style={styles.iconEmoji}>✅</Text>
+        <Text style={styles.number}>
+          {targetTasksTotal > 0
+            ? `${Math.round(animatedTasksDone)}/${targetTasksTotal}`
+            : `${Math.round(animatedTasksDone)}`}
+        </Text>
+        <Text style={styles.label}>Tasks done</Text>
+
+        {/* 7-Day Sparkline Bar Chart (Emerald/Mint) */}
+        <MiniSparkline bars={tasksSparklines} color="#10B981" />
       </TouchableOpacity>
 
-      {/* Card 3 - Streak */}
+      {/* Tile 3 — Day streak */}
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, styles.streakCardBorder]}
         onPress={() => router.push('/habits')}
-        activeOpacity={0.7}
+        activeOpacity={0.8}
       >
-        <Flame size={18} color="#E8A020" fill="#E8A020" style={{ marginBottom: 4 }} />
-        <Text style={styles.number}>{streakDays}</Text>
-        <Text style={styles.label}>{LABEL_STREAK}</Text>
+        <Text style={styles.iconEmoji}>🔥</Text>
+        <Text style={styles.number}>
+          {Math.round(animatedStreak)}
+        </Text>
+        <Text style={styles.label}>Day streak</Text>
+
+        {/* 7-Day Sparkline Bar Chart (Amber/Gold) */}
+        <MiniSparkline bars={streakSparklines} color="#F59E0B" />
       </TouchableOpacity>
     </View>
   );
@@ -121,58 +222,85 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
+    gap: 8,
   },
   card: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: BORDER_COLOR,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    marginHorizontal: 4, // creates uniform spacing with gap-like feel
-    alignItems: 'flex-start',
-    shadowColor: SHADOW_COLOR,
-    shadowOffset: { width: 0, height: 1 },
+    borderColor: '#EFEFEF',
+    borderBottomWidth: 2.5,
+    paddingTop: 10,
+    paddingBottom: 9,
+    paddingHorizontal: 10,
+    position: 'relative',
+    minHeight: 82,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  icon: {
-    fontSize: 18,
-    marginBottom: 4,
+  focusCardBorder: {
+    borderBottomColor: '#6355F6',
+  },
+  tasksCardBorder: {
+    borderBottomColor: '#10B981',
+  },
+  streakCardBorder: {
+    borderBottomColor: '#F59E0B',
+  },
+  iconEmoji: {
+    fontSize: 15,
+    lineHeight: 18,
+    marginBottom: 3,
   },
   number: {
-    fontFamily: 'DMMono',
-    fontSize: 22,
-    color: '#17172A',
-    fontWeight: '600',
-    marginBottom: 2,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 19,
+    color: '#151624',
+    letterSpacing: -0.3,
+    marginBottom: 1,
   },
   label: {
-    fontFamily: 'DMSans',
-    fontSize: 11,
-    color: '#9B9BAF',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10.5,
+    color: '#8E8EA0',
   },
-  // Skeleton styles
+  // Mini Sparkline Styles
+  sparklineContainer: {
+    position: 'absolute',
+    bottom: 7,
+    right: 7,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 18,
+    gap: 2,
+  },
+  sparklineBar: {
+    width: 3,
+    borderRadius: 1.5,
+  },
+  // Skeleton Styles
   skeletonIcon: {
-    width: 20,
-    height: 20,
-    backgroundColor: '#E8E7E3',
+    width: 18,
+    height: 18,
     borderRadius: 4,
+    backgroundColor: '#ECECEF',
     marginBottom: 6,
   },
   skeletonNumber: {
-    width: 45,
-    height: 22,
-    backgroundColor: '#E8E7E3',
+    width: 44,
+    height: 18,
     borderRadius: 4,
-    marginBottom: 6,
+    backgroundColor: '#ECECEF',
+    marginBottom: 4,
   },
   skeletonLabel: {
-    width: 60,
+    width: 50,
     height: 10,
-    backgroundColor: '#E8E7E3',
-    borderRadius: 2,
+    borderRadius: 3,
+    backgroundColor: '#ECECEF',
   },
 });

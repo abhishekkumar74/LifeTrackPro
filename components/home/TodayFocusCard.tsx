@@ -7,16 +7,12 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
+import { Play } from 'lucide-react-native';
 import { Task } from '@/types/app.types';
-import { getSubjectColor, getSubjectBgColor } from '@/lib/utils/subject-colors';
 
 // Constants
 const LABEL_TODAYS_FOCUS = "TODAY'S FOCUS";
-const LABEL_NO_TASKS = "What will you focus on today?";
-const BTN_ADD_TASK = "+ Add today's task";
-const BTN_START = "▶ Start";
-const SHADOW_COLOR = '#000000';
-const BORDER_COLOR = '#E8E7E3';
+const BTN_START = "Start";
 
 interface TodayFocusCardProps {
   task: Task | null;
@@ -26,8 +22,18 @@ interface TodayFocusCardProps {
   onPressCard?: () => void;
   isCse?: boolean;
   userGoal?: string;
-  firstIncompleteTopic?: { subject: string; topic: string } | null;
+  firstIncompleteTopic?: { subject: string; topic: string; chapter?: string } | null;
 }
+
+const getSubjectEmoji = (subject: string): string => {
+  const s = subject.toLowerCase();
+  if (s.includes('physic')) return '🥼';
+  if (s.includes('chem')) return '🧪';
+  if (s.includes('math')) return '📐';
+  if (s.includes('bio') || s.includes('botan') || s.includes('zool')) return '🧬';
+  if (s.includes('comp') || s.includes('code') || s.includes('data') || s.includes('algo') || s.includes('cse')) return '💻';
+  return '📚';
+};
 
 export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
   task,
@@ -61,235 +67,229 @@ export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <View style={styles.leftAccentBarSkeleton} />
-        <View style={styles.contentArea}>
+        <View style={styles.decorativeCircleOuter} />
+        <View style={styles.decorativeCircleInner} />
+        <View style={styles.content}>
           <Animated.View style={[styles.skeletonLabel, pulseStyle]} />
           <Animated.View style={[styles.skeletonTitle, pulseStyle]} />
-          <Animated.View style={[styles.skeletonChip, pulseStyle]} />
-        </View>
-        <View style={styles.rightAreaSkeleton}>
-          <Animated.View style={[styles.skeletonButton, pulseStyle]} />
+          <Animated.View style={[styles.skeletonSub, pulseStyle]} />
+          <View style={styles.bottomRow}>
+            <Animated.View style={[styles.skeletonPill, pulseStyle]} />
+            <Animated.View style={[styles.skeletonButton, pulseStyle]} />
+          </View>
         </View>
       </View>
     );
   }
 
-  const isInterviewPrep = !userGoal || 
-    userGoal.includes('Amazon') || 
-    userGoal.includes('Google') || 
-    userGoal.includes('Microsoft') || 
-    userGoal.includes('Meta') || 
-    userGoal.includes('FAANG') || 
-    userGoal.includes('SDE') || 
-    userGoal.includes('SWE') || 
-    userGoal.includes('Placement') ||
-    userGoal.includes('GATE');
-
-  const cardLabel = isCse 
-    ? (isInterviewPrep ? "INTERVIEW PREP" : "TODAY'S CODING")
-    : LABEL_TODAYS_FOCUS;
-
-  // Determine display title and subject
+  // Determine display values
   let displayTitle = '';
   let displaySubject = '';
+  let displayEstimate = 'Estimated 2h 30m';
 
   if (task) {
     displayTitle = task.title;
-    displaySubject = task.subject || '';
+    displaySubject = task.subject || 'Physics';
+    displayEstimate = 'Estimated 1h 45m';
+  } else if (firstIncompleteTopic) {
+    displayTitle = `${firstIncompleteTopic.chapter ? `${firstIncompleteTopic.chapter} — ` : ''}${firstIncompleteTopic.topic}`;
+    displaySubject = firstIncompleteTopic.subject || (isCse ? 'Computer Science' : 'Physics');
+    displayEstimate = 'Estimated 2h 30m';
   } else if (isCse) {
-    if (isInterviewPrep) {
-      displayTitle = "2hr DSA practice";
-      displaySubject = "Data Structures & Algorithms";
-    } else {
-      displayTitle = firstIncompleteTopic 
-        ? `Practice: ${firstIncompleteTopic.topic}` 
-        : "2hr Backend practice";
-      displaySubject = firstIncompleteTopic 
-        ? firstIncompleteTopic.subject 
-        : "Backend Development";
-    }
+    displayTitle = 'Data Structures — Trees, Graphs & BFS/DFS';
+    displaySubject = 'Computer Science';
+    displayEstimate = 'Estimated 2h 00m';
+  } else {
+    // Exact default from user mock / image
+    displayTitle = 'Thermodynamics — Laws 1, 2 & numericals';
+    displaySubject = 'Physics';
+    displayEstimate = 'Estimated 2h 30m';
   }
 
-  const subjectTheme = displaySubject
-    ? { text: getSubjectColor(displaySubject), bg: getSubjectBgColor(getSubjectColor(displaySubject)) }
-    : { text: '#5C5C70', bg: '#F5F5F7' };
-
-  const showTaskContent = !!task || isCse;
-  const showStartButton = !!task || isCse;
+  const subjectEmoji = getSubjectEmoji(displaySubject);
 
   return (
     <View style={styles.container}>
-      {/* Left accent bar */}
-      <View style={styles.leftAccentBar} />
+      {/* Decorative curved shapes on top-right (as in user screenshot) */}
+      <View style={styles.decorativeCircleOuter} pointerEvents="none" />
+      <View style={styles.decorativeCircleInner} pointerEvents="none" />
 
-      {/* Content Touch Target */}
+      {/* Main Card Content */}
       <TouchableOpacity
-        style={styles.contentArea}
-        onPress={task ? onPressCard : (isCse ? onStartFocus : onAddTask)}
-        activeOpacity={0.7}
+        style={styles.content}
+        onPress={task ? onPressCard : onStartFocus}
+        activeOpacity={0.92}
       >
-        <Text style={styles.topLabel}>{cardLabel}</Text>
-        {showTaskContent ? (
-          <>
-            <Text style={styles.taskTitle} numberOfLines={2} ellipsizeMode="tail">
-              {displayTitle}
-            </Text>
-            {displaySubject ? (
-              <View style={[styles.subjectChip, { backgroundColor: subjectTheme.bg }]}>
-                <Text style={[styles.subjectText, { color: subjectTheme.text }]}>
-                  {displaySubject}
-                </Text>
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>{LABEL_NO_TASKS}</Text>
-            <TouchableOpacity onPress={onAddTask} activeOpacity={0.6} style={styles.emptyAddBtn}>
-              <Text style={styles.emptyAddText}>{BTN_ADD_TASK}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </TouchableOpacity>
+        {/* Top Header Label */}
+        <Text style={styles.topLabel}>{LABEL_TODAYS_FOCUS}</Text>
 
-      {/* Right start button */}
-      {showStartButton && (
-        <View style={styles.rightArea}>
+        {/* Focus Task / Syllabus Title */}
+        <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
+          {displayTitle}
+        </Text>
+
+        {/* Estimate & Subject Subtitle */}
+        <Text style={styles.subtitle}>
+          {`${displayEstimate} · ${displaySubject}`}
+        </Text>
+
+        {/* Bottom Actions Row */}
+        <View style={styles.bottomRow}>
+          {/* Subject Badge Pill */}
+          <View style={styles.subjectPill}>
+            <Text style={styles.subjectEmoji}>{subjectEmoji}</Text>
+            <Text style={styles.subjectText}>{displaySubject}</Text>
+          </View>
+
+          {/* Start Focus Pill Button */}
           <TouchableOpacity
             style={styles.startButton}
             onPress={onStartFocus}
             activeOpacity={0.8}
+            accessibilityLabel="Start Focus Session"
           >
+            <Play size={13} color="#FFFFFF" fill="#FFFFFF" />
             <Text style={styles.startButtonText}>{BTN_START}</Text>
           </TouchableOpacity>
         </View>
-      )}
+      </TouchableOpacity>
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: BORDER_COLOR,
+    backgroundColor: '#131422',
+    borderRadius: 24,
     marginTop: 16,
     overflow: 'hidden',
-    flexDirection: 'row',
-    shadowColor: SHADOW_COLOR,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 2,
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 8,
   },
-  leftAccentBar: {
-    width: 4,
-    backgroundColor: '#5B4FE8',
+  decorativeCircleOuter: {
+    position: 'absolute',
+    top: -55,
+    right: -45,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: 'rgba(39, 36, 78, 0.45)',
   },
-  contentArea: {
-    flex: 1,
-    padding: 16,
+  decorativeCircleInner: {
+    position: 'absolute',
+    top: -20,
+    right: -20,
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    backgroundColor: 'rgba(51, 48, 102, 0.55)',
+  },
+  content: {
+    padding: 18,
+    zIndex: 2,
   },
   topLabel: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 10,
-    color: '#9B9BAF',
-    letterSpacing: 1.2,
-  },
-  taskTitle: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 16,
-    color: '#17172A',
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  emptyContainer: {
-    marginTop: 4,
-  },
-  emptyText: {
-    fontFamily: 'DMSans',
-    fontSize: 15,
-    color: '#9B9BAF',
-  },
-  emptyAddBtn: {
-    marginTop: 6,
-    alignSelf: 'flex-start',
-  },
-  emptyAddText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 14,
-    color: '#5B4FE8',
-    fontWeight: '600',
-  },
-  subjectChip: {
-    alignSelf: 'flex-start',
-    marginTop: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  subjectText: {
-    fontFamily: 'DMSans-Medium',
+    fontFamily: 'DMSans-Bold',
     fontSize: 11,
-    fontWeight: '500',
-  },
-  rightArea: {
-    padding: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  startButton: {
-    backgroundColor: '#5B4FE8',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    shadowColor: '#5B4FE8',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  startButtonText: {
-    color: '#FFFFFF',
-    fontFamily: 'DMSans-Medium',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  // Skeleton styling
-  leftAccentBarSkeleton: {
-    width: 4,
-    backgroundColor: '#E8E7E3',
-  },
-  skeletonLabel: {
-    width: 80,
-    height: 10,
-    backgroundColor: '#E8E7E3',
-    borderRadius: 2,
+    color: '#8E8EA8',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
     marginBottom: 6,
   },
-  skeletonTitle: {
-    width: 160,
-    height: 16,
-    backgroundColor: '#E8E7E3',
-    borderRadius: 4,
-    marginBottom: 8,
+  title: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 19,
+    color: '#FFFFFF',
+    lineHeight: 25,
+    marginBottom: 4,
   },
-  skeletonChip: {
-    width: 60,
-    height: 18,
-    backgroundColor: '#E8E7E3',
-    borderRadius: 10,
+  subtitle: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12.5,
+    color: '#7E8098',
+    marginBottom: 14,
   },
-  rightAreaSkeleton: {
-    padding: 12,
-    justifyContent: 'center',
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  skeletonButton: {
-    width: 70,
+  subjectPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  subjectEmoji: {
+    fontSize: 12.5,
+  },
+  subjectText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12.5,
+    color: '#E0E0F0',
+  },
+  startButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#5B4FE8',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    shadowColor: '#5B4FE8',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  startButtonText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  // Skeleton Styles
+  skeletonLabel: {
+    width: 90,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    marginBottom: 10,
+  },
+  skeletonTitle: {
+    width: '85%',
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginBottom: 10,
+  },
+  skeletonSub: {
+    width: '55%',
+    height: 14,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.10)',
+    marginBottom: 20,
+  },
+  skeletonPill: {
+    width: 90,
     height: 32,
-    backgroundColor: '#E8E7E3',
-    borderRadius: 10,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  skeletonButton: {
+    width: 80,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(91, 79, 232, 0.35)',
   },
 });

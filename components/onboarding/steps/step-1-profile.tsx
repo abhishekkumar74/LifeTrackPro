@@ -29,13 +29,48 @@ interface CategoryOption {
 }
 
 const CATEGORY_OPTIONS: CategoryOption[] = [
-  { type: 'student', label: 'Student', emoji: '🎓' },
-  { type: 'cse_student', label: 'CSE Student', emoji: '🎓', description: 'B.Tech / MCA / BSc CS' },
-  { type: 'employee', label: 'Employee', emoji: '💼' },
-  { type: 'creator', label: 'Creator', emoji: '🎨' },
-  { type: 'entrepreneur', label: 'Entrepreneur', emoji: '🚀' },
-  { type: 'educator', label: 'Educator', emoji: '📖' },
-  { type: 'aspirant', label: 'Aspirant', emoji: '🎯' },
+  {
+    type: 'aspirant',
+    label: 'Govt Job Aspirant',
+    emoji: '🎯',
+    description: 'UPSC, SSC, Banking, Railways, Defence',
+  },
+  {
+    type: 'student',
+    label: 'Entrance Exams',
+    emoji: '🎓',
+    description: 'NEET, JEE, CUET, CAT, GATE, Boards',
+  },
+  {
+    type: 'cse_student',
+    label: 'College Student',
+    emoji: '🏛️',
+    description: 'B.Tech, BCA, Degree & Placements',
+  },
+  {
+    type: 'employee',
+    label: 'Working Professional',
+    emoji: '💼',
+    description: 'Corporate, Remote & Tech',
+  },
+  {
+    type: 'creator',
+    label: 'Creator',
+    emoji: '🎨',
+    description: 'Content, Design & Media',
+  },
+  {
+    type: 'entrepreneur',
+    label: 'Entrepreneur',
+    emoji: '🚀',
+    description: 'Startups & Business',
+  },
+  {
+    type: 'educator',
+    label: 'Educator',
+    emoji: '📖',
+    description: 'Teaching & Coaching',
+  },
 ];
 
 export default function Step1Profile({ state, onChange }: StepProps): React.JSX.Element {
@@ -89,7 +124,7 @@ export default function Step1Profile({ state, onChange }: StepProps): React.JSX.
               <Text style={styles.emoji}>{item.emoji}</Text>
               <Text style={styles.tileLabel}>{item.label}</Text>
               {item.description && (
-                <Text style={styles.tileDesc} numberOfLines={1}>{item.description}</Text>
+                <Text style={styles.tileDesc} numberOfLines={2}>{item.description}</Text>
               )}
             </Pressable>
           );
@@ -141,12 +176,13 @@ const styles = StyleSheet.create({
   },
   tile: {
     width: TILE_WIDTH,
-    minHeight: 80,
+    minHeight: 88,
     borderRadius: RADIUS.lg,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
   },
   tileUnselected: {
     backgroundColor: COLORS.surface,

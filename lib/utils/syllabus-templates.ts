@@ -1,3 +1,5 @@
+import { SEED_EXAMS } from '@/lib/constants/exams-seed';
+
 export interface TemplateTopic {
   subject: string;
   chapter: string;
@@ -364,3 +366,47 @@ export const SYLLABUS_TEMPLATES: Record<string, SyllabusTemplate> = {
     topics: WORK_SKILLS_TOPICS,
   },
 };
+
+/**
+ * Dynamically build or resolve a SyllabusTemplate for any exam slug or name.
+ */
+export function getTemplateForExam(examKey: string): SyllabusTemplate | null {
+  const upper = examKey.toUpperCase().replace(/\s+/g, '_');
+  if (SYLLABUS_TEMPLATES[upper]) {
+    return SYLLABUS_TEMPLATES[upper];
+  }
+
+  // Look in SEED_EXAMS
+  const lower = examKey.toLowerCase().trim();
+  const matched = SEED_EXAMS.find(
+    (e) =>
+      e.id === examKey ||
+      e.slug.toLowerCase() === lower ||
+      e.name.toLowerCase() === lower ||
+      lower.includes(e.name.toLowerCase()) ||
+      lower.includes(e.slug.toLowerCase())
+  );
+
+  if (!matched) return null;
+
+  const topics: TemplateTopic[] = [];
+  let order = 0;
+
+  matched.subjects.forEach((subj) => {
+    subj.chapters.forEach((ch) => {
+      topics.push({
+        subject: subj.name,
+        chapter: ch.name,
+        topic: `Core concepts of ${ch.name}`,
+        order_index: order++,
+      });
+    });
+  });
+
+  return {
+    name: matched.name,
+    description: matched.description,
+    subjects: matched.subjects.map((s) => s.name),
+    topics,
+  };
+}

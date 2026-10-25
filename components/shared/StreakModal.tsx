@@ -226,7 +226,7 @@ export const StreakModal: React.FC<StreakModalProps> = ({
             <View style={styles.statsGrid}>
               <View style={styles.statBox}>
                 <Trophy size={18} color="#E8A020" />
-                <Text style={styles.statVal}>{Math.max(streakCount, 7)} Days</Text>
+                <Text style={styles.statVal}>{streakCount > 0 ? `${streakCount} Days` : '1 Day'}</Text>
                 <Text style={styles.statLabel}>Best Record</Text>
               </View>
 

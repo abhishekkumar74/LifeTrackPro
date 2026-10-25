@@ -227,21 +227,30 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
 
                       {/* Filtered Subjects */}
                       {filteredSubjects.map((sub) => {
-                        const isSelected = selectedSubject === sub;
-                        const color = getSubjectColor(sub);
+                        const examMatch = sub.match(/^(.*?)\s*\((.*?)\)$/);
+                        const displayName = examMatch ? examMatch[1] : sub;
+                        const examBadge = examMatch ? examMatch[2] : null;
+                        const isSelected = selectedSubject === displayName || selectedSubject === sub;
+                        const color = getSubjectColor(displayName);
+
                         return (
                           <TouchableOpacity
                             key={sub}
                             style={[styles.optionItem, isSelected && styles.optionItemActive]}
-                            onPress={() => handleSelect(sub)}
+                            onPress={() => handleSelect(displayName)}
                             activeOpacity={0.7}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           >
                             <View style={styles.optionLeft}>
                               <View style={[styles.colorDot, { backgroundColor: color }]} />
                               <Text style={[styles.optionText, isSelected && styles.optionTextActive]}>
-                                {sub}
+                                {displayName}
                               </Text>
+                              {examBadge ? (
+                                <View style={styles.examTagBadge}>
+                                  <Text style={styles.examTagBadgeText}>{examBadge}</Text>
+                                </View>
+                              ) : null}
                             </View>
                             {isSelected && <Check size={16} color="#5B4FE8" />}
                           </TouchableOpacity>
@@ -562,5 +571,18 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans-Medium',
     fontSize: 12,
     color: '#5C5C70',
+  },
+  examTagBadge: {
+    marginLeft: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: '#F0EFFF',
+  },
+  examTagBadgeText: {
+    fontSize: 11,
+    fontFamily: 'DMSans-Medium',
+    color: '#5B4FE8',
+    fontWeight: '600',
   },
 });

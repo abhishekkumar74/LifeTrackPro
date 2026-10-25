@@ -1446,7 +1446,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
               <TextInput
                 style={styles.checkinInput}
-                placeholder="e.g., Finished 2 chapters of Physics, solved 10 DSA questions..."
+                placeholder="e.g., Finished 2 chapters, solved 10 practice questions..."
                 placeholderTextColor="#9B9BAF"
                 value={checkinNoteInput}
                 onChangeText={setCheckinNoteInput}

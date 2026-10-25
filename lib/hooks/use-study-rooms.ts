@@ -265,6 +265,17 @@ export function useEndRoom() {
         .eq('id', roomId);
 
       if (error) throw error;
+
+      // Storage Optimization: Purge chat messages when room ends
+      try {
+        await supabase
+          .from('room_messages')
+          .delete()
+          .eq('room_id', roomId);
+      } catch {
+        // ignore
+      }
+
       return data;
     },
     onSuccess: () => {

@@ -29,7 +29,6 @@ const LABEL_DUE_DATE = "Due Date";
 const LABEL_MILESTONE = "Link to Milestone (Optional)";
 const BTN_SUBMIT = "Add Task";
 
-const SUBJECTS = ['Physics', 'Chemistry', 'Biology', 'Math', 'Other'];
 const PRIORITIES: { val: TaskPriority; label: string; color: string }[] = [
   { val: 'urgent', label: 'Urgent', color: '#E85858' },
   { val: 'important', label: 'Important', color: '#E8A020' },

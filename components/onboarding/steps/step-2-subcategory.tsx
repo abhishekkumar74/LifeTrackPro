@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, TouchableOpacity } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '@/constants/theme';
-import { UserCategory } from '@/types/app.types';
+import { UserCategory, ExamType, Exam } from '@/types/app.types';
+import { useExams } from '@/lib/hooks/use-exams';
 
 interface StepProps {
   state: {
@@ -12,48 +13,19 @@ interface StepProps {
   onChange: (updates: { subcategories: string[]; customSubcategory?: string }) => void;
 }
 
+const EXAM_TYPE_TABS: { label: string; value: ExamType | 'all' }[] = [
+  { label: 'All Exams', value: 'all' },
+  { label: 'Entrance', value: 'entrance' },
+  { label: 'Sarkari / Govt', value: 'sarkari' },
+  { label: 'Boards', value: 'board' },
+  { label: 'Professional', value: 'professional' },
+];
+
 const SUBCATEGORY_OPTIONS = {
-  student: [
-    'NEET',
-    'JEE Main',
-    'JEE Advanced',
-    'UPSC CSE',
-    'UPSC CAPF',
-    'SSC CGL',
-    'SSC CHSL',
-    'SSC MTS',
-    'IBPS PO',
-    'IBPS Clerk',
-    'SBI PO',
-    'RBI Grade B',
-    'SEBI',
-    'CAT',
-    'XAT',
-    'GMAT',
-    'GRE',
-    'GATE',
-    'ESE/IES',
-    'CLAT',
-    'AILET',
-    'LSAT',
-    'NDA',
-    'CDS',
-    'AFCAT',
-    'CUET',
-    'Class 10 Boards',
-    'Class 12 Boards',
-    'CA Foundation',
-    'CA Intermediate',
-    'CA Final',
-    'CS Foundation',
-    'CMA',
-    'IELTS',
-    'TOEFL',
-    'PTE',
-    'Coding / DSA',
-    'Other',
-  ],
+  student: [],
   cse_student: [
+    'B.Tech Computer Science (CSE)',
+    'Campus Placement',
     'Amazon SDE',
     'Google SWE', 
     'Microsoft SWE',
@@ -61,7 +33,6 @@ const SUBCATEGORY_OPTIONS = {
     'Startup (Product)',
     'FAANG (General)',
     'GATE Exam',
-    'Campus Placement',
     'Higher Studies (MS/MBA)',
     'Backend Development',
     'Full Stack Development',
@@ -141,22 +112,66 @@ const SUBCATEGORY_OPTIONS = {
 
 export default function Step2Subcategory({ state, onChange }: StepProps): React.JSX.Element {
   const { category, subcategories, customSubcategory } = state;
+  const isExamCandidate = category === 'student' || category === 'aspirant';
+  const isMultiSelect = isExamCandidate || category === 'cse_student';
+
+  const defaultExamType: ExamType | 'all' =
+    category === 'aspirant' ? 'sarkari' : category === 'student' ? 'entrance' : 'all';
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedExamType, setSelectedExamType] = useState<ExamType | 'all'>(defaultExamType);
   const [customCategory, setCustomCategory] = useState(customSubcategory || '');
   const [showCustomInput, setShowCustomInput] = useState(subcategories.includes('Other'));
+
+  useEffect(() => {
+    if (category === 'aspirant') {
+      setSelectedExamType('sarkari');
+    } else if (category === 'student') {
+      setSelectedExamType('entrance');
+    } else {
+      setSelectedExamType('all');
+    }
+  }, [category]);
+
+  const examsQuery = useExams({
+    category: isExamCandidate ? 'student' : undefined,
+    examType: selectedExamType,
+    search: searchQuery,
+  });
+
+  const examTypeTabs = useMemo(() => {
+    if (category === 'aspirant') {
+      return [
+        { label: 'Sarkari / Govt', value: 'sarkari' as const },
+        { label: 'All Exams', value: 'all' as const },
+        { label: 'Entrance', value: 'entrance' as const },
+        { label: 'Professional', value: 'professional' as const },
+        { label: 'Boards', value: 'board' as const },
+      ];
+    }
+    return [
+      { label: 'Entrance', value: 'entrance' as const },
+      { label: 'All Exams', value: 'all' as const },
+      { label: 'Sarkari / Govt', value: 'sarkari' as const },
+      { label: 'Boards', value: 'board' as const },
+      { label: 'Professional', value: 'professional' as const },
+    ];
+  }, [category]);
 
   useEffect(() => {
     setShowCustomInput(subcategories.includes('Other'));
   }, [subcategories]);
 
-  const pills = category ? SUBCATEGORY_OPTIONS[category] || [] : [];
-  const isMultiSelect = category === 'student' || category === 'cse_student';
+  const staticPills = category ? SUBCATEGORY_OPTIONS[category] || [] : [];
 
   const getHeading = (): string => {
     switch (category) {
+      case 'aspirant':
+        return 'Select Your Govt Exam Target';
       case 'student':
+        return 'Select Your Target Exam';
       case 'cse_student':
-        return 'What are you preparing for?';
+        return 'Select Your College Focus & Target';
       case 'employee':
         return "What's your work setup?";
       case 'creator':
@@ -165,8 +180,6 @@ export default function Step2Subcategory({ state, onChange }: StepProps): React.
         return 'Tell us about your business';
       case 'educator':
         return 'What is your teaching focus?';
-      case 'aspirant':
-        return 'What are your personal goals?';
       default:
         return 'Tell us more about your focus';
     }
@@ -195,6 +208,41 @@ export default function Step2Subcategory({ state, onChange }: StepProps): React.
     });
   };
 
+  const handleExamPress = (exam: Exam) => {
+    const isSelected =
+      subcategories.includes(exam.slug) ||
+      subcategories.includes(exam.name) ||
+      subcategories.includes(exam.id);
+
+    let nextSubcategories: string[];
+    if (isMultiSelect) {
+      if (isSelected) {
+        nextSubcategories = subcategories.filter(
+          (x) => x !== exam.slug && x !== exam.name && x !== exam.id
+        );
+      } else {
+        if (subcategories.length >= 2) {
+          // Replace the oldest exam to maintain maximum 2 active selections
+          nextSubcategories = [subcategories[subcategories.length - 1], exam.slug];
+        } else {
+          nextSubcategories = [...subcategories, exam.slug];
+        }
+      }
+    } else {
+      if (isSelected) {
+        nextSubcategories = [];
+      } else {
+        nextSubcategories = [exam.slug];
+      }
+    }
+
+    const hasOther = nextSubcategories.includes('Other');
+    onChange({
+      subcategories: nextSubcategories,
+      customSubcategory: hasOther ? customCategory : '',
+    });
+  };
+
   const handleCustomCategoryChange = (text: string) => {
     setCustomCategory(text);
     onChange({
@@ -203,7 +251,119 @@ export default function Step2Subcategory({ state, onChange }: StepProps): React.
     });
   };
 
-  const filteredPills = pills.filter((pill) =>
+  // Render for Student Category with Exam Types & Popularity Ranking
+  const renderStudentExamSection = () => {
+    const exams = examsQuery.data || [];
+
+    return (
+      <View style={styles.examSectionContainer}>
+        {/* Exam Type Tabs */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.typeTabsScroll}
+          style={styles.typeTabsWrapper}
+        >
+          {examTypeTabs.map((tab) => {
+            const isActive = selectedExamType === tab.value;
+            return (
+              <TouchableOpacity
+                key={tab.value}
+                style={[styles.typeTabPill, isActive && styles.typeTabPillActive]}
+                onPress={() => setSelectedExamType(tab.value)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.typeTabText, isActive && styles.typeTabTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Exams Grid / Pills */}
+        <View style={styles.pillsContainer}>
+          {exams.length === 0 && (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No exams found matching your filter.</Text>
+            </View>
+          )}
+          {exams.map((exam) => {
+            const isSelected =
+              subcategories.includes(exam.name) ||
+              subcategories.includes(exam.slug) ||
+              subcategories.includes(exam.id);
+
+            const typeLabel =
+              exam.exam_type === 'entrance'
+                ? 'Entrance'
+                : exam.exam_type === 'sarkari'
+                ? 'Govt'
+                : exam.exam_type === 'board'
+                ? 'Board'
+                : exam.exam_type === 'professional'
+                ? 'Professional'
+                : 'Exam';
+
+            return (
+              <Pressable
+                key={exam.id}
+                style={[
+                  styles.examCardPill,
+                  isSelected ? styles.examCardSelected : styles.pillUnselected,
+                ]}
+                onPress={() => handleExamPress(exam)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: isSelected }}
+                accessibilityLabel={exam.name}
+              >
+                <View style={[styles.examColorDot, { backgroundColor: exam.color || '#5B4FE8' }]} />
+                <View style={styles.examTextCol}>
+                  <Text
+                    style={[
+                      styles.examTitleText,
+                      isSelected ? styles.pillTextSelected : styles.pillTextUnselected,
+                    ]}
+                  >
+                    {exam.name}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.examTypeBadgeText,
+                      isSelected ? styles.examTypeBadgeSelected : styles.examTypeBadgeUnselected,
+                    ]}
+                  >
+                    {typeLabel}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+
+          {/* "Other" Option */}
+          <Pressable
+            key="Other"
+            style={[
+              styles.pill,
+              subcategories.includes('Other') ? styles.pillSelected : styles.pillUnselected,
+            ]}
+            onPress={() => handlePillPress('Other')}
+          >
+            <Text
+              style={[
+                styles.pillText,
+                subcategories.includes('Other') ? styles.pillTextSelected : styles.pillTextUnselected,
+              ]}
+            >
+              + Other Exam
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  };
+
+  const filteredStaticPills = staticPills.filter((pill) =>
     pill.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
@@ -215,14 +375,20 @@ export default function Step2Subcategory({ state, onChange }: StepProps): React.
     >
       <Text style={styles.heading}>{getHeading()}</Text>
       <Text style={styles.subtext}>
-        Select {isMultiSelect ? 'all that apply' : 'your primary focus'}.
+        {isExamCandidate
+          ? 'Select up to 2 exams to unlock curated syllabus & progress tracking.'
+          : `Select ${isMultiSelect ? 'all that apply' : 'your primary focus'}.`}
       </Text>
 
-      {(category === 'student' || category === 'cse_student') && (
+      {(isExamCandidate || category === 'cse_student') && (
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search exam..."
+            placeholder={
+              category === 'aspirant'
+                ? 'Search Sarkari exams (UPSC, SSC, Banking, Railways)...'
+                : 'Search exams (NEET, JEE, CAT, GATE, Boards)...'
+            }
             placeholderTextColor={COLORS.t3}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -231,41 +397,45 @@ export default function Step2Subcategory({ state, onChange }: StepProps): React.
         </View>
       )}
 
-      <View style={styles.pillsContainer}>
-        {filteredPills.map((pill) => {
-          const isSelected = subcategories.includes(pill);
-          return (
-            <Pressable
-              key={pill}
-              style={[
-                styles.pill,
-                isSelected ? styles.pillSelected : styles.pillUnselected,
-              ]}
-              onPress={() => handlePillPress(pill)}
-              accessibilityRole={isMultiSelect ? 'checkbox' : 'radio'}
-              accessibilityState={{ checked: isSelected }}
-              accessibilityLabel={pill}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text
+      {isExamCandidate ? (
+        renderStudentExamSection()
+      ) : (
+        <View style={styles.pillsContainer}>
+          {filteredStaticPills.map((pill) => {
+            const isSelected = subcategories.includes(pill);
+            return (
+              <Pressable
+                key={pill}
                 style={[
-                  styles.pillText,
-                  isSelected ? styles.pillTextSelected : styles.pillTextUnselected,
+                  styles.pill,
+                  isSelected ? styles.pillSelected : styles.pillUnselected,
                 ]}
+                onPress={() => handlePillPress(pill)}
+                accessibilityRole={isMultiSelect ? 'checkbox' : 'radio'}
+                accessibilityState={{ checked: isSelected }}
+                accessibilityLabel={pill}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                {pill}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+                <Text
+                  style={[
+                    styles.pillText,
+                    isSelected ? styles.pillTextSelected : styles.pillTextUnselected,
+                  ]}
+                >
+                  {pill}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       {showCustomInput && (
         <View style={styles.customInputContainer}>
-          <Text style={styles.customLabel}>Tell us your focus area:</Text>
+          <Text style={styles.customLabel}>Tell us your exam or focus area:</Text>
           <TextInput
             style={styles.customInput}
-            placeholder="e.g. CA Foundation, IELTS, Coding..."
+            placeholder="e.g. State PSC, B.Com, MCA..."
             placeholderTextColor={COLORS.t3}
             value={customCategory}
             onChangeText={handleCustomCategoryChange}
@@ -368,5 +538,89 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     height: 52,
     paddingHorizontal: SPACING.lg,
+  },
+  examSectionContainer: {
+    width: '100%',
+  },
+  typeTabsWrapper: {
+    marginBottom: SPACING.lg,
+  },
+  typeTabsScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: SPACING.lg,
+  },
+  typeTabPill: {
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+  },
+  typeTabPillActive: {
+    backgroundColor: '#1E1B4B',
+    borderColor: '#1E1B4B',
+  },
+  typeTabText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  typeTabTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  examCardPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: RADIUS.lg,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+  },
+  examCardSelected: {
+    backgroundColor: COLORS.violet,
+    borderColor: COLORS.violet,
+  },
+  examColorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  examTextCol: {
+    flexDirection: 'column',
+  },
+  examTitleText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  examTypeBadgeText: {
+    fontSize: 10,
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    marginTop: 1,
+  },
+  examTypeBadgeUnselected: {
+    color: '#9CA3AF',
+  },
+  examTypeBadgeSelected: {
+    color: '#E0E7FF',
+  },
+  emptyContainer: {
+    width: '100%',
+    paddingVertical: SPACING.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 14,
+    color: COLORS.t3,
+    textAlign: 'center',
   },
 });

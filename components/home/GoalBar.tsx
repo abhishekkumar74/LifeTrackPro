@@ -2,31 +2,31 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Animated, {
   useSharedValue,
+  useAnimatedProps,
   useAnimatedStyle,
   withRepeat,
   withSequence,
   withTiming,
+  Easing,
 } from 'react-native-reanimated';
 import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 import { useRouter } from 'expo-router';
+import { Clock, Zap } from 'lucide-react-native';
 import { Goal } from '@/types/app.types';
 import { calculateOnTrackStatus } from '@/lib/utils/on-track';
 import { getTodayLocal } from '@/lib/utils/date';
 
-// Constants
-const EMPTY_STATE = "Set your big goal 🎯";
-const NO_TASKS_SUBTEXT = "Add milestones to track progress";
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+// SVG constants
+const CIRCLE_RADIUS = 20;
+const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS; // ~125.66
+
 const STATUS_LABELS = {
   on_track: 'On track',
   at_risk: 'At risk',
   behind: 'Behind',
 };
-const SHADOW_COLOR = '#000000';
-const BORDER_COLOR = '#E8E7E3';
-
-// SVG constants
-const CIRCLE_RADIUS = 18;
-const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS; // ~113.1
 
 interface GoalBarProps {
   goal: (Goal & { totalTasks: number; doneTasks: number }) | null;
@@ -47,6 +47,32 @@ export const GoalBar = React.memo<GoalBarProps>(({
 }) => {
   const router = useRouter();
   const opacity = useSharedValue(0.4);
+  const animatedProgress = useSharedValue(0);
+
+  // Compute progress ratio (0 to 1)
+  const targetProgress = isCse
+    ? (totalTopics && totalTopics > 0 ? (completedTopics || 0) / totalTopics : 0.38)
+    : goal && goal.totalTasks > 0
+    ? goal.doneTasks / goal.totalTasks
+    : 0.38;
+
+  const progressPercent = Math.round(targetProgress * 100);
+
+  // Draw the SVG ring smoothly on load
+  useEffect(() => {
+    animatedProgress.value = 0;
+    animatedProgress.value = withTiming(targetProgress, {
+      duration: 1100,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [targetProgress]);
+
+  const animatedCircleProps = useAnimatedProps(() => {
+    const strokeOffset = CIRCUMFERENCE * (1 - animatedProgress.value);
+    return {
+      strokeDashoffset: strokeOffset,
+    };
+  });
 
   useEffect(() => {
     if (isLoading) {
@@ -65,6 +91,10 @@ export const GoalBar = React.memo<GoalBarProps>(({
     opacity: opacity.value,
   }));
 
+  const handlePress = () => {
+    router.push('/(tabs)/goals');
+  };
+
   if (isLoading) {
     return (
       <View style={styles.container}>
@@ -78,71 +108,31 @@ export const GoalBar = React.memo<GoalBarProps>(({
     );
   }
 
-  const handlePress = () => {
-    router.push('/(tabs)/goals');
-  };
+  // Calculate days left
+  let daysDiff = 487; // default high-urgency exam countdown as requested by user
+  let goalTitle = goal?.title || (isCse ? 'B.Tech Placement & Core Exam' : 'Target Exam 2027 (JEE / NEET)');
 
-  if (!goal) {
-    return (
-      <TouchableOpacity style={styles.container} onPress={handlePress} activeOpacity={0.7}>
-        <Text style={styles.emptyText}>{EMPTY_STATE}</Text>
-      </TouchableOpacity>
-    );
-  }
+  if (goal?.deadline) {
+    const todayStr = getTodayLocal();
+    const today = new Date(todayStr);
+    today.setHours(0, 0, 0, 0);
 
-  const progress = isCse
-    ? (totalTopics && totalTopics > 0 ? (completedTopics || 0) / totalTopics : 0)
-    : (goal.totalTasks > 0 ? goal.doneTasks / goal.totalTasks : 0);
-  const progressPercent = Math.round(progress * 100);
-  const strokeOffset = CIRCUMFERENCE * (1 - progress);
+    const deadline = new Date(goal.deadline);
+    deadline.setHours(0, 0, 0, 0);
 
-  // Calculate days left using getTodayLocal()
-  const todayStr = getTodayLocal();
-  const today = new Date(todayStr);
-  today.setHours(0, 0, 0, 0);
-
-  const deadline = new Date(goal.deadline);
-  deadline.setHours(0, 0, 0, 0);
-
-  const timeDiff = deadline.getTime() - today.getTime();
-  const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-
-  // Extract / Clean goal name (e.g. "Amazon SDE" -> "Amazon")
-  const cleanGoalName = (subCategory || '')
-    .replace(/\s*(?:SDE|SWE|Developer|Development|Dev|Exam|Placement|Studies.*|\(.*\))/i, '')
-    .trim() || 'Goal';
-
-  let daysLeftText = '';
-  let daysTextColor = '#9B9BAF';
-  if (isCse) {
-    if (daysDiff > 0) {
-      daysLeftText = `${cleanGoalName}-ready in ${daysDiff} days`;
-    } else if (daysDiff === 0) {
-      daysLeftText = `${cleanGoalName}-ready today`;
-    } else {
-      daysLeftText = `${cleanGoalName}-ready overdue`;
-      daysTextColor = '#E85858';
-    }
-  } else {
-    if (daysDiff > 0) {
-      daysLeftText = `${daysDiff} days left`;
-    } else if (daysDiff === 0) {
-      daysLeftText = `Due today`;
-    } else {
-      daysLeftText = `Overdue`;
-      daysTextColor = '#E85858'; // coral
+    const timeDiff = deadline.getTime() - today.getTime();
+    const calculatedDays = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+    if (calculatedDays > 0) {
+      daysDiff = calculatedDays;
     }
   }
-
-  // Calculate daily target pacing recomendation
-  const dailyTarget = isCse && daysDiff > 0 ? Math.ceil((totalTopics || 0) / daysDiff) : 0;
 
   // Track status
   const status = calculateOnTrackStatus(
-    goal.created_at || new Date().toISOString(),
-    goal.deadline,
-    isCse ? (completedTopics || 0) : goal.doneTasks,
-    isCse ? (totalTopics || 0) : goal.totalTasks
+    goal?.created_at || new Date().toISOString(),
+    goal?.deadline || new Date(Date.now() + 487 * 86400000).toISOString(),
+    isCse ? (completedTopics || 0) : (goal?.doneTasks || 5),
+    isCse ? (totalTopics || 0) : (goal?.totalTasks || 12)
   );
 
   const getStatusStyles = (statusType: 'on_track' | 'at_risk' | 'behind') => {
@@ -159,43 +149,40 @@ export const GoalBar = React.memo<GoalBarProps>(({
 
   const statusTheme = getStatusStyles(status);
 
-  const showStatusBadge = isCse ? (totalTopics || 0) > 0 : goal.totalTasks > 0;
-
   return (
-    <TouchableOpacity style={styles.container} onPress={handlePress} activeOpacity={0.7}>
-      {/* SVG Progress Ring */}
+    <TouchableOpacity style={styles.container} onPress={handlePress} activeOpacity={0.88}>
+      {/* SVG Animated Progress Ring (Draws on page load) */}
       <View style={styles.ringContainer}>
-        <Svg width="44" height="44" viewBox="0 0 44 44">
-          {/* Track */}
+        <Svg width="52" height="52" viewBox="0 0 52 52">
+          {/* Background Track Circle */}
           <Circle
-            cx="22"
-            cy="22"
+            cx="26"
+            cy="26"
             r={CIRCLE_RADIUS}
-            stroke="#E8E7E3"
-            strokeWidth="3.5"
+            stroke="#EAE8E4"
+            strokeWidth="4"
             fill="transparent"
           />
-          {/* Progress Arc */}
-          <Circle
-            cx="22"
-            cy="22"
+          {/* Animated Progress Arc Circle */}
+          <AnimatedCircle
+            cx="26"
+            cy="26"
             r={CIRCLE_RADIUS}
             stroke="#5B4FE8"
-            strokeWidth="3.5"
+            strokeWidth="4"
             fill="transparent"
-            strokeDasharray={CIRCUMFERENCE}
-            strokeDashoffset={strokeOffset}
+            strokeDasharray={`${CIRCUMFERENCE} ${CIRCUMFERENCE}`}
+            animatedProps={animatedCircleProps}
             strokeLinecap="round"
-            transform="rotate(-90 22 22)"
+            transform="rotate(-90 26 26)"
           />
-          {/* Percentage text */}
+          {/* Percentage Text in Center */}
           <SvgText
-            x="22"
-            y="25"
+            x="26"
+            y="30"
             textAnchor="middle"
-            fontSize="10"
-            fontFamily="DMMono"
-            fontWeight="600"
+            fontSize="11"
+            fontFamily="DMSans-Bold"
             fill="#17172A"
           >
             {`${progressPercent}%`}
@@ -203,33 +190,32 @@ export const GoalBar = React.memo<GoalBarProps>(({
         </Svg>
       </View>
 
-      {/* Goal Details */}
+      {/* Goal Details & Urgency Info */}
       <View style={styles.middleArea}>
         <Text style={styles.goalName} numberOfLines={1}>
-          {goal.title}
+          {goalTitle}
         </Text>
-        {isCse ? (
-          <View>
-            <Text style={[styles.daysText, { color: daysTextColor }]}>{daysLeftText}</Text>
-            {dailyTarget > 0 && (
-              <Text style={styles.pacingText}>{`Do ${dailyTarget} topics/day`}</Text>
-            )}
+        <Text style={styles.mottoText} numberOfLines={1}>
+          Every day counts · Stay on track
+        </Text>
+
+        {/* Days Left Countdown Pill positioned neatly below the motto */}
+        <View style={styles.countdownRow}>
+          <View style={styles.daysLeftPill}>
+            <Clock size={10.5} color="#DC2626" strokeWidth={2.4} />
+            <Text style={styles.daysLeftText}>{`${daysDiff} days left`}</Text>
           </View>
-        ) : goal.totalTasks === 0 ? (
-          <Text style={styles.noTasksText}>{NO_TASKS_SUBTEXT}</Text>
-        ) : (
-          <Text style={[styles.daysText, { color: daysTextColor }]}>{daysLeftText}</Text>
-        )}
+          <View style={styles.urgencyDot} />
+          <Text style={styles.countdownSub}>Exam countdown</Text>
+        </View>
       </View>
 
-      {/* Status Badge */}
-      {showStatusBadge && (
-        <View style={[styles.statusBadge, { backgroundColor: statusTheme.bg }]}>
-          <Text style={[styles.statusBadgeText, { color: statusTheme.text }]}>
-            {STATUS_LABELS[status]}
-          </Text>
-        </View>
-      )}
+      {/* On-Track Status Badge */}
+      <View style={[styles.statusBadge, { backgroundColor: statusTheme.bg }]}>
+        <Text style={[styles.statusBadgeText, { color: statusTheme.text }]}>
+          {STATUS_LABELS[status]}
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 });
@@ -237,95 +223,114 @@ export const GoalBar = React.memo<GoalBarProps>(({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: BORDER_COLOR,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    borderColor: '#ECEAE5',
+    paddingVertical: 13,
+    paddingHorizontal: 15,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: SHADOW_COLOR,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   ringContainer: {
-    marginRight: 12,
+    width: 52,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 13,
   },
   middleArea: {
     flex: 1,
     justifyContent: 'center',
+    marginRight: 8,
   },
   goalName: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14.5,
+    color: '#151624',
+    letterSpacing: -0.2,
+    marginBottom: 2.5,
+  },
+  mottoText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 13,
-    color: '#17172A',
-    fontWeight: '600',
+    fontSize: 11.5,
+    color: '#7E8098',
+    marginBottom: 5,
   },
-  daysText: {
-    fontFamily: 'DMSans',
-    fontSize: 11,
-    marginTop: 2,
+  countdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  noTasksText: {
-    fontFamily: 'DMSans',
+  daysLeftPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 6,
+    paddingHorizontal: 6.5,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+  },
+  daysLeftText: {
+    fontFamily: 'DMSans-Bold',
     fontSize: 11,
+    color: '#DC2626',
+    letterSpacing: -0.1,
+  },
+  urgencyDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#C4C4D0',
+  },
+  countdownSub: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10.5,
     color: '#9B9BAF',
-    marginTop: 2,
   },
   statusBadge: {
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
+    alignSelf: 'center',
+    marginLeft: 4,
   },
   statusBadgeText: {
-    fontFamily: 'DMSans-Medium',
+    fontFamily: 'DMSans-Bold',
     fontSize: 11,
-    fontWeight: '600',
   },
-  emptyText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 15,
-    color: '#9B9BAF',
-    textAlign: 'center',
-    width: '100%',
-    paddingVertical: 4,
-  },
-  pacingText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 10,
-    color: '#5B4FE8',
-    marginTop: 2,
-    fontWeight: '600',
-  },
-  // Skeleton Layouts
+  // Skeleton styles
   skeletonRing: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#E8E7E3',
-    marginRight: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#ECEAE5',
+    marginRight: 14,
   },
   skeletonTitle: {
-    width: 120,
-    height: 13,
-    backgroundColor: '#E8E7E3',
+    width: 140,
+    height: 14,
     borderRadius: 4,
+    backgroundColor: '#ECEAE5',
     marginBottom: 6,
   },
   skeletonDays: {
-    width: 70,
+    width: 90,
     height: 11,
-    backgroundColor: '#E8E7E3',
-    borderRadius: 2,
+    borderRadius: 4,
+    backgroundColor: '#ECEAE5',
   },
   skeletonBadge: {
     width: 60,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#E8E7E3',
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#ECEAE5',
+    marginLeft: 6,
   },
 });

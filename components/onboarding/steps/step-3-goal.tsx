@@ -15,6 +15,7 @@ interface StepProps {
     category: UserCategory | null;
     goalText: string;
     timeline: string | null;
+    subcategories?: string[];
   };
   onChange: (updates: { goalText?: string; timeline?: string | null }) => void;
 }
@@ -28,13 +29,25 @@ const TIMELINE_OPTIONS = [
 ];
 
 export default function Step3Goal({ state, onChange }: StepProps): React.JSX.Element {
-  const { category, goalText, timeline } = state;
+  const { category, goalText, timeline, subcategories } = state;
   const [isFocused, setIsFocused] = useState(false);
 
   const getPlaceholder = (): string => {
     switch (category) {
-      case 'student':
-        return 'e.g. Clear NEET 2026, AIR under 3000';
+      case 'student': {
+        const target = subcategories?.[0];
+        return target
+          ? `e.g. Clear ${target} with Top Rank`
+          : 'e.g. Clear target entrance exam with Top Rank';
+      }
+      case 'aspirant': {
+        const target = subcategories?.[0];
+        return target
+          ? `e.g. Crack ${target.toUpperCase()} in First Attempt`
+          : 'e.g. Crack UPSC / SSC / Banking in 1st Attempt';
+      }
+      case 'cse_student':
+        return 'e.g. Crack Amazon / Google SDE-1 offer';
       case 'employee':
         return 'e.g. Get promoted to Senior Manager';
       case 'creator':
@@ -42,7 +55,7 @@ export default function Step3Goal({ state, onChange }: StepProps): React.JSX.Ele
       case 'entrepreneur':
         return 'e.g. Hit ₹10L monthly revenue';
       default:
-        return 'e.g. Learn Spanish fluently';
+        return 'e.g. Achieve my dream goals with discipline';
     }
   };
 

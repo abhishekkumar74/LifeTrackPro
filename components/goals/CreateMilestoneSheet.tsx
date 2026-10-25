@@ -146,7 +146,7 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
           <Text style={styles.fieldLabel}>Milestone Title</Text>
           <BottomSheetTextInput
             style={styles.textInput}
-            placeholder="e.g. Complete Physics syllabus"
+            placeholder="e.g. Complete target syllabus section"
             placeholderTextColor="#9B9BAF"
             value={title}
             onChangeText={setTitle}

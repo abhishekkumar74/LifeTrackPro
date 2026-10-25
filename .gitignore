@@ -51,6 +51,7 @@ yarn-error.*
 
 # macOS
 .DS_Store
+Icon?
 !**/icon.png
 *.html
 !privacy.html

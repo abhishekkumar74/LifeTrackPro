@@ -198,7 +198,7 @@ export function useCreateNote() {
           ease_factor: 2.5,
           interval_days: 1,
           review_count: 0,
-          next_review: tomorrowStr,
+          next_review: noteData.next_review || tomorrowStr,
           user_id: session.user.id,
         })
         .select()
@@ -210,6 +210,7 @@ export function useCreateNote() {
     onSuccess: (newNote) => {
       const user = useAuthStore.getState().user;
       queryClient.invalidateQueries({ queryKey: ['notes', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['flashcards', user?.id] });
       // Pre-warm the cache for this new note ID
       queryClient.setQueryData(['note', user?.id, newNote.id], newNote);
     },

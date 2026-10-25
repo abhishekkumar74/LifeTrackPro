@@ -138,7 +138,7 @@ export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
         {Platform.OS === 'web' ? (
           <TextInput
             style={styles.textInput}
-            placeholder="e.g. NEET Biology Session"
+            placeholder="e.g. Deep Study & Focus Session"
             placeholderTextColor="#9B9BAF"
             value={roomName}
             onChangeText={setRoomName}
@@ -147,7 +147,7 @@ export const CreateRoomSheet: React.FC<CreateRoomSheetProps> = ({
         ) : (
           <BottomSheetTextInput
             style={styles.textInput}
-            placeholder="e.g. NEET Biology Session"
+            placeholder="e.g. Deep Study & Focus Session"
             placeholderTextColor="#9B9BAF"
             value={roomName}
             onChangeText={setRoomName}

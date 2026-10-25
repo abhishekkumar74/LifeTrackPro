@@ -227,6 +227,38 @@ const SUBCATEGORIES: Record<UserCategory, string[]> = {
   ],
 };
 
+function getShortTargetName(nameOrSlug: string): string {
+  const s = (nameOrSlug || '').toLowerCase();
+  if (s.includes('btech') || s.includes('computer science') || s.includes('cse')) return 'B.Tech CSE';
+  if (s.includes('upsc')) return 'UPSC CSE';
+  if (s.includes('ssc-cgl') || s === 'ssc cgl') return 'SSC CGL';
+  if (s.includes('chsl') || s.includes('mts')) return 'SSC CHSL';
+  if (s.includes('alp') || s.includes('loco pilot')) return 'RRB ALP';
+  if (s.includes('technician') || s.includes('rrb-tech')) return 'RRB Tech';
+  if (s.includes('je') || s.includes('junior engineer')) return 'RRB JE';
+  if (s.includes('rpf-si') || s.includes('rpf sub') || s.includes('rpf si')) return 'RPF SI';
+  if (s.includes('rpf') || s.includes('constable')) return 'RPF Constable';
+  if (s.includes('ministerial')) return 'RRB Ministerial';
+  if (s.includes('paramedical')) return 'RRB Paramedical';
+  if (s.includes('section controller') || s.includes('section-controller')) return 'Section Controller';
+  if (s.includes('group d') || s.includes('group-d')) return 'RRB Group D';
+  if (s.includes('rrb') || s.includes('railway') || s.includes('ntpc')) return 'RRB NTPC';
+  if (s.includes('ibps') || s.includes('bank') || s.includes('sbi')) return 'Bank PO/Clerk';
+  if (s.includes('pcs') || s.includes('bpsc') || s.includes('uppsc')) return 'State PCS';
+  if (s.includes('neet')) return 'NEET UG';
+  if (s.includes('jee-adv') || s.includes('jee advanced')) return 'JEE Adv';
+  if (s.includes('jee')) return 'JEE Main';
+  if (s.includes('cat')) return 'CAT';
+  if (s.includes('gate')) return 'GATE';
+  if (s.includes('clat')) return 'CLAT';
+  if (s.includes('cuet')) return 'CUET';
+  if (s.includes('nda')) return 'NDA';
+  if (s.includes('cds')) return 'CDS';
+  if (s.includes('placement')) return 'Placements';
+  if (nameOrSlug.length > 14) return nameOrSlug.substring(0, 13) + '…';
+  return nameOrSlug;
+}
+
 export default function ProfileScreen(): React.JSX.Element {
   useAndroidBackHandler();
   const insets = useSafeAreaInsets();
@@ -387,6 +419,7 @@ export default function ProfileScreen(): React.JSX.Element {
   const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>(profile?.sub_category || []);
   const [customSubcategoryText, setCustomSubcategoryText] = useState('');
   const [subCategorySearchQuery, setSubCategorySearchQuery] = useState('');
+  const [activeExamCategoryFilter, setActiveExamCategoryFilter] = useState<string>('all');
 
   // Dynamic exams list for students from master database
   const examsQuery = useExams({ category: 'student' });
@@ -403,32 +436,25 @@ export default function ProfileScreen(): React.JSX.Element {
   );
 
   const studentExamOptions = useMemo(() => {
-    const list = studentExams.map((e) => ({
+    return studentExams.map((e) => ({
       key: e.slug,
       label: e.name,
       exam_type: e.exam_type,
       color: e.color,
     }));
-    return list.length > 0
-      ? [...list, { key: 'Other', label: 'Other', exam_type: 'other' as const, color: '#9CA3AF' }]
-      : [{ key: 'Other', label: 'Other', exam_type: 'other' as const, color: '#9CA3AF' }];
   }, [studentExams]);
 
   const getSubcategoriesList = useCallback(
     (cat: UserCategory): { key: string; label: string; color?: string; exam_type?: string }[] => {
       if (cat === 'aspirant') {
         const sarkariList = studentExamOptions.filter((e) => e.exam_type === 'sarkari');
-        const otherExams = studentExamOptions.filter((e) => e.exam_type !== 'sarkari');
-        return [...sarkariList, ...otherExams];
+        return [...sarkariList, { key: 'Other', label: 'Other', exam_type: 'other' as const, color: '#9CA3AF' }];
       }
       if (cat === 'student') {
         const entranceList = studentExamOptions.filter(
           (e) => e.exam_type === 'entrance' || e.exam_type === 'board'
         );
-        const otherExams = studentExamOptions.filter(
-          (e) => e.exam_type !== 'entrance' && e.exam_type !== 'board'
-        );
-        return [...entranceList, ...otherExams];
+        return [...entranceList, { key: 'Other', label: 'Other', exam_type: 'other' as const, color: '#9CA3AF' }];
       }
       if (cat === 'cse_student') {
         const predefined = (SUBCATEGORIES.cse_student || []).map((s) => ({
@@ -493,11 +519,8 @@ export default function ProfileScreen(): React.JSX.Element {
       if (!session) throw new Error('Not authenticated');
 
       const dbUpdates = { ...updates };
-      if ((dbUpdates.category as string) === 'cse_student') {
-        dbUpdates.category = 'student' as any;
-        if (!dbUpdates.sub_category?.includes('cse_student')) {
-          dbUpdates.sub_category = ['cse_student', ...(dbUpdates.sub_category || [])];
-        }
+      if (dbUpdates.sub_category) {
+        dbUpdates.sub_category = dbUpdates.sub_category.filter((s) => s !== 'cse_student');
       }
 
       const { data, error } = await supabase
@@ -552,6 +575,7 @@ export default function ProfileScreen(): React.JSX.Element {
     );
     setCustomSubcategoryText(custom || '');
     setSubCategorySearchQuery('');
+    setActiveExamCategoryFilter('all');
     setIsSubCategoryPickerOpen(true);
   };
 
@@ -560,6 +584,7 @@ export default function ProfileScreen(): React.JSX.Element {
     setSelectedSubcategories([]);
     setCustomSubcategoryText('');
     setSubCategorySearchQuery('');
+    setActiveExamCategoryFilter('all');
 
     updateProfileMutation.mutate(
       { category: cat, sub_category: [] },
@@ -668,12 +693,218 @@ export default function ProfileScreen(): React.JSX.Element {
     );
   };
 
-  const filteredSubCategories = useMemo(() => {
+  const getExamCategory = useCallback((itemKey: string, label: string, userCat: UserCategory): string => {
+    const s = (itemKey + ' ' + label).toLowerCase();
+    if (userCat === 'aspirant') {
+      if (
+        s.includes('rrb') ||
+        s.includes('rpf') ||
+        s.includes('railway') ||
+        s.includes('loco pilot') ||
+        s.includes('technician') ||
+        s.includes('junior engineer') ||
+        s.includes('ministerial') ||
+        s.includes('paramedical') ||
+        s.includes('section controller') ||
+        s.includes('group d') ||
+        s.includes('ntpc')
+      ) {
+        return 'railway';
+      }
+      if (
+        s.includes('ssc') ||
+        s.includes('cgl') ||
+        s.includes('chsl') ||
+        s.includes('mts') ||
+        s.includes('cpo') ||
+        s.includes('steno') ||
+        s.includes('gd')
+      ) {
+        return 'ssc';
+      }
+      if (
+        s.includes('upsc') ||
+        s.includes('civil services') ||
+        s.includes('ias') ||
+        s.includes('ips') ||
+        s.includes('pcs') ||
+        s.includes('bpsc') ||
+        s.includes('uppsc') ||
+        s.includes('mppsc') ||
+        s.includes('state pcs')
+      ) {
+        return 'upsc';
+      }
+      if (
+        s.includes('bank') ||
+        s.includes('ibps') ||
+        s.includes('sbi') ||
+        s.includes('rbi') ||
+        s.includes('po') ||
+        s.includes('clerk')
+      ) {
+        return 'banking';
+      }
+      if (
+        s.includes('defence') ||
+        s.includes('defense') ||
+        s.includes('cds') ||
+        s.includes('nda') ||
+        s.includes('afcat') ||
+        s.includes('capf')
+      ) {
+        return 'defence';
+      }
+      return 'other';
+    }
+
+    if (userCat === 'student') {
+      if (
+        s.includes('jee') ||
+        s.includes('engineering') ||
+        s.includes('gate') ||
+        s.includes('btech') ||
+        s.includes('bitsat') ||
+        s.includes('iit')
+      ) {
+        return 'engineering';
+      }
+      if (
+        s.includes('neet') ||
+        s.includes('medical') ||
+        s.includes('aiims') ||
+        s.includes('mbbs')
+      ) {
+        return 'medical';
+      }
+      if (
+        s.includes('board') ||
+        s.includes('class 10') ||
+        s.includes('class 12') ||
+        s.includes('cbse') ||
+        s.includes('icse')
+      ) {
+        return 'boards';
+      }
+      if (
+        s.includes('cat') ||
+        s.includes('clat') ||
+        s.includes('mat') ||
+        s.includes('xat') ||
+        s.includes('law') ||
+        s.includes('mba') ||
+        s.includes('cuet')
+      ) {
+        return 'management';
+      }
+      return 'other';
+    }
+
+    if (userCat === 'cse_student') {
+      if (
+        s.includes('btech') ||
+        s.includes('cse') ||
+        s.includes('computer science') ||
+        s.includes('gate') ||
+        s.includes('higher studies')
+      ) {
+        return 'core';
+      }
+      if (
+        s.includes('placement') ||
+        s.includes('amazon') ||
+        s.includes('google') ||
+        s.includes('microsoft') ||
+        s.includes('meta') ||
+        s.includes('faang') ||
+        s.includes('system design') ||
+        s.includes('competitive programming')
+      ) {
+        return 'placements';
+      }
+      if (
+        s.includes('backend') ||
+        s.includes('full stack') ||
+        s.includes('devops') ||
+        s.includes('cloud') ||
+        s.includes('open source')
+      ) {
+        return 'dev';
+      }
+      return 'other';
+    }
+
+    return 'all';
+  }, []);
+
+  const examCategoryTabs = useMemo(() => {
     const predefined = getSubcategoriesList(category);
+
+    const countSelected = (groupId: string) => {
+      return predefined.filter((item) => {
+        const exam = studentExams.find((e) => e.slug === item.key);
+        const isSelected = selectedSubcategories.some(
+          (s) => s === item.key || (exam && (s === exam.name || s === exam.id))
+        );
+        if (!isSelected) return false;
+        if (groupId === 'all') return true;
+        return getExamCategory(item.key, item.label, category) === groupId;
+      }).length;
+    };
+
+    if (category === 'aspirant') {
+      return [
+        { id: 'all', label: 'All Exams', selectedCount: countSelected('all') },
+        { id: 'railway', label: '🚆 Railways & RPF', selectedCount: countSelected('railway') },
+        { id: 'ssc', label: '🏛️ SSC', selectedCount: countSelected('ssc') },
+        { id: 'upsc', label: '🇮🇳 UPSC & State PCS', selectedCount: countSelected('upsc') },
+        { id: 'banking', label: '🏦 Banking', selectedCount: countSelected('banking') },
+        { id: 'defence', label: '🛡️ Defence', selectedCount: countSelected('defence') },
+        { id: 'other', label: 'Other', selectedCount: countSelected('other') },
+      ];
+    }
+
+    if (category === 'student') {
+      return [
+        { id: 'all', label: 'All Exams', selectedCount: countSelected('all') },
+        { id: 'engineering', label: '⚡ Engineering (JEE/GATE)', selectedCount: countSelected('engineering') },
+        { id: 'medical', label: '🩺 Medical (NEET)', selectedCount: countSelected('medical') },
+        { id: 'boards', label: '📚 Boards (10th/12th)', selectedCount: countSelected('boards') },
+        { id: 'management', label: '📈 Management & Law', selectedCount: countSelected('management') },
+        { id: 'other', label: 'Other', selectedCount: countSelected('other') },
+      ];
+    }
+
+    if (category === 'cse_student') {
+      return [
+        { id: 'all', label: 'All Topics', selectedCount: countSelected('all') },
+        { id: 'core', label: '💻 Core Computer Science', selectedCount: countSelected('core') },
+        { id: 'placements', label: '🏆 FAANG & Placements', selectedCount: countSelected('placements') },
+        { id: 'dev', label: '🌐 Web, Cloud & DevOps', selectedCount: countSelected('dev') },
+        { id: 'other', label: 'Other', selectedCount: countSelected('other') },
+      ];
+    }
+
+    return [];
+  }, [category, getSubcategoriesList, selectedSubcategories, studentExams, getExamCategory]);
+
+  const filteredSubCategories = useMemo(() => {
+    let list = getSubcategoriesList(category);
+
+    // 1. Filter by category tab if not 'all'
+    if (activeExamCategoryFilter !== 'all') {
+      list = list.filter((item) => {
+        return getExamCategory(item.key, item.label, category) === activeExamCategoryFilter;
+      });
+    }
+
+    // 2. Filter by search query if any
     const query = subCategorySearchQuery.trim().toLowerCase();
-    if (!query) return predefined;
-    return predefined.filter((item) => item.label.toLowerCase().includes(query));
-  }, [category, subCategorySearchQuery, getSubcategoriesList]);
+    if (!query) return list;
+    return list.filter(
+      (item) => item.label.toLowerCase().includes(query) || item.key.toLowerCase().includes(query)
+    );
+  }, [category, subCategorySearchQuery, getSubcategoriesList, activeExamCategoryFilter, getExamCategory]);
 
   const handlePeakTimeSelect = (pt: 'morning' | 'afternoon' | 'night') => {
     setPeakTime(pt);
@@ -947,13 +1178,21 @@ export default function ProfileScreen(): React.JSX.Element {
       emoji: '🎓',
       shortLabel: 'Student',
     };
-    const subCats = profile?.sub_category && profile.sub_category.length > 0
-      ? profile.sub_category
-          .filter((s) => s !== 'cse_student')
-          .map(getSubcategoryDisplayName)
-          .join(', ')
-      : '';
-    return subCats ? `${meta.emoji} ${meta.shortLabel} · ${subCats}` : `${meta.emoji} ${meta.label}`;
+    const subCats = (profile?.sub_category || []).filter((s) => s !== 'cse_student');
+
+    if (subCats.length === 0) {
+      return `${meta.emoji} ${meta.shortLabel}`;
+    }
+
+    if (subCats.length === 1) {
+      const shortName = getShortTargetName(getSubcategoryDisplayName(subCats[0]));
+      return `${meta.emoji} ${meta.shortLabel} · ${shortName}`;
+    }
+
+    // 2 targets: compact 1-line tag
+    const firstShort = getShortTargetName(getSubcategoryDisplayName(subCats[0]));
+    const secondShort = getShortTargetName(getSubcategoryDisplayName(subCats[1]));
+    return `${firstShort} • ${secondShort}`;
   };
 
   const activeTargetDetails = useMemo(() => {
@@ -967,7 +1206,7 @@ export default function ProfileScreen(): React.JSX.Element {
 
     const displayName = exam ? exam.name : (primarySlug ? getSubcategoryDisplayName(primarySlug) : '');
     const secondarySlug = subCats[1];
-    const secondaryName = secondarySlug ? getSubcategoryDisplayName(secondarySlug) : null;
+    const secondaryName = secondarySlug ? getShortTargetName(getSubcategoryDisplayName(secondarySlug)) : null;
 
     let emoji = '🎯';
     let color = '#5B4FE8';
@@ -1051,7 +1290,9 @@ export default function ProfileScreen(): React.JSX.Element {
               onPress={handleOpenSubCategoryPicker}
               activeOpacity={0.7}
             >
-              <Text style={styles.categoryPillText}>{getCategoryDisplay()}</Text>
+              <Text style={styles.categoryPillText} numberOfLines={1} ellipsizeMode="tail">
+                {getCategoryDisplay()}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1520,7 +1761,7 @@ export default function ProfileScreen(): React.JSX.Element {
         <BottomSheet
           ref={subCategorySheetRef}
           index={0}
-          snapPoints={['75%']}
+          snapPoints={['82%']}
           enableDynamicSizing={false}
           enablePanDownToClose
           backdropComponent={renderBackdrop}
@@ -1575,38 +1816,107 @@ export default function ProfileScreen(): React.JSX.Element {
               </View>
             )}
 
+            {/* Exam Category Filter Chips Bar (All, Railways, SSC, UPSC, Banking, Defence...) */}
+            {examCategoryTabs.length > 0 && (
+              <View style={styles.sheetCategoryTabsWrapper}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.sheetCategoryTabsContainer}
+                >
+                  {examCategoryTabs.map((tab) => {
+                    const isActive = activeExamCategoryFilter === tab.id;
+                    return (
+                      <TouchableOpacity
+                        key={tab.id}
+                        style={[
+                          styles.sheetCategoryTab,
+                          isActive && styles.sheetCategoryTabActive,
+                        ]}
+                        onPress={() => setActiveExamCategoryFilter(tab.id)}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.sheetCategoryTabText,
+                            isActive && styles.sheetCategoryTabTextActive,
+                          ]}
+                        >
+                          {tab.label}
+                        </Text>
+                        {tab.selectedCount > 0 && (
+                          <View
+                            style={[
+                              styles.sheetCategoryTabBadge,
+                              isActive && styles.sheetCategoryTabBadgeActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.sheetCategoryTabBadgeText,
+                                isActive && styles.sheetCategoryTabBadgeTextActive,
+                              ]}
+                            >
+                              {tab.selectedCount}
+                            </Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
             <ScrollView
               style={styles.sheetScrollView}
               contentContainerStyle={styles.sheetScrollContent}
               keyboardShouldPersistTaps="handled"
             >
               <View style={styles.sheetPillsContainer}>
-                {filteredSubCategories.map((item) => {
-                  const exam = studentExams.find((e) => e.slug === item.key);
-                  const isSelected = selectedSubcategories.some(
-                    (s) => s === item.key || (exam && (s === exam.name || s === exam.id))
-                  );
-                  return (
-                    <TouchableOpacity
-                      key={item.key}
-                      style={[
-                        styles.sheetPill,
-                        isSelected ? styles.sheetPillSelected : styles.sheetPillUnselected,
-                      ]}
-                      onPress={() => handleToggleSubcategory(item.key)}
-                      activeOpacity={0.7}
-                    >
-                      <Text
+                {filteredSubCategories.length > 0 ? (
+                  filteredSubCategories.map((item) => {
+                    const exam = studentExams.find((e) => e.slug === item.key);
+                    const isSelected = selectedSubcategories.some(
+                      (s) => s === item.key || (exam && (s === exam.name || s === exam.id))
+                    );
+                    return (
+                      <TouchableOpacity
+                        key={item.key}
                         style={[
-                          styles.sheetPillText,
-                          isSelected ? styles.sheetPillTextSelected : styles.sheetPillTextUnselected,
+                          styles.sheetPill,
+                          isSelected ? styles.sheetPillSelected : styles.sheetPillUnselected,
                         ]}
+                        onPress={() => handleToggleSubcategory(item.key)}
+                        activeOpacity={0.7}
                       >
-                        {item.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                        <Text
+                          style={[
+                            styles.sheetPillText,
+                            isSelected ? styles.sheetPillTextSelected : styles.sheetPillTextUnselected,
+                          ]}
+                        >
+                          {item.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })
+                ) : (
+                  <View style={styles.sheetEmptyCategoryContainer}>
+                    <Text style={styles.sheetEmptyCategoryText}>
+                      No exams found in this category.
+                    </Text>
+                    {activeExamCategoryFilter !== 'all' && (
+                      <TouchableOpacity
+                        style={styles.sheetEmptyCategoryBtn}
+                        onPress={() => setActiveExamCategoryFilter('all')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.sheetEmptyCategoryBtnText}>Show All Exams</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
               </View>
 
               {/* Custom Input for Other */}
@@ -2057,9 +2367,11 @@ const styles = StyleSheet.create({
   categoryPill: {
     backgroundColor: '#EAE8FD',
     borderRadius: 12,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 3,
     marginBottom: 8,
+    maxWidth: '85%',
+    alignSelf: 'center',
   },
   categoryPillText: {
     fontFamily: 'DMSans-Medium',
@@ -2803,8 +3115,88 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E8E7E3',
     paddingHorizontal: 12,
-    marginBottom: 16,
+    marginBottom: 10,
     height: 44,
+  },
+  sheetCategoryTabsWrapper: {
+    marginBottom: 14,
+  },
+  sheetCategoryTabsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sheetCategoryTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7F6F3',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  sheetCategoryTabActive: {
+    backgroundColor: '#1E1B4B',
+    borderColor: '#1E1B4B',
+  },
+  sheetCategoryTabText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#5C5C70',
+    fontWeight: '600',
+  },
+  sheetCategoryTabTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  sheetCategoryTabBadge: {
+    backgroundColor: '#EAE8FD',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sheetCategoryTabBadgeActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  sheetCategoryTabBadgeText: {
+    fontFamily: 'DMMono-Medium',
+    fontSize: 10,
+    color: '#5B4FE8',
+    fontWeight: '700',
+  },
+  sheetCategoryTabBadgeTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  sheetEmptyCategoryContainer: {
+    width: '100%',
+    paddingVertical: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  sheetEmptyCategoryText: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#9B9BAF',
+    textAlign: 'center',
+  },
+  sheetEmptyCategoryBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#EEEDFA',
+  },
+  sheetEmptyCategoryBtnText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#5B4FE8',
+    fontWeight: '700',
   },
   sheetSearchInput: {
     flex: 1,

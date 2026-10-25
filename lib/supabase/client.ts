@@ -248,6 +248,51 @@ export type TransactionRow = {
   updated_at: string;
 }
 
+export type ExamRow = {
+  id: string;
+  name: string;
+  slug: string;
+  category: string;
+  exam_type: string;
+  popularity_score: number;
+  description: string | null;
+  icon_name: string | null;
+  color: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type SubjectRow = {
+  id: string;
+  name: string;
+  code: string | null;
+  color: string;
+  icon_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ExamSubjectRow = {
+  id: string;
+  exam_id: string;
+  subject_id: string;
+  display_name: string | null;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ExamChapterRow = {
+  id: string;
+  exam_subject_id: string;
+  name: string;
+  order_index: number;
+  estimated_hours: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- TABLE INTERFACES ---
 
 export type ProfileTable = {
@@ -459,6 +504,94 @@ export type JournalEntryTable = {
   Relationships: [];
 };
 
+export type ExamTable = {
+  Row: ExamRow;
+  Insert: Omit<ExamRow, 'id' | 'created_at' | 'updated_at'> & {
+    id?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  Update: Partial<ExamRow>;
+  Relationships: [];
+};
+
+export type SubjectTable = {
+  Row: SubjectRow;
+  Insert: Omit<SubjectRow, 'id' | 'created_at' | 'updated_at'> & {
+    id?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  Update: Partial<SubjectRow>;
+  Relationships: [];
+};
+
+export type ExamSubjectTable = {
+  Row: ExamSubjectRow;
+  Insert: Omit<ExamSubjectRow, 'id' | 'created_at' | 'updated_at'> & {
+    id?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  Update: Partial<ExamSubjectRow>;
+  Relationships: [];
+};
+
+export type ExamChapterTable = {
+  Row: ExamChapterRow;
+  Insert: Omit<ExamChapterRow, 'id' | 'created_at' | 'updated_at'> & {
+    id?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  Update: Partial<ExamChapterRow>;
+  Relationships: [];
+};
+
+export type UserExamEnrollmentRow = {
+  id: string;
+  user_id: string;
+  exam_id: string;
+  exam_slug: string;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserExamEnrollmentTable = {
+  Row: UserExamEnrollmentRow;
+  Insert: Omit<UserExamEnrollmentRow, 'id' | 'created_at' | 'updated_at'> & {
+    id?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  Update: Partial<UserExamEnrollmentRow>;
+  Relationships: [];
+};
+
+export type UserChapterProgressRow = {
+  id: string;
+  user_id: string;
+  chapter_id: string;
+  status: 'in_progress' | 'done';
+  completed_at: string | null;
+  notes: string | null;
+  revision_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserChapterProgressTable = {
+  Row: UserChapterProgressRow;
+  Insert: Omit<UserChapterProgressRow, 'id' | 'created_at' | 'updated_at'> & {
+    id?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  Update: Partial<UserChapterProgressRow>;
+  Relationships: [];
+};
+
 /**
  * Generic schema types definition for Supabase client.
  * Provides custom typings for relational database mapping.
@@ -482,6 +615,12 @@ export type Database = {
       transactions: TransactionTable;
       room_messages: RoomMessageTable;
       journal_entries: JournalEntryTable;
+      exams: ExamTable;
+      subjects: SubjectTable;
+      exam_subjects: ExamSubjectTable;
+      exam_chapters: ExamChapterTable;
+      user_exam_enrollments: UserExamEnrollmentTable;
+      user_chapter_progress: UserChapterProgressTable;
     };
     Views: {
       [_ in never]: never;

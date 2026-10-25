@@ -15,7 +15,58 @@ export type SyllabusStatus = 'not_started' | 'in_progress' | 'done' | 'needs_rev
 
 export type RoomType = 'silent' | 'music' | 'discussion';
 
+export type ExamType = 'entrance' | 'sarkari' | 'board' | 'professional' | 'other';
+
 // --- DATA MODEL INTERFACES ---
+
+export interface Exam {
+  id: string;
+  name: string;
+  slug: string;
+  category: string;
+  exam_type: ExamType;
+  popularity_score: number;
+  description: string | null;
+  icon_name: string | null;
+  color: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Subject {
+  id: string;
+  name: string;
+  code?: string | null;
+  color: string;
+  icon_name?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ExamSubject {
+  id: string;
+  exam_id: string;
+  subject_id: string;
+  name: string;
+  display_name?: string | null;
+  code?: string | null;
+  color: string;
+  order_index: number;
+  subject?: Subject;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ExamChapter {
+  id: string;
+  exam_subject_id: string;
+  name: string;
+  order_index: number;
+  estimated_hours?: number;
+  created_at?: string;
+  updated_at?: string;
+}
 
 export interface UserProfile {
   id: string;
@@ -137,7 +188,31 @@ export interface SyllabusTopic {
   topic: string;
   status: SyllabusStatus;
   order_index: number;
+  exam_slug?: string | null;
+  chapter_id?: string | null;
   created_at: string;
+}
+
+export interface UserExamEnrollment {
+  id: string;
+  user_id: string;
+  exam_id: string;
+  exam_slug: string;
+  is_primary: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface UserChapterProgress {
+  id: string;
+  user_id: string;
+  chapter_id: string;
+  status: 'in_progress' | 'done';
+  completed_at?: string | null;
+  notes?: string | null;
+  revision_count?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface StudyRoom {
