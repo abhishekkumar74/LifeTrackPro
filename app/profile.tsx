@@ -69,7 +69,64 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const CATEGORIES: UserCategory[] = ['student', 'cse_student', 'employee', 'creator', 'entrepreneur', 'educator', 'aspirant'];
+const CATEGORIES: UserCategory[] = [
+  'aspirant',
+  'student',
+  'cse_student',
+  'employee',
+  'creator',
+  'entrepreneur',
+  'educator',
+];
+
+export const CATEGORY_META: Record<
+  UserCategory,
+  { label: string; emoji: string; shortLabel: string; subtitle: string }
+> = {
+  aspirant: {
+    label: 'Govt Job Aspirant',
+    emoji: '🎯',
+    shortLabel: 'Govt Aspirant',
+    subtitle: 'UPSC, SSC, Banking, Railways, Defence',
+  },
+  student: {
+    label: 'Entrance Exams',
+    emoji: '🎓',
+    shortLabel: 'Entrance Exams',
+    subtitle: 'NEET, JEE, CUET, CAT, GATE, Boards',
+  },
+  cse_student: {
+    label: 'College Student',
+    emoji: '🏛️',
+    shortLabel: 'College Student',
+    subtitle: 'B.Tech, BCA, Degree & Placements',
+  },
+  employee: {
+    label: 'Working Professional',
+    emoji: '💼',
+    shortLabel: 'Professional',
+    subtitle: 'Corporate, Remote & Tech',
+  },
+  creator: {
+    label: 'Creator',
+    emoji: '🎨',
+    shortLabel: 'Creator',
+    subtitle: 'Content, Design & Media',
+  },
+  entrepreneur: {
+    label: 'Entrepreneur',
+    emoji: '🚀',
+    shortLabel: 'Entrepreneur',
+    subtitle: 'Startups & Business',
+  },
+  educator: {
+    label: 'Educator',
+    emoji: '📖',
+    shortLabel: 'Educator',
+    subtitle: 'Teaching & Coaching',
+  },
+};
+
 const PEAK_TIMES: ('morning' | 'afternoon' | 'night')[] = ['morning', 'afternoon', 'night'];
 const DURATIONS = [25, 50, 90];
 const DELETION_REASONS = [
@@ -83,6 +140,8 @@ const DELETION_REASONS = [
 
 const SUBCATEGORIES: Record<UserCategory, string[]> = {
   cse_student: [
+    'B.Tech Computer Science (CSE)',
+    'Campus Placement',
     'Amazon SDE',
     'Google SWE',
     'Microsoft SWE',
@@ -90,7 +149,6 @@ const SUBCATEGORIES: Record<UserCategory, string[]> = {
     'Startup (Product)',
     'FAANG (General)',
     'GATE Exam',
-    'Campus Placement',
     'Higher Studies (MS/MBA)',
     'Backend Development',
     'Full Stack Development',
@@ -348,15 +406,38 @@ export default function ProfileScreen(): React.JSX.Element {
     const list = studentExams.map((e) => ({
       key: e.slug,
       label: e.name,
+      exam_type: e.exam_type,
+      color: e.color,
     }));
     return list.length > 0
-      ? [...list, { key: 'Other', label: 'Other' }]
-      : [{ key: 'Other', label: 'Other' }];
+      ? [...list, { key: 'Other', label: 'Other', exam_type: 'other' as const, color: '#9CA3AF' }]
+      : [{ key: 'Other', label: 'Other', exam_type: 'other' as const, color: '#9CA3AF' }];
   }, [studentExams]);
 
   const getSubcategoriesList = useCallback(
-    (cat: UserCategory): { key: string; label: string }[] => {
-      if (cat === 'student') return studentExamOptions;
+    (cat: UserCategory): { key: string; label: string; color?: string; exam_type?: string }[] => {
+      if (cat === 'aspirant') {
+        const sarkariList = studentExamOptions.filter((e) => e.exam_type === 'sarkari');
+        const otherExams = studentExamOptions.filter((e) => e.exam_type !== 'sarkari');
+        return [...sarkariList, ...otherExams];
+      }
+      if (cat === 'student') {
+        const entranceList = studentExamOptions.filter(
+          (e) => e.exam_type === 'entrance' || e.exam_type === 'board'
+        );
+        const otherExams = studentExamOptions.filter(
+          (e) => e.exam_type !== 'entrance' && e.exam_type !== 'board'
+        );
+        return [...entranceList, ...otherExams];
+      }
+      if (cat === 'cse_student') {
+        const predefined = (SUBCATEGORIES.cse_student || []).map((s) => ({
+          key: s === 'B.Tech Computer Science (CSE)' ? 'btech-cse' : s,
+          label: s,
+          color: '#6366F1',
+        }));
+        return predefined;
+      }
       return (SUBCATEGORIES[cat] || []).map((s) => ({ key: s, label: s }));
     },
     [studentExamOptions]
@@ -493,7 +574,8 @@ export default function ProfileScreen(): React.JSX.Element {
   };
 
   const handleToggleSubcategory = (itemKey: string) => {
-    const isMultiSelect = category === 'student' || category === 'cse_student';
+    const isMultiSelect =
+      category === 'student' || category === 'aspirant' || category === 'cse_student';
     const exam = studentExams.find((e) => e.slug === itemKey);
     const isSelected = selectedSubcategories.some(
       (s) => s === itemKey || (exam && (s === exam.name || s === exam.id))
@@ -508,7 +590,7 @@ export default function ProfileScreen(): React.JSX.Element {
         );
       } else {
         if (selectedSubcategories.length >= 2) {
-          showToast('Maximum 2 exams can be tracked at a time for focus', 'info');
+          showToast('Maximum 2 exams/courses can be tracked simultaneously', 'info');
           return;
         }
         setSelectedSubcategories([...selectedSubcategories, itemKey]);
@@ -545,13 +627,42 @@ export default function ProfileScreen(): React.JSX.Element {
     updateProfileMutation.mutate(
       { sub_category: finalSubcategories },
       {
-        onSuccess: () => {
-          showToast('Updated ✓', 'success');
+        onSuccess: async () => {
+          // Sync with user_exam_enrollments table for live curriculum linking
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user?.id) {
+              for (const slug of finalSubcategories) {
+                if (!slug || slug === 'Other') continue;
+                const { data: ex } = await supabase
+                  .from('exams')
+                  .select('id')
+                  .eq('slug', slug)
+                  .maybeSingle();
+                if (ex?.id) {
+                  await supabase.from('user_exam_enrollments').upsert(
+                    {
+                      user_id: session.user.id,
+                      exam_id: ex.id,
+                      exam_slug: slug,
+                      is_primary: true,
+                    },
+                    { onConflict: 'user_id,exam_id' }
+                  );
+                }
+              }
+            }
+          } catch (e) {
+            // resilient fallback
+          }
+
+          showToast('Target Updated ✓', 'success');
           setIsSubCategoryPickerOpen(false);
           queryClient.invalidateQueries({ queryKey: ['subjects'] });
+          queryClient.invalidateQueries({ queryKey: ['syllabus'] });
         },
         onError: () => {
-          showToast('Failed to update sub-category', 'error');
+          showToast('Failed to update target', 'error');
         },
       }
     );
@@ -831,12 +942,74 @@ export default function ProfileScreen(): React.JSX.Element {
   };
 
   const getCategoryDisplay = () => {
-    const cat = profile?.category ? profile.category.charAt(0).toUpperCase() + profile.category.slice(1) : 'Student';
+    const meta = CATEGORY_META[profile?.category || 'student'] || {
+      label: 'Student',
+      emoji: '🎓',
+      shortLabel: 'Student',
+    };
     const subCats = profile?.sub_category && profile.sub_category.length > 0
-      ? profile.sub_category.map(getSubcategoryDisplayName).join(', ')
+      ? profile.sub_category
+          .filter((s) => s !== 'cse_student')
+          .map(getSubcategoryDisplayName)
+          .join(', ')
       : '';
-    return subCats ? `${cat} · ${subCats}` : cat;
+    return subCats ? `${meta.emoji} ${meta.shortLabel} · ${subCats}` : `${meta.emoji} ${meta.label}`;
   };
+
+  const activeTargetDetails = useMemo(() => {
+    const isAcademic = category === 'student' || category === 'aspirant' || category === 'cse_student';
+    const subCats = (profile?.sub_category || []).filter((s) => s !== 'cse_student');
+    const primarySlug = subCats[0] || (category === 'cse_student' ? 'btech-cse' : '');
+
+    const exam = studentExams.find(
+      (e) => e.slug === primarySlug || e.id === primarySlug || e.name.toLowerCase() === primarySlug.toLowerCase()
+    );
+
+    const displayName = exam ? exam.name : (primarySlug ? getSubcategoryDisplayName(primarySlug) : '');
+    const secondarySlug = subCats[1];
+    const secondaryName = secondarySlug ? getSubcategoryDisplayName(secondarySlug) : null;
+
+    let emoji = '🎯';
+    let color = '#5B4FE8';
+    let badgeText = 'TARGET';
+    let description = 'Curriculum & syllabus progress linked';
+
+    if (exam) {
+      color = exam.color || '#5B4FE8';
+      if (exam.exam_type === 'sarkari') {
+        emoji = '🏛️';
+        badgeText = 'SARKARI / GOVT';
+      } else if (exam.exam_type === 'entrance') {
+        emoji = exam.slug.includes('neet') ? '🩺' : '🎓';
+        badgeText = 'ENTRANCE';
+      } else if (exam.slug === 'btech-cse') {
+        emoji = '💻';
+        badgeText = 'COLLEGE CURRICULUM';
+      }
+      description = exam.description || description;
+    } else if (category === 'cse_student') {
+      emoji = '💻';
+      color = '#6366F1';
+      badgeText = 'COLLEGE FOCUS';
+      description = 'Complete 4-Year curriculum, DSA & placements prep';
+    } else if (category === 'aspirant') {
+      emoji = '🎯';
+      color = '#D97706';
+      badgeText = 'GOVT TARGET';
+      description = 'High-yield syllabus & daily revision tracking';
+    }
+
+    return {
+      isAcademic,
+      displayName: displayName || (isAcademic ? 'Choose your target exam / course' : 'Select your primary focus'),
+      secondaryName,
+      emoji,
+      color,
+      badgeText,
+      description,
+      hasTarget: Boolean(displayName),
+    };
+  }, [category, profile?.sub_category, studentExams, getSubcategoryDisplayName]);
 
   const initials = profile?.name ? profile.name.trim().charAt(0).toUpperCase() : 'U';
 
@@ -1012,51 +1185,90 @@ export default function ProfileScreen(): React.JSX.Element {
           {/* Category Selector Chips */}
           <View style={styles.rowBlock}>
             <Text style={styles.rowBlockTitle}>Category</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.chipScroll}
+              contentContainerStyle={{ paddingRight: 16 }}
+            >
               {CATEGORIES.map((cat) => {
                 const active = category === cat;
+                const meta = CATEGORY_META[cat] || { emoji: '📌', shortLabel: cat };
                 return (
                   <TouchableOpacity
                     key={cat}
                     style={[styles.chip, active && styles.chipActive]}
                     onPress={() => handleCategorySelect(cat)}
+                    activeOpacity={0.7}
                   >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{cat}</Text>
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {meta.emoji} {meta.shortLabel}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
           </View>
 
-          {/* Sub-category / Preparation row */}
-          <TouchableOpacity
-            style={styles.row}
-            onPress={handleOpenSubCategoryPicker}
-            activeOpacity={0.7}
-          >
-            <View style={styles.rowLabelCol}>
-              <Text style={styles.rowTitle}>
-                {(category === 'student' || category === 'cse_student') ? 'Preparation / Exams' : 'Sub-category'}
+          {/* Dedicated Target Exam / Course Card (Unacademy Style) */}
+          <View style={styles.targetCardContainer}>
+            <View style={styles.targetCardHeaderRow}>
+              <Text style={styles.targetCardSectionTitle}>
+                {activeTargetDetails.isAcademic ? 'MY TARGET EXAM & CURRICULUM' : 'PRIMARY FOCUS & DOMAIN'}
               </Text>
-              <Text style={styles.rowSubtitle}>
-                {(category === 'student' || category === 'cse_student')
-                  ? 'Exams or subjects you are preparing for'
-                  : 'Your specific focus area'}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text
-                style={[styles.rowVal, { maxWidth: 150 }]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
+              <TouchableOpacity
+                onPress={handleOpenSubCategoryPicker}
+                activeOpacity={0.7}
+                style={styles.switchButtonPill}
               >
-                {profile?.sub_category && profile.sub_category.length > 0
-                  ? profile.sub_category.map(getSubcategoryDisplayName).join(', ')
-                  : 'None selected'}
-              </Text>
-              <ChevronRight size={16} color="#9B9BAF" />
+                <Text style={styles.switchButtonPillText}>⇄ Change</Text>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.targetCard,
+                { borderLeftColor: activeTargetDetails.color, borderLeftWidth: 4 },
+              ]}
+              onPress={handleOpenSubCategoryPicker}
+              activeOpacity={0.8}
+            >
+              <View style={styles.targetCardLeft}>
+                <View
+                  style={[
+                    styles.targetCardIconBadge,
+                    { backgroundColor: `${activeTargetDetails.color}18` },
+                  ]}
+                >
+                  <Text style={styles.targetCardIconEmoji}>{activeTargetDetails.emoji}</Text>
+                </View>
+                <View style={styles.targetCardTextCol}>
+                  <View style={styles.targetCardBadgeRow}>
+                    <Text style={[styles.targetCardBadgeText, { color: activeTargetDetails.color }]}>
+                      {activeTargetDetails.badgeText}
+                    </Text>
+                  </View>
+                  <Text style={styles.targetCardTitle} numberOfLines={1}>
+                    {activeTargetDetails.displayName}
+                  </Text>
+                  <Text style={styles.targetCardSubtitle} numberOfLines={2}>
+                    {activeTargetDetails.description}
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={18} color="#9B9BAF" />
+            </TouchableOpacity>
+
+            {/* If user has 2nd target selected, show pill */}
+            {activeTargetDetails.secondaryName && (
+              <View style={styles.secondaryTargetRow}>
+                <Text style={styles.secondaryTargetLabel}>Also preparing for:</Text>
+                <View style={[styles.secondaryTargetBadge, { backgroundColor: '#F0EFFF' }]}>
+                  <Text style={styles.secondaryTargetBadgeText}>+ {activeTargetDetails.secondaryName}</Text>
+                </View>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* PERSONAL VAULT & DIARY SECTION */}
@@ -1074,16 +1286,16 @@ export default function ProfileScreen(): React.JSX.Element {
               <Lock size={18} color="#E5A93C" />
             </View>
             <View style={styles.journalVaultTextCol}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={styles.journalVaultTitle}>Secret Journal Vault</Text>
+              <View style={styles.journalVaultBadgeWrap}>
                 <View style={styles.journalVaultBadge}>
                   <Text style={styles.journalVaultBadgeText}>
                     EARLY BIRD FREE 🎁
                   </Text>
                 </View>
               </View>
+              <Text style={styles.journalVaultTitle} numberOfLines={1}>Secret Journal Vault</Text>
               <Text style={styles.journalVaultSub} numberOfLines={1}>
-                Private encrypted diary & daily reflections (Early Bird Free)
+                Private encrypted diary & daily reflections
               </Text>
             </View>
             <ChevronRight size={16} color="#E5A93C" />
@@ -1322,7 +1534,13 @@ export default function ProfileScreen(): React.JSX.Element {
           <BottomSheetView style={styles.sheetContent}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>
-                {(category === 'student' || category === 'cse_student') ? 'Select Preparations / Exams' : 'Select Sub-category'}
+                {category === 'aspirant'
+                  ? 'Select Sarkari / Govt Exam'
+                  : category === 'student'
+                  ? 'Select Target Entrance Exam'
+                  : category === 'cse_student'
+                  ? 'Select College Course & Target'
+                  : 'Select Focus Area'}
               </Text>
               <TouchableOpacity
                 style={styles.sheetSaveButton}
@@ -1332,17 +1550,23 @@ export default function ProfileScreen(): React.JSX.Element {
                 {updateProfileMutation.isPending ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.sheetSaveButtonText}>Save</Text>
+                  <Text style={styles.sheetSaveButtonText}>Save Target</Text>
                 )}
               </TouchableOpacity>
             </View>
 
-            {/* Search bar for student */}
-            {(category === 'student' || category === 'cse_student') && (
+            {/* Search bar */}
+            {(category === 'student' || category === 'aspirant' || category === 'cse_student') && (
               <View style={styles.sheetSearchContainer}>
                 <TextInput
                   style={styles.sheetSearchInput}
-                  placeholder="Search exams/subjects..."
+                  placeholder={
+                    category === 'aspirant'
+                      ? 'Search Sarkari exams (UPSC, SSC, Banking, Railways)...'
+                      : category === 'student'
+                      ? 'Search entrance exams (NEET, JEE, CAT, GATE)...'
+                      : 'Search courses & focus areas...'
+                  }
                   placeholderTextColor="#9B9BAF"
                   value={subCategorySearchQuery}
                   onChangeText={setSubCategorySearchQuery}
@@ -1842,7 +2066,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#5B4FE8',
-    textTransform: 'capitalize',
+    textTransform: 'none',
   },
   statsRow: {
     flexDirection: 'row',
@@ -2020,7 +2244,7 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans',
     fontSize: 12,
     color: '#5C5C70',
-    textTransform: 'capitalize',
+    textTransform: 'none',
   },
   chipTextActive: {
     color: '#5B4FE8',
@@ -2029,6 +2253,115 @@ const styles = StyleSheet.create({
   chipGrid: {
     flexDirection: 'row',
     gap: 8,
+  },
+  targetCardContainer: {
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F4F3F0',
+    marginTop: 4,
+  },
+  targetCardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  targetCardSectionTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9B9BAF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  switchButtonPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#F0EFFF',
+  },
+  switchButtonPillText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#5B4FE8',
+  },
+  targetCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FAFAF9',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#EFEFEA',
+  },
+  targetCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  targetCardIconBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  targetCardIconEmoji: {
+    fontSize: 20,
+  },
+  targetCardTextCol: {
+    flex: 1,
+  },
+  targetCardBadgeRow: {
+    marginBottom: 2,
+  },
+  targetCardBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  targetCardTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#17172A',
+    marginBottom: 2,
+  },
+  targetCardSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#6B7280',
+    lineHeight: 15,
+  },
+  secondaryTargetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 4,
+    gap: 6,
+  },
+  secondaryTargetLabel: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9B9BAF',
+  },
+  secondaryTargetBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  secondaryTargetBadgeText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#5B4FE8',
+    fontWeight: '600',
   },
   signOutButton: {
     flexDirection: 'row',
@@ -2588,26 +2921,31 @@ const styles = StyleSheet.create({
   journalVaultTextCol: {
     flex: 1,
   },
+  journalVaultBadgeWrap: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
   journalVaultTitle: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#F4EFEB',
+    marginBottom: 2,
   },
   journalVaultBadge: {
     backgroundColor: 'rgba(229, 169, 60, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(229, 169, 60, 0.3)',
+    borderColor: 'rgba(229, 169, 60, 0.35)',
   },
   journalVaultBadgeText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: 'bold',
     color: '#E5A93C',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   journalVaultGoldBadge: {
     backgroundColor: 'rgba(217, 119, 6, 0.2)',
