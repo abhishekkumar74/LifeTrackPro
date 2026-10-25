@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { View, StyleSheet, ScrollView, RefreshControl, StatusBar, Text, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Flame, Timer, AlertCircle, AlertTriangle } from 'lucide-react-native';
+import { Flame, Timer, AlertCircle, AlertTriangle, Check, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase/client';
 import { HomeHeader } from '@/components/home/HomeHeader';
 import { TodayFocusCard } from '@/components/home/TodayFocusCard';
 import { QuickStats } from '@/components/home/QuickStats';
+import { DailyReviewBanner } from '@/components/home/DailyReviewBanner';
 import { ScheduleStrip } from '@/components/home/ScheduleStrip';
 import { HabitRow } from '@/components/home/HabitRow';
 import { GoalBar } from '@/components/home/GoalBar';
@@ -47,6 +48,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false);
   const [streakModalVisible, setStreakModalVisible] = useState(false);
   const [notificationSheetVisible, setNotificationSheetVisible] = useState(false);
+  const [showCompletedTasks, setShowCompletedTasks] = useState(false);
 
   useAndroidBackHandler(() => {
     if (taskSheetVisible) {
@@ -253,6 +255,47 @@ export default function HomeDashboardScreen(): React.JSX.Element {
     });
   }, [completeTaskMutation, handleRefreshStats]);
 
+  const activeTodayTasks = useMemo(() => {
+    return stats.todayTasks?.filter((t) => t.completed_at === null) || [];
+  }, [stats.todayTasks]);
+
+  const completedTodayTasks = useMemo(() => {
+    return stats.todayTasks?.filter((t) => t.completed_at !== null) || [];
+  }, [stats.todayTasks]);
+
+  const renderTaskItem = useCallback((t: any) => {
+    const isCompleted = t.completed_at !== null;
+    const accentColor = t.subject ? getSubjectColor(t.subject) : '#9B9BAF';
+    return (
+      <TouchableOpacity
+        key={t.id}
+        style={[styles.taskItem, isCompleted && styles.taskItemCompleted]}
+        onPress={() => handleToggleTask(t.id, isCompleted, t.milestone_id)}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.checkbox, isCompleted && styles.checkboxChecked]}>
+          {isCompleted && <Text style={styles.checkboxCheck}>✓</Text>}
+        </View>
+        <View style={styles.taskTextContent}>
+          <Text
+            style={[styles.taskTitleText, isCompleted && styles.taskTitleTextCompleted]}
+            numberOfLines={1}
+          >
+            {t.title}
+          </Text>
+          {t.subject && (
+            <View style={styles.taskSubjectBadge}>
+              <View style={[styles.subjectDot, { backgroundColor: accentColor }]} />
+              <Text style={styles.taskSubjectText}>{t.subject}</Text>
+            </View>
+          )}
+        </View>
+        {t.priority === 'urgent' && <AlertCircle size={15} color="#E53E3E" style={{ marginLeft: 8 }} />}
+        {t.priority === 'important' && <AlertTriangle size={15} color="#DD6B20" style={{ marginLeft: 8 }} />}
+      </TouchableOpacity>
+    );
+  }, [handleToggleTask]);
+
   // Tab scroll registration
   const scrollRef = useRef<ScrollView>(null);
   useEffect(() => {
@@ -380,7 +423,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
       {/* Sticky Home Header */}
       <HomeHeader
         name={userName}
-        streakCount={stats.habitStreak}
+        streakCount={stats.activeStreak || stats.habitStreak || 1}
         isLoading={stats.isLoading}
         avatarUrl={profile?.avatar_url}
         onPressStreak={() => setStreakModalVisible(true)}
@@ -404,7 +447,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
           />
         }
       >
-        {/* Zone B — Today's Focus Card */}
+        {/* Zone B — Today's Focus Card (Obsidian themed matching mock) */}
         <TodayFocusCard
           task={stats.topTask}
           isLoading={stats.isLoading}
@@ -416,85 +459,89 @@ export default function HomeDashboardScreen(): React.JSX.Element {
           firstIncompleteTopic={syllabusStats.firstIncompleteTopic}
         />
 
-        {/* Compact Focus Stats Summary Card */}
-        {!stats.isLoading && (
-          <TouchableOpacity
-            style={styles.summaryCard}
-            onPress={() => router.push('/(tabs)/stats')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.summaryCardLeft, { flexDirection: 'row', alignItems: 'center' }]}>
-              <Flame size={14} color="#E8A020" fill="#E8A020" style={{ marginRight: 4 }} />
-              <Text style={styles.summaryStreakText}>
-                {stats.focusStreak} day focus streak
-              </Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryCardRight}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Timer size={14} color="#5B4FE8" style={{ marginRight: 4 }} />
-                <Text style={styles.summaryFocusText}>
-                  Today: {stats.focusMinutesToday}m focused
-                </Text>
-              </View>
-              <Text style={styles.arrowIcon}>→</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-
-        {/* Zone C — Quick Stats Row */}
+        {/* Zone C — Quick Stats Row (Animated count-up with 7-day sparklines) */}
         <View style={styles.statsWrapper}>
           <QuickStats
             focusMinutes={stats.focusMinutesToday}
             tasksTotal={stats.tasksTotal}
             tasksDone={stats.tasksDone}
-            streakDays={stats.habitStreak}
+            streakDays={stats.activeStreak || stats.habitStreak || 1}
             isLoading={stats.isLoading}
+            sparklines={stats.sparklines}
           />
         </View>
+
+        {/* Daily Review Banner — Engagement Hook ("14 flashcards due today") */}
+        <DailyReviewBanner />
 
         {/* Today's Tasks Section */}
         <View style={styles.sectionWrapper}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionHeaderTitle}>Today's Tasks</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={styles.sectionHeaderTitle}>Today's Tasks</Text>
+              {activeTodayTasks.length > 0 && (
+                <View style={styles.tasksCountBadge}>
+                  <Text style={styles.tasksCountBadgeText}>{activeTodayTasks.length}</Text>
+                </View>
+              )}
+            </View>
             <TouchableOpacity onPress={() => setTaskSheetVisible(true)} activeOpacity={0.6}>
               <Text style={styles.seeAllText}>+ Add task</Text>
             </TouchableOpacity>
           </View>
-          {stats.todayTasks && stats.todayTasks.length > 0 ? (
+
+          {activeTodayTasks.length > 0 ? (
             <View style={styles.tasksContainer}>
-              {stats.todayTasks.map((t) => {
-                const isCompleted = t.completed_at !== null;
-                const accentColor = t.subject ? getSubjectColor(t.subject) : '#9B9BAF';
-                return (
-                  <TouchableOpacity
-                    key={t.id}
-                    style={[styles.taskItem, isCompleted && styles.taskItemCompleted]}
-                    onPress={() => handleToggleTask(t.id, isCompleted, t.milestone_id)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.checkbox, isCompleted && styles.checkboxChecked]}>
-                      {isCompleted && <Text style={styles.checkboxCheck}>✓</Text>}
-                    </View>
-                    <View style={styles.taskTextContent}>
-                      <Text
-                        style={[styles.taskTitleText, isCompleted && styles.taskTitleTextCompleted]}
-                        numberOfLines={1}
-                      >
-                        {t.title}
-                      </Text>
-                      {t.subject && (
-                        <View style={styles.taskSubjectBadge}>
-                          <View style={[styles.subjectDot, { backgroundColor: accentColor }]} />
-                          <Text style={styles.taskSubjectText}>{t.subject}</Text>
-                        </View>
-                      )}
-                    </View>
-                    {t.priority === 'urgent' && <AlertCircle size={15} color="#E53E3E" style={{ marginLeft: 8 }} />}
-                    {t.priority === 'important' && <AlertTriangle size={15} color="#DD6B20" style={{ marginLeft: 8 }} />}
-                  </TouchableOpacity>
-                );
-              })}
+              {activeTodayTasks.map(renderTaskItem)}
+
+              {completedTodayTasks.length > 0 && (
+                <TouchableOpacity
+                  style={styles.toggleCompletedRow}
+                  onPress={() => setShowCompletedTasks(!showCompletedTasks)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.toggleCompletedText}>
+                    {showCompletedTasks ? 'Hide completed' : `Show completed (${completedTodayTasks.length})`}
+                  </Text>
+                  {showCompletedTasks ? (
+                    <ChevronUp size={14} color="#9B9BAF" />
+                  ) : (
+                    <ChevronDown size={14} color="#9B9BAF" />
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {showCompletedTasks && completedTodayTasks.map(renderTaskItem)}
+            </View>
+          ) : completedTodayTasks.length > 0 ? (
+            <View style={styles.allDoneCard}>
+              <View style={styles.allDoneHeaderRow}>
+                <View style={styles.allDoneCheckCircle}>
+                  <Check size={14} color="#FFFFFF" strokeWidth={3} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.allDoneTitle}>All caught up! 🎉</Text>
+                  <Text style={styles.allDoneSubtitle}>
+                    {completedTodayTasks.length === 1
+                      ? 'Completed 1 task today'
+                      : `Completed all ${completedTodayTasks.length} tasks today`}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.allDoneViewBtn}
+                  onPress={() => setShowCompletedTasks(!showCompletedTasks)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.allDoneViewText}>
+                    {showCompletedTasks ? 'Hide' : `View (${completedTodayTasks.length})`}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {showCompletedTasks && (
+                <View style={[styles.tasksContainer, { marginTop: 12 }]}>
+                  {completedTodayTasks.map(renderTaskItem)}
+                </View>
+              )}
             </View>
           ) : (
             <View style={styles.emptyTasksCard}>
@@ -572,7 +619,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
       {/* Interactive Streak Modal */}
       <StreakModal
         isVisible={streakModalVisible}
-        streakCount={stats.habitStreak}
+        streakCount={stats.activeStreak || stats.habitStreak || 1}
         weeklyActivity={stats.weeklyActivity}
         onClose={() => setStreakModalVisible(false)}
       />
@@ -771,6 +818,82 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans-Medium',
     fontSize: 13,
     color: '#5B4FE8',
+    fontWeight: '600',
+  },
+  tasksCountBadge: {
+    backgroundColor: '#EAE8FD',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  tasksCountBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#5B4FE8',
+    fontWeight: '700',
+  },
+  allDoneCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  allDoneHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  allDoneCheckCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  allDoneTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    color: '#17172A',
+    fontWeight: '700',
+  },
+  allDoneSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  allDoneViewBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  allDoneViewText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  toggleCompletedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  toggleCompletedText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#9B9BAF',
     fontWeight: '600',
   },
 });
