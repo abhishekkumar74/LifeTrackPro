@@ -361,6 +361,7 @@ export function useReviewNote() {
         // Invalidate queries to guarantee server consistency
         queryClient.invalidateQueries({ queryKey: ['flashcards', user.id] });
         queryClient.invalidateQueries({ queryKey: ['notes', user.id] });
+        queryClient.invalidateQueries({ queryKey: ['notes', user.id, 'due'] });
         queryClient.invalidateQueries({ queryKey: ['due-revisions', user.id] });
       }
     },

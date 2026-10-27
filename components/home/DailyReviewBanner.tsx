@@ -6,10 +6,15 @@ import * as Haptics from 'expo-haptics';
 
 export const DailyReviewBanner = React.memo(() => {
   const router = useRouter();
-  const { dueCards, parsedCards } = useFlashcards();
+  const { dueCards, isLoading } = useFlashcards();
 
-  // If there are real due cards, use that count. Otherwise default to 14 cards ready as an engaging hook.
-  const dueCount = dueCards.length > 0 ? dueCards.length : (parsedCards.length > 0 ? parsedCards.length : 14);
+  // Only show the banner if there are genuine flashcards due today
+  if (isLoading || !dueCards || dueCards.length === 0) {
+    return null;
+  }
+
+  const dueCount = dueCards.length;
+  const estimatedMins = Math.max(1, Math.round(dueCount * 0.5));
 
   const handlePressReview = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -34,10 +39,10 @@ export const DailyReviewBanner = React.memo(() => {
       {/* Middle Text Details — strictly single-line to keep sleek capsule height */}
       <View style={styles.textContent}>
         <Text style={styles.headline} numberOfLines={1} ellipsizeMode="tail">
-          {`${dueCount} flashcards due today`}
+          {`${dueCount} flashcard${dueCount === 1 ? '' : 's'} due today`}
         </Text>
         <Text style={styles.subtext} numberOfLines={1} ellipsizeMode="tail">
-          Last reviewed 23h ago · 5 min
+          {`Spaced repetition review · ~${estimatedMins} min`}
         </Text>
       </View>
 

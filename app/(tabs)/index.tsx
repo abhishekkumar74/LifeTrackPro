@@ -469,7 +469,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
           />
         </View>
 
-        {/* Daily Review Banner — Engagement Hook ("14 flashcards due today") */}
+        {/* Daily Review Banner — Shown only when flashcards are due */}
         <DailyReviewBanner />
 
         {/* Today's Tasks Section */}
