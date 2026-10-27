@@ -408,7 +408,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
   }, [router, isCse, subCategory, syllabusStats]);
 
   const handleSeeAllSchedule = useCallback(() => {
-    router.push('/focus');
+    router.push('/routines');
   }, [router]);
 
   const handleEditHabits = useCallback(() => {
