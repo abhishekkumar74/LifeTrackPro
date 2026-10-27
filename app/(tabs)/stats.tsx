@@ -770,14 +770,8 @@ export default function StatsScreen(): React.JSX.Element {
               }}
               activeOpacity={0.85}
             >
-              <View style={styles.unifiedShareBtnLeft}>
-                <Share2 size={16} color="#FFFFFF" />
-                <Text style={styles.unifiedShareBtnText}>Share Progress Card</Text>
-              </View>
-              <View style={styles.storyPill}>
-                <Sparkles size={11} color="#FDE047" />
-                <Text style={styles.storyPillText}>STORY</Text>
-              </View>
+              <Share2 size={16} color="#FFFFFF" />
+              <Text style={styles.unifiedShareBtnText}>Share Progress Card</Text>
             </TouchableOpacity>
           </View>
           {isNewUser && (
@@ -1442,8 +1436,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(196, 181, 253, 0.35)',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 16,
+    gap: 8,
     shadowColor: '#5B4FE8',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,

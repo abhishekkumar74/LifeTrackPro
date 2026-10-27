@@ -39,7 +39,8 @@ function getAudioModule() {
   return AudioModule;
 }
 import { Href, router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Music, Pause, Play, Send, Share2, Smile, Volume2, VolumeX, CheckCircle, Award, Sparkles, Target, MessageSquare, LayoutGrid } from 'lucide-react-native';
+import { ArrowLeft, Music, Pause, Play, Send, Share2, Smile, Volume2, VolumeX, CheckCircle, Award, Sparkles, Target, MessageSquare, LayoutGrid, Plus, Minus, X, Clock } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   Alert,
@@ -193,6 +194,24 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   const [showCheckinModal, setShowCheckinModal] = useState(false);
   const [checkinNoteInput, setCheckinNoteInput] = useState('');
   const [roomWeeklyGoalTargetMins, setRoomWeeklyGoalTargetMins] = useState(3000); // 50 Hours
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [goalHoursInput, setGoalHoursInput] = useState('50');
+  const [selectedFocusDurationMins, setSelectedFocusDurationMins] = useState(25);
+
+  // Load custom room target goal from local storage
+  useEffect(() => {
+    if (!id) return;
+    AsyncStorage.getItem(`@room_target_${id}`)
+      .then((stored) => {
+        if (stored) {
+          const h = parseFloat(stored);
+          if (!isNaN(h) && h > 0) {
+            setRoomWeeklyGoalTargetMins(Math.round(h * 60));
+          }
+        }
+      })
+      .catch(() => {});
+  }, [id]);
 
   // Music State
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
@@ -489,6 +508,11 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       })
       .on('broadcast', { event: 'room_ended' }, () => {
         handleRoomExpired();
+      })
+      .on('broadcast', { event: 'goal_updated' }, ({ payload }) => {
+        if (payload?.targetHours && typeof payload.targetHours === 'number') {
+          setRoomWeeklyGoalTargetMins(Math.round(payload.targetHours * 60));
+        }
       })
       .on(
         'postgres_changes',
@@ -813,51 +837,30 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     setMessageInput('');
   };
 
-  const handleStartFocus = () => {
+  const handleStartFocus = (durationMins?: number) => {
     if (focusActive) {
       Alert.alert(
         'Stop Focus Session?',
-        'Do you want to stop this focus session? Progress won\'t be logged.',
+        'Do you want to end your personal focus session early?',
         [
           {
             text: 'Stop',
             style: 'destructive',
             onPress: () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
               setFocusActive(false);
             },
           },
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'Keep Focusing', style: 'cancel' },
         ]
       );
     } else {
-      Alert.alert(
-        'Start Focus Session ⏱',
-        'Select focus duration:',
-        [
-          {
-            text: '25 Minutes',
-            onPress: () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
-              setFocusTimeLeft(25 * 60);
-              setFocusDuration(25 * 60);
-              setFocusStartedAt(new Date().toISOString());
-              setFocusActive(true);
-            },
-          },
-          {
-            text: '50 Minutes',
-            onPress: () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
-              setFocusTimeLeft(50 * 60);
-              setFocusDuration(50 * 60);
-              setFocusStartedAt(new Date().toISOString());
-              setFocusActive(true);
-            },
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
+      const mins = durationMins || selectedFocusDurationMins || 25;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      setFocusTimeLeft(mins * 60);
+      setFocusDuration(mins * 60);
+      setFocusStartedAt(new Date().toISOString());
+      setFocusActive(true);
     }
   };
 
@@ -966,10 +969,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
       <StatusBar barStyle="light-content" backgroundColor="#14142B" translucent={false} />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <View style={{ flex: 1 }}>
         {/* TOP BAR */}
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.backIconButton} onPress={handleLeave} activeOpacity={0.7}>
@@ -1074,41 +1074,74 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           >
             {/* SHARED TIMER CARD */}
             <View style={styles.timerCard}>
+              <View style={styles.timerTopHeader}>
+                <View style={styles.timerTopBadge}>
+                  <Sparkles size={11} color="#A78BFA" />
+                  <Text style={styles.timerTopBadgeText}>
+                    {focusActive ? 'PERSONAL FOCUS' : 'GROUP SESSION'}
+                  </Text>
+                </View>
+
+                <View style={styles.timerStatusBadge}>
+                  <View style={[styles.pulseActiveIndicator, focusActive && styles.pulseActiveIndicatorFocus]} />
+                  <Text style={styles.timerStatusText}>
+                    {focusActive ? 'In Progress' : `${memberCount} Studying`}
+                  </Text>
+                </View>
+              </View>
+
               <Text style={styles.timerDisplay}>
                 {focusActive ? formatFocusTime(focusTimeLeft) : timerText}
               </Text>
-              <View style={styles.timerLabelRow}>
-                <View style={styles.pulseActiveIndicator} />
-                <Text style={styles.timerSub}>
-                  {focusActive ? 'Personal Focus Session' : 'Group Session Timer'}
-                </Text>
-              </View>
+
+              <Text style={styles.timerSubText}>
+                {focusActive ? 'Personal focus session in progress' : 'Scheduled group session countdown'}
+              </Text>
+
+              {/* DURATION PRESET SELECTOR (when idle) */}
+              {!focusActive && (
+                <View style={styles.presetPillsRow}>
+                  {[25, 45, 60].map((mins) => {
+                    const isSelected = selectedFocusDurationMins === mins;
+                    return (
+                      <TouchableOpacity
+                        key={mins}
+                        style={[styles.presetPill, isSelected && styles.presetPillActive]}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setSelectedFocusDurationMins(mins);
+                        }}
+                        activeOpacity={0.75}
+                      >
+                        <Clock size={11} color={isSelected ? '#FFFFFF' : '#9B9BAF'} />
+                        <Text style={[styles.presetPillText, isSelected && styles.presetPillTextActive]}>
+                          {mins}m
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
 
               {/* Start/Stop Focus Action inside Timer Card */}
               <TouchableOpacity
-                style={[styles.focusButton, focusActive && styles.stopFocusButton, { marginTop: 14, width: '90%' }]}
-                onPress={handleStartFocus}
-                activeOpacity={0.8}
+                style={[styles.focusButton, focusActive && styles.stopFocusButton]}
+                onPress={() => handleStartFocus()}
+                activeOpacity={0.85}
               >
-                <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                  <Defs>
-                    <LinearGradient id="btnGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <Stop offset="0%" stopColor={focusActive ? '#FF5E7E' : '#5B4FE8'} />
-                      <Stop offset="100%" stopColor={focusActive ? '#E85858' : '#8B6FE8'} />
-                    </LinearGradient>
-                  </Defs>
-                  <Rect width="100%" height="100%" rx={16} fill="url(#btnGrad)" />
-                </Svg>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  {focusActive ? (
-                    <Pause size={15} color="#FFFFFF" fill="#FFFFFF" />
-                  ) : (
-                    <Play size={15} color="#FFFFFF" fill="#FFFFFF" />
-                  )}
-                  <Text style={styles.focusButtonText}>
-                    {focusActive ? 'Stop Focus Session' : 'Start Focus Session ⏱'}
-                  </Text>
-                </View>
+                {focusActive ? (
+                  <View style={styles.focusBtnContent}>
+                    <Pause size={16} color="#FFFFFF" fill="#FFFFFF" />
+                    <Text style={styles.focusButtonText}>End Focus Session</Text>
+                  </View>
+                ) : (
+                  <View style={styles.focusBtnContent}>
+                    <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
+                    <Text style={styles.focusButtonText}>
+                      Start {selectedFocusDurationMins}m Focus Session
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
             </View>
 
@@ -1206,25 +1239,10 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                 <TouchableOpacity
                   style={styles.roomGoalEditBtn}
                   onPress={() => {
-                    Alert.prompt(
-                      'Set Room Target 🎯',
-                      'Enter weekly goal target focus hours for this room:',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Set Target',
-                          onPress: (val?: string) => {
-                            const hours = parseFloat(val || '50');
-                            if (!isNaN(hours) && hours > 0) {
-                              setRoomWeeklyGoalTargetMins(hours * 60);
-                            }
-                          },
-                        },
-                      ],
-                      'plain-text',
-                      (roomWeeklyGoalTargetMins / 60).toString()
-                    );
+                    setGoalHoursInput(String(Math.round(roomWeeklyGoalTargetMins / 60)));
+                    setShowGoalModal(true);
                   }}
+                  activeOpacity={0.75}
                 >
                   <Text style={styles.roomGoalEditBtnText}>Set Goal</Text>
                 </TouchableOpacity>
@@ -1251,7 +1269,6 @@ export default function ActiveRoomScreen(): React.JSX.Element {
             <View style={styles.membersSection}>
               <View style={styles.membersHeaderRow}>
                 <Text style={styles.sectionLabel}>STUDENTS STUDYING</Text>
-                <Text style={styles.interactionSubtitle}>Tap avatar to Cheer or Nudge ✨</Text>
               </View>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-start' }}>
                 {members.map((member) => (
@@ -1301,7 +1318,11 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           </ScrollView>
         ) : (
           /* CHAT TAB VIEW */
-          <View style={{ flex: 1, backgroundColor: '#0C0C1A' }}>
+          <KeyboardAvoidingView
+            style={{ flex: 1, backgroundColor: '#0C0C1A' }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 95 : 0}
+          >
             {/* STICKY MINI HEADER */}
             <View style={styles.stickyMiniBar}>
               <View style={styles.stickyMiniItem}>
@@ -1343,6 +1364,8 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               renderItem={({ item }) => <MessageRow message={item} />}
               contentContainerStyle={styles.chatListContent}
               style={{ flex: 1 }}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
             />
 
             {/* EMOJI PICKER POPUP */}
@@ -1389,9 +1412,9 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                 <Send size={16} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         )}
-      </KeyboardAvoidingView>
+      </View>
 
       {/* FLOATING REACTIONS CANVAS */}
       {activeReactions.map((reaction) => (
@@ -1474,6 +1497,149 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                   <Text style={styles.modalSubmitText}>Post Check-in ✨</Text>
                 </TouchableOpacity>
               </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ROOM WEEKLY GOAL MODAL */}
+      <Modal
+        visible={showGoalModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowGoalModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableOpacity
+            style={styles.goalModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowGoalModal(false)}
+          >
+            <TouchableOpacity
+              style={styles.goalModalContainer}
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <View style={styles.goalModalHeader}>
+                <View style={styles.goalModalHeaderLeft}>
+                  <Award size={20} color="#FFD700" />
+                  <Text style={styles.goalModalTitle}>Set Weekly Room Target</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowGoalModal(false)}
+                  style={styles.goalModalCloseBtn}
+                  activeOpacity={0.7}
+                >
+                  <X size={18} color="#9B9BAF" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.goalModalDesc}>
+                Set the collective focus goal in hours for everyone in this study room.
+              </Text>
+
+              {/* Quick Preset Chips */}
+              <View style={styles.goalPresetRow}>
+                {[20, 35, 50, 75, 100].map((hours) => {
+                  const isSelected = parseFloat(goalHoursInput) === hours;
+                  return (
+                    <TouchableOpacity
+                      key={hours}
+                      style={[styles.goalPresetChip, isSelected && styles.goalPresetChipActive]}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        setGoalHoursInput(String(hours));
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.goalPresetChipText, isSelected && styles.goalPresetChipTextActive]}>
+                        {hours}h
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Stepper Input Row */}
+              <View style={styles.goalInputRow}>
+                <TouchableOpacity
+                  style={styles.goalStepperBtn}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    const curr = parseFloat(goalHoursInput) || 50;
+                    const next = Math.max(5, curr - 5);
+                    setGoalHoursInput(String(next));
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Minus size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+
+                <View style={styles.goalValueBox}>
+                  <TextInput
+                    style={styles.goalTextInput}
+                    value={goalHoursInput}
+                    onChangeText={setGoalHoursInput}
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    selectTextOnFocus
+                  />
+                  <Text style={styles.goalUnitText}>hours / week</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.goalStepperBtn}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    const curr = parseFloat(goalHoursInput) || 50;
+                    const next = Math.min(500, curr + 5);
+                    setGoalHoursInput(String(next));
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Plus size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.goalProgressSummary}>
+                <Text style={styles.goalProgressSummaryText}>
+                  Current Progress: <Text style={{ color: '#00B894', fontWeight: 'bold' }}>{(totalRoomFocusMinutes / 60).toFixed(1)}h</Text> logged
+                </Text>
+              </View>
+
+              {/* Save Target Button */}
+              <TouchableOpacity
+                style={styles.goalSaveBtn}
+                onPress={() => {
+                  const hours = parseFloat(goalHoursInput);
+                  if (!isNaN(hours) && hours > 0) {
+                    const mins = Math.round(hours * 60);
+                    setRoomWeeklyGoalTargetMins(mins);
+                    if (id) {
+                      AsyncStorage.setItem(`@room_target_${id}`, String(hours)).catch(() => {});
+                    }
+                    if (reactionChannelRef.current) {
+                      try {
+                        reactionChannelRef.current.send({
+                          type: 'broadcast',
+                          event: 'goal_updated',
+                          payload: { targetHours: hours },
+                        });
+                      } catch (e) {}
+                    }
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                    setShowGoalModal(false);
+                  } else {
+                    Alert.alert('Invalid Target', 'Please enter a valid target in hours.');
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.goalSaveBtnText}>Save Target</Text>
+              </TouchableOpacity>
             </TouchableOpacity>
           </TouchableOpacity>
         </KeyboardAvoidingView>
@@ -1789,26 +1955,115 @@ const styles = StyleSheet.create({
     color: '#2ED573',
   },
   timerCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderRadius: 24,
+    backgroundColor: '#16142A',
+    borderRadius: 22,
     marginHorizontal: 16,
     marginVertical: 12,
-    paddingVertical: 18,
+    padding: 18,
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(124, 58, 237, 0.28)',
+    shadowColor: '#5B4FE8',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    elevation: 4,
+  },
+  timerTopHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 10,
+  },
+  timerTopBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(108, 92, 231, 0.16)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.09)',
-    shadowColor: '#6C5CE7',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 3,
+    borderColor: 'rgba(108, 92, 231, 0.3)',
+  },
+  timerTopBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#C4B5FD',
+    letterSpacing: 0.6,
+  },
+  timerStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  timerStatusText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#D1D5DB',
+    fontWeight: '600',
   },
   timerDisplay: {
     fontFamily: 'DMMono',
-    fontSize: 46,
-    color: '#F0E6FF',
+    fontSize: 52,
+    color: '#FFFFFF',
     fontWeight: '700',
-    letterSpacing: -1,
+    letterSpacing: 1,
+    marginVertical: 2,
+  },
+  timerSubText: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9E9EB8',
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  presetPillsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  presetPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  presetPillActive: {
+    backgroundColor: 'rgba(91, 79, 232, 0.28)',
+    borderColor: '#7C3AED',
+  },
+  presetPillText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#9B9BAF',
+    fontWeight: '600',
+  },
+  presetPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  focusBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  pulseActiveIndicatorFocus: {
+    backgroundColor: '#00B894',
   },
   timerLabelRow: {
     flexDirection: 'row',
@@ -2134,19 +2389,21 @@ const styles = StyleSheet.create({
     marginTop: 'auto',
   },
   focusButton: {
+    width: '100%',
     height: 50,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
-    shadowColor: '#6C5CE7',
+    backgroundColor: '#5B4FE8',
+    shadowColor: '#5B4FE8',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 10,
     elevation: 4,
   },
   stopFocusButton: {
-    shadowColor: '#FF6B6B',
+    backgroundColor: '#E85858',
+    shadowColor: '#E85858',
   },
   focusButtonText: {
     color: '#FFFFFF',
@@ -2154,6 +2411,152 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: 'bold',
     letterSpacing: 0.3,
+  },
+  goalModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  goalModalContainer: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#1E1A29',
+    borderRadius: 22,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  goalModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  goalModalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  goalModalTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  goalModalCloseBtn: {
+    padding: 4,
+  },
+  goalModalDesc: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#9E9EB8',
+    marginBottom: 16,
+    lineHeight: 17,
+  },
+  goalPresetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  goalPresetChip: {
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  goalPresetChipActive: {
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+    borderColor: '#FFD700',
+  },
+  goalPresetChipText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12,
+    color: '#9B9BAF',
+    fontWeight: '600',
+  },
+  goalPresetChipTextActive: {
+    color: '#FFD700',
+    fontWeight: '700',
+  },
+  goalInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#141221',
+    borderRadius: 14,
+    padding: 8,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  goalStepperBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalValueBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalTextInput: {
+    fontFamily: 'DMMono',
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    padding: 0,
+    minWidth: 70,
+  },
+  goalUnitText: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9E9EB8',
+    marginTop: 2,
+  },
+  goalProgressSummary: {
+    backgroundColor: 'rgba(0, 184, 148, 0.12)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 184, 148, 0.25)',
+  },
+  goalProgressSummaryText: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#D1D5DB',
+  },
+  goalSaveBtn: {
+    backgroundColor: '#FFD700',
+    borderRadius: 14,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  goalSaveBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#16142A',
   },
   reactionsContainer: {
     display: 'none',
