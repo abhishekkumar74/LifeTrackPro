@@ -19,8 +19,12 @@ export function calculateNextReview(
   easeFactor: number = 2.5,
   intervalDays: number = 1
 ): SpacedRepResult {
-  let newRepetitions = repetitions;
-  let newIntervalDays = intervalDays;
+  const safeRep = typeof repetitions === 'number' && !isNaN(repetitions) ? repetitions : 0;
+  const safeEase = typeof easeFactor === 'number' && !isNaN(easeFactor) && easeFactor >= 1.3 ? easeFactor : 2.5;
+  const safeInterval = typeof intervalDays === 'number' && !isNaN(intervalDays) && intervalDays >= 1 ? intervalDays : 1;
+
+  let newRepetitions = safeRep;
+  let newIntervalDays = safeInterval;
 
   if (quality < 3) {
     newRepetitions = 0;
@@ -31,12 +35,12 @@ export function calculateNextReview(
     } else if (newRepetitions === 1) {
       newIntervalDays = 6;
     } else {
-      newIntervalDays = Math.round(intervalDays * easeFactor);
+      newIntervalDays = Math.round(safeInterval * safeEase);
     }
     newRepetitions++;
   }
 
-  let newEaseFactor = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+  let newEaseFactor = safeEase + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
   newEaseFactor = Math.max(1.3, newEaseFactor);
 
   const nextDate = new Date();

@@ -462,20 +462,34 @@ export default function LearnScreen(): React.JSX.Element {
 
   const handleFlashcardGotIt = useCallback((noteId: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    reviewNoteMutation.mutate({ noteId, quality: 4 });
+    reviewNoteMutation.mutate(
+      { noteId, quality: 4 },
+      {
+        onSuccess: () => {
+          refetchFlashcards();
+        },
+      }
+    );
 
     setGotItCount((prev) => prev + 1);
     moveToNextCard();
-  }, [reviewNoteMutation, moveToNextCard]);
+  }, [reviewNoteMutation, moveToNextCard, refetchFlashcards]);
 
   const handleFlashcardReviewAgain = useCallback((noteId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    reviewNoteMutation.mutate({ noteId, quality: 1 });
+    reviewNoteMutation.mutate(
+      { noteId, quality: 1 },
+      {
+        onSuccess: () => {
+          refetchFlashcards();
+        },
+      }
+    );
 
     setReviewAgainCount((prev) => prev + 1);
     setFailedCardIds((prev) => [...prev, noteId]);
     moveToNextCard();
-  }, [reviewNoteMutation, moveToNextCard]);
+  }, [reviewNoteMutation, moveToNextCard, refetchFlashcards]);
 
   // Local Search Filters
   const filteredSyllabus = useMemo((): GroupedSyllabus => {
@@ -2576,7 +2590,10 @@ export default function LearnScreen(): React.JSX.Element {
 
                           <TouchableOpacity
                             style={[styles.completeBtn, styles.doneBtn]}
-                            onPress={() => setStudySessionState('idle')}
+                            onPress={() => {
+                              refetchFlashcards();
+                              setStudySessionState('idle');
+                            }}
                             activeOpacity={0.8}
                           >
                             <Text style={styles.doneBtnText}>Done</Text>

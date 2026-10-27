@@ -988,16 +988,11 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                 {room.name}
               </Text>
               <View style={styles.headerSubRow}>
-                <Text style={styles.headerSubText}>
-                  {memberCount} {memberCount === 1 ? 'member' : 'members'}
-                </Text>
-                <Text style={styles.headerSubDot}>·</Text>
                 <View style={styles.subjectInlineBadge}>
                   <Text style={styles.subjectInlineBadgeText} numberOfLines={1}>
                     {room.subject || 'General'}
                   </Text>
                 </View>
-                <Text style={styles.headerSubDot}>·</Text>
                 <TouchableOpacity
                   onPress={async () => {
                     try {
@@ -1832,13 +1827,14 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 10,
-    gap: 10,
+    marginHorizontal: 8,
+    gap: 8,
+    overflow: 'hidden',
   },
   headerGroupAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: 'rgba(108, 92, 231, 0.25)',
     borderWidth: 1.5,
     borderColor: '#7D6BFB',
@@ -1849,16 +1845,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 6,
     elevation: 4,
+    flexShrink: 0,
   },
   headerGroupEmoji: {
-    fontSize: 19,
+    fontSize: 18,
   },
   headerTextCol: {
     flex: 1,
+    overflow: 'hidden',
+    justifyContent: 'center',
   },
   roomTitle: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#FFFFFF',
     letterSpacing: -0.2,
@@ -1868,6 +1867,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginTop: 2,
+    overflow: 'hidden',
   },
   headerSubText: {
     fontFamily: 'DMSans-Medium',
@@ -1886,7 +1886,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderWidth: 1,
     borderColor: 'rgba(125, 107, 251, 0.4)',
-    maxWidth: 100,
+    maxWidth: 95,
   },
   subjectInlineBadgeText: {
     fontFamily: 'DMSans-Bold',
@@ -1915,6 +1915,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0,
   },
   shareTopButton: {
     width: 38,

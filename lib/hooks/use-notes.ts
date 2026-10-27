@@ -343,8 +343,26 @@ export function useReviewNote() {
     },
     onSuccess: (updatedNote) => {
       const user = useAuthStore.getState().user;
-      queryClient.invalidateQueries({ queryKey: ['notes', user?.id] });
-      queryClient.setQueryData(['note', user?.id, updatedNote.id], updatedNote);
+      if (user?.id) {
+        queryClient.setQueryData(['note', user.id, updatedNote.id], updatedNote);
+
+        // Optimistically update flashcards query cache so UI updates immediately
+        queryClient.setQueryData<Note[]>(['flashcards', user.id], (old) => {
+          if (!old) return old;
+          return old.map((n) => (n.id === updatedNote.id ? { ...n, ...updatedNote } : n));
+        });
+
+        // Optimistically update notes query cache
+        queryClient.setQueryData<Note[]>(['notes', user.id], (old) => {
+          if (!old) return old;
+          return old.map((n) => (n.id === updatedNote.id ? { ...n, ...updatedNote } : n));
+        });
+
+        // Invalidate queries to guarantee server consistency
+        queryClient.invalidateQueries({ queryKey: ['flashcards', user.id] });
+        queryClient.invalidateQueries({ queryKey: ['notes', user.id] });
+        queryClient.invalidateQueries({ queryKey: ['due-revisions', user.id] });
+      }
     },
     onError: (err) => {
       handleSupabaseError(err, 'review_note');
