@@ -196,7 +196,6 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   const [roomWeeklyGoalTargetMins, setRoomWeeklyGoalTargetMins] = useState(3000); // 50 Hours
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [goalHoursInput, setGoalHoursInput] = useState('50');
-  const [selectedFocusDurationMins, setSelectedFocusDurationMins] = useState(25);
 
   // Load custom room target goal from local storage
   useEffect(() => {
@@ -213,6 +212,41 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       .catch(() => {});
   }, [id]);
 
+  // Session tracking in room
+  const userJoinedTimeRef = useRef<number>(Date.now());
+  const hasRecordedSessionRef = useRef<boolean>(false);
+
+  const recordRoomStudySession = useCallback(async () => {
+    if (hasRecordedSessionRef.current) return;
+    const durationSecs = Math.floor((Date.now() - userJoinedTimeRef.current) / 1000);
+    if (durationSecs >= 60 && currentUserId) {
+      hasRecordedSessionRef.current = true;
+      try {
+        const durationMin = Math.max(1, Math.round(durationSecs / 60));
+        await supabase.from('focus_sessions').insert({
+          user_id: currentUserId,
+          session_goal: `Study Room: ${room?.name || 'Group Focus'}`,
+          duration_min: durationMin,
+          subject: room?.subject || null,
+          sound_used: null,
+          mood: null,
+          started_at: new Date(userJoinedTimeRef.current).toISOString(),
+          ended_at: new Date().toISOString(),
+          status: 'completed',
+        });
+
+        const earnedSeeds = Math.min(15, Math.max(2, Math.floor(durationMin / 5)));
+        const currentSeeds = profile?.focus_seeds || 0;
+        await supabase
+          .from('profiles')
+          .update({ focus_seeds: currentSeeds + earnedSeeds })
+          .eq('id', currentUserId);
+      } catch (e) {
+        if (__DEV__) console.warn('Failed to save in-room study session:', e);
+      }
+    }
+  }, [currentUserId, room?.name, room?.subject, profile?.focus_seeds]);
+
   // Music State
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
   const [currentStation, setCurrentStation] = useState<MusicStation>(STATIONS[0]);
@@ -224,12 +258,13 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<'lounge' | 'chat'>('lounge');
 
   const safeGoBack = useCallback(() => {
+    recordRoomStudySession();
     if (router.canGoBack()) {
       router.back();
     } else {
       router.replace('/rooms' as Href);
     }
-  }, []);
+  }, [recordRoomStudySession]);
 
   const playStation = useCallback(async (station: MusicStation, volume: number) => {
     const loadId = Math.random().toString();
@@ -391,17 +426,10 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   }, []);
 
   // Local State
-  const [userJoinedTime] = useState<number>(Date.now());
   const [timerText, setTimerText] = useState('00:00');
   const [messageInput, setMessageInput] = useState('');
   const [activeReactions, setActiveReactions] = useState<FloatingEmojiData[]>([]);
   const reactionChannelRef = useRef<any>(null);
-
-  // Local Focus Timer State inside Room
-  const [focusActive, setFocusActive] = useState(false);
-  const [focusTimeLeft, setFocusTimeLeft] = useState(0);
-  const [focusDuration, setFocusDuration] = useState(0);
-  const [focusStartedAt, setFocusStartedAt] = useState('');
 
   // Enforce free capacity limits
   const hostIsPremium = hostProfile?.is_premium || false;
@@ -423,6 +451,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     if (hasExpiredRef.current) return;
     hasExpiredRef.current = true;
 
+    recordRoomStudySession();
     stopMusic();
 
     try {
@@ -626,76 +655,19 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     return () => clearInterval(interval);
   }, [room, handleRoomExpired]);
 
-  const formatFocusTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
-
-  const handleFocusComplete = async (durationSecs: number, startedAt: string) => {
-    try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
-
-      const endedAt = new Date().toISOString();
-      const durationMin = Math.max(1, Math.round(durationSecs / 60));
-
-      // 1. Insert focus session to Supabase
-      const { error } = await supabase.from('focus_sessions').insert({
-        user_id: currentUserId,
-        session_goal: `Study Room: ${room?.name || 'Group Focus'}`,
-        duration_min: durationMin,
-        subject: room?.subject || null,
-        sound_used: null,
-        mood: null,
-        started_at: startedAt,
-        ended_at: endedAt,
-        status: 'completed',
-      });
-
-      if (error) throw error;
-
-      // 2. Award seeds to user profile
-      const currentSeeds = profile?.focus_seeds || 0;
-      await supabase
-        .from('profiles')
-        .update({ focus_seeds: currentSeeds + 5 })
-        .eq('id', currentUserId);
-
-      Alert.alert(
-        'Congratulations!',
-        `You focused for ${durationMin}m in the study room! You earned 5 Focus Seeds.`,
-        [{ text: 'Great!' }]
-      );
-    } catch (e) {
-      if (__DEV__) console.warn('Failed to save in-room focus session:', e);
-    }
-  };
-
-  useEffect(() => {
-    if (!focusActive) return;
-
-    const interval = setInterval(() => {
-      setFocusTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          setFocusActive(false);
-          handleFocusComplete(focusDuration, focusStartedAt);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [focusActive, focusDuration, focusStartedAt]);
-
-  // Sync Focus session status with room presence
+  // Sync active study presence
   useEffect(() => {
     updatePresenceStatus({
-      isFocusing: focusActive,
-      focusTimeLeft: focusTimeLeft,
+      isFocusing: true,
     });
-  }, [focusActive, focusTimeLeft, updatePresenceStatus]);
+  }, [updatePresenceStatus]);
+
+  // Record session on screen unmount
+  useEffect(() => {
+    return () => {
+      recordRoomStudySession();
+    };
+  }, [recordRoomStudySession]);
 
   const handleCloseCheckinModal = useCallback(() => {
     Keyboard.dismiss();
@@ -734,9 +706,8 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
   const totalRoomFocusMinutes = useMemo(() => {
     const baseMins = members.length * 45;
-    const activeFocusMins = focusActive ? Math.round((focusDuration - focusTimeLeft) / 60) : 0;
-    return Math.max(120, baseMins + activeFocusMins);
-  }, [members.length, focusActive, focusDuration, focusTimeLeft]);
+    return Math.max(120, baseMins);
+  }, [members.length]);
 
   // Synchronize DB member count from the host's client
   useEffect(() => {
@@ -835,33 +806,6 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     if (!messageInput.trim()) return;
     sendMessage(messageInput);
     setMessageInput('');
-  };
-
-  const handleStartFocus = (durationMins?: number) => {
-    if (focusActive) {
-      Alert.alert(
-        'Stop Focus Session?',
-        'Do you want to end your personal focus session early?',
-        [
-          {
-            text: 'Stop',
-            style: 'destructive',
-            onPress: () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              setFocusActive(false);
-            },
-          },
-          { text: 'Keep Focusing', style: 'cancel' },
-        ]
-      );
-    } else {
-      const mins = durationMins || selectedFocusDurationMins || 25;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      setFocusTimeLeft(mins * 60);
-      setFocusDuration(mins * 60);
-      setFocusStartedAt(new Date().toISOString());
-      setFocusActive(true);
-    }
   };
 
   if (isRoomLoading) {
@@ -1067,77 +1011,29 @@ export default function ActiveRoomScreen(): React.JSX.Element {
             contentContainerStyle={{ paddingVertical: 12 }}
             showsVerticalScrollIndicator={false}
           >
-            {/* SHARED TIMER CARD */}
+            {/* SHARED LIVE ROOM TIMER CARD */}
             <View style={styles.timerCard}>
               <View style={styles.timerTopHeader}>
                 <View style={styles.timerTopBadge}>
                   <Sparkles size={11} color="#A78BFA" />
-                  <Text style={styles.timerTopBadgeText}>
-                    {focusActive ? 'PERSONAL FOCUS' : 'GROUP SESSION'}
-                  </Text>
+                  <Text style={styles.timerTopBadgeText}>LIVE STUDY ROOM</Text>
                 </View>
 
                 <View style={styles.timerStatusBadge}>
-                  <View style={[styles.pulseActiveIndicator, focusActive && styles.pulseActiveIndicatorFocus]} />
+                  <View style={[styles.pulseActiveIndicator, styles.pulseActiveIndicatorFocus]} />
                   <Text style={styles.timerStatusText}>
-                    {focusActive ? 'In Progress' : `${memberCount} Studying`}
+                    {memberCount} Studying Live
                   </Text>
                 </View>
               </View>
 
               <Text style={styles.timerDisplay}>
-                {focusActive ? formatFocusTime(focusTimeLeft) : timerText}
+                {timerText}
               </Text>
 
               <Text style={styles.timerSubText}>
-                {focusActive ? 'Personal focus session in progress' : 'Scheduled group session countdown'}
+                Scheduled group study session remaining
               </Text>
-
-              {/* DURATION PRESET SELECTOR (when idle) */}
-              {!focusActive && (
-                <View style={styles.presetPillsRow}>
-                  {[25, 45, 60].map((mins) => {
-                    const isSelected = selectedFocusDurationMins === mins;
-                    return (
-                      <TouchableOpacity
-                        key={mins}
-                        style={[styles.presetPill, isSelected && styles.presetPillActive]}
-                        onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
-                          setSelectedFocusDurationMins(mins);
-                        }}
-                        activeOpacity={0.75}
-                      >
-                        <Clock size={11} color={isSelected ? '#FFFFFF' : '#9B9BAF'} />
-                        <Text style={[styles.presetPillText, isSelected && styles.presetPillTextActive]}>
-                          {mins}m
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-
-              {/* Start/Stop Focus Action inside Timer Card */}
-              <TouchableOpacity
-                style={[styles.focusButton, focusActive && styles.stopFocusButton]}
-                onPress={() => handleStartFocus()}
-                activeOpacity={0.85}
-              >
-                {focusActive ? (
-                  <View style={styles.focusBtnContent}>
-                    <Pause size={16} color="#FFFFFF" fill="#FFFFFF" />
-                    <Text style={styles.focusButtonText}>End Focus Session</Text>
-                  </View>
-                ) : (
-                  <View style={styles.focusBtnContent}>
-                    <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
-                    <Text style={styles.focusButtonText}>
-                      Start {selectedFocusDurationMins}m Focus Session
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
             </View>
 
             {/* MUSIC PLAYER BAR (only for Music Rooms) */}
@@ -1323,7 +1219,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               <View style={styles.stickyMiniItem}>
                 <Sparkles size={14} color="#A29BFE" />
                 <Text style={styles.stickyMiniTimerText}>
-                  {focusActive ? formatFocusTime(focusTimeLeft) : timerText}
+                  {timerText}
                 </Text>
               </View>
 
@@ -2022,7 +1918,8 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans',
     fontSize: 12,
     color: '#9E9EB8',
-    marginBottom: 14,
+    marginTop: 2,
+    marginBottom: 4,
     textAlign: 'center',
   },
   presetPillsRow: {
