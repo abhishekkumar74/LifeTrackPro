@@ -248,6 +248,13 @@ export default function FocusScreen(): React.JSX.Element {
   const [showSummary, setShowSummary] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
+
+  // Snapshot of elapsed seconds captured at the moment session completes — prevents stale closure issue
+  const completedElapsedSecondsRef = useRef<number>(0);
+  const completedSessionGoalRef = useRef<string>('');
+  const completedSubjectRef = useRef<string | null>(null);
+  const completedSoundRef = useRef<string | null>(null);
+  const completedRoutineIdRef = useRef<string | null>(null);
   const [tempGoal, setTempGoal] = useState('');
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
@@ -648,6 +655,23 @@ export default function FocusScreen(): React.JSX.Element {
       prevModeRef.current === 'focus' &&
       (currentMode === 'short_break' || currentMode === 'long_break')
     ) {
+      // Snapshot all session values NOW before any state resets
+      const currentStore = useFocusStore.getState();
+      const focusMinutes = currentStore.selectedPreset === 'custom'
+        ? currentStore.customMinutes
+        : parseInt(currentStore.selectedPreset.split('/')[0], 10);
+
+      // Use elapsedSeconds from store directly (most up-to-date value)
+      const snappedElapsed = currentStore.elapsedSeconds > 0
+        ? currentStore.elapsedSeconds
+        : focusMinutes * 60;
+
+      completedElapsedSecondsRef.current = snappedElapsed;
+      completedSessionGoalRef.current = currentStore.sessionGoal || '';
+      completedSubjectRef.current = currentStore.subjectTag;
+      completedSoundRef.current = currentStore.activeSound;
+      completedRoutineIdRef.current = currentStore.linkedRoutineBlockId;
+
       // Trigger completion summary modal
       setShowSummary(true);
       playRewardingCompletionHaptics().catch(() => {});
@@ -699,26 +723,48 @@ export default function FocusScreen(): React.JSX.Element {
     focusAccuracy?: 'fully_focused' | 'partially_distracted' | 'off_track' | null,
     seedsEarned?: number
   ) => {
-    const focusMinutes =
-      selectedPreset === 'custom'
-        ? customMinutes
-        : parseInt(selectedPreset.split('/')[0], 10);
+    // For completed sessions: use snapshotted values captured exactly at session end
+    // For interrupted sessions: read live store values
+    const storeState = useFocusStore.getState();
+    const focusMinutes = storeState.selectedPreset === 'custom'
+      ? storeState.customMinutes
+      : parseInt(storeState.selectedPreset.split('/')[0], 10);
 
-    const effectiveSeconds = elapsedSeconds > 0 ? elapsedSeconds : focusMinutes * 60;
+    let effectiveSeconds: number;
+    let effectiveGoal: string;
+    let effectiveSubject: string | null;
+    let effectiveSound: string | null;
+    let effectiveRoutineId: string | null;
 
-    // Only skip interrupted sessions with under 60 seconds of progress
-    if (status === 'interrupted' && effectiveSeconds < 60) {
-      if (__DEV__) {
-        console.warn('Cannot save interrupted session with under 60 seconds.');
+    if (status === 'completed') {
+      // Use snapshotted values from the moment the timer hit 0
+      effectiveSeconds = completedElapsedSecondsRef.current > 0
+        ? completedElapsedSecondsRef.current
+        : focusMinutes * 60;
+      effectiveGoal = completedSessionGoalRef.current || storeState.sessionGoal || 'Deep Focus Session';
+      effectiveSubject = completedSubjectRef.current ?? storeState.subjectTag;
+      effectiveSound = completedSoundRef.current ?? storeState.activeSound;
+      effectiveRoutineId = completedRoutineIdRef.current ?? storeState.linkedRoutineBlockId;
+    } else {
+      // Interrupted: use live values
+      effectiveSeconds = storeState.elapsedSeconds > 0 ? storeState.elapsedSeconds : 0;
+      effectiveGoal = storeState.sessionGoal || 'Deep Focus Session';
+      effectiveSubject = storeState.subjectTag;
+      effectiveSound = storeState.activeSound;
+      effectiveRoutineId = storeState.linkedRoutineBlockId;
+
+      // Skip interrupted sessions under 60 seconds
+      if (effectiveSeconds < 60) {
+        if (__DEV__) console.warn('Interrupted session under 60s — not saving.');
+        return;
       }
-      return;
     }
 
     const endedAt = new Date().toISOString();
     const startedAt = new Date(Date.now() - effectiveSeconds * 1000).toISOString();
 
-    const dbDuration = status === 'interrupted' 
-      ? Math.max(1, Math.floor(effectiveSeconds / 60)) 
+    const dbDuration = status === 'interrupted'
+      ? Math.max(1, Math.floor(effectiveSeconds / 60))
       : focusMinutes;
 
     try {
@@ -729,10 +775,10 @@ export default function FocusScreen(): React.JSX.Element {
 
       let { error } = await supabase.from('focus_sessions').insert({
         user_id: session.user.id,
-        session_goal: sessionGoal.trim() || 'Deep Focus Session',
+        session_goal: effectiveGoal.trim() || 'Deep Focus Session',
         duration_min: dbDuration,
-        subject: subjectTag,
-        sound_used: activeSound,
+        subject: effectiveSubject,
+        sound_used: effectiveSound,
         mood: status === 'interrupted' ? null : safeMood,
         started_at: startedAt,
         ended_at: endedAt,
@@ -747,10 +793,10 @@ export default function FocusScreen(): React.JSX.Element {
         }
         const retryResult = await supabase.from('focus_sessions').insert({
           user_id: session.user.id,
-          session_goal: sessionGoal.trim() || 'Deep Focus Session',
+          session_goal: effectiveGoal.trim() || 'Deep Focus Session',
           duration_min: dbDuration,
-          subject: subjectTag,
-          sound_used: activeSound,
+          subject: effectiveSubject,
+          sound_used: effectiveSound,
           mood: status === 'interrupted' ? null : safeMood,
           started_at: startedAt,
           ended_at: endedAt,
@@ -824,15 +870,15 @@ export default function FocusScreen(): React.JSX.Element {
         useNotificationStore.getState().addNotification({
           type: 'milestone',
           title: 'Focus Session Completed! 🏆',
-          body: `You logged ${dbDuration}m of deep work${subjectTag ? ` on "${subjectTag}"` : ''} (+${earned} XP earned).`,
+          body: `You logged ${dbDuration}m of deep work${effectiveSubject ? ` on "${effectiveSubject}"` : ''} (+${earned} XP earned).`,
           time: 'Just now',
           targetScreen: '/(tabs)/focus',
           actionText: 'View Focus Stats',
         });
 
-        if (subjectTag) {
-          scheduleRevisionAlert(subjectTag, 1).catch(() => {});
-          scheduleRevisionAlert(subjectTag, 3).catch(() => {});
+        if (effectiveSubject) {
+          scheduleRevisionAlert(effectiveSubject, 1).catch(() => {});
+          scheduleRevisionAlert(effectiveSubject, 3).catch(() => {});
         }
       }
 
@@ -848,7 +894,7 @@ export default function FocusScreen(): React.JSX.Element {
       FocusLiveActivity.endSession().catch(() => {});
 
       // Check if we should mark a linked routine block as done
-      const routineId = params.routineBlockId || linkedRoutineBlockId;
+      const routineId = effectiveRoutineId || params.routineBlockId;
       if (status === 'completed' && routineId) {
         const todayStr = getTodayLocal();
         const { error: logError } = await supabase
@@ -875,6 +921,7 @@ export default function FocusScreen(): React.JSX.Element {
         queryClient.invalidateQueries({ queryKey: ['routineAnalyticsList'] });
         queryClient.invalidateQueries({ queryKey: ['routineHistoryLogs'] });
         queryClient.invalidateQueries({ queryKey: ['schedule_blocks'] });
+        queryClient.invalidateQueries({ queryKey: ['manageRoutinesList'] });
       } else {
         useUiStore.getState().showToast('Session saved! ⚡', 'success');
       }
@@ -883,12 +930,12 @@ export default function FocusScreen(): React.JSX.Element {
       await ambient.stop();
 
       // Check if we should prompt for CSE syllabus topics
-      if (status === 'completed' && isCse && subjectTag) {
+      if (status === 'completed' && isCse && effectiveSubject) {
         const { data: topics, error: topicsErr } = await supabase
           .from('syllabus_topics')
           .select('*')
           .eq('user_id', session.user.id)
-          .eq('subject', subjectTag)
+          .eq('subject', effectiveSubject)
           .not('status', 'eq', 'done')
           .order('order_index', { ascending: true })
           .limit(10);
@@ -945,10 +992,10 @@ export default function FocusScreen(): React.JSX.Element {
           }
 
           const localSession = {
-            session_goal: sessionGoal.trim() || 'Deep Focus Session',
+            session_goal: effectiveGoal.trim() || 'Deep Focus Session',
             duration_min: dbDuration,
-            subject: subjectTag,
-            sound_used: activeSound,
+            subject: effectiveSubject,
+            sound_used: effectiveSound,
             mood: status === 'interrupted' ? null : mood,
             started_at: startedAt,
             ended_at: endedAt,
@@ -990,7 +1037,7 @@ export default function FocusScreen(): React.JSX.Element {
         'Could not sync session to cloud, but timer and audio have been reset.'
       );
     }
-  }, [elapsedSeconds, selectedPreset, customMinutes, sessionGoal, subjectTag, activeSound, resetSession, ambient, refetchHistory, queryClient, isCse, params.routineBlockId, linkedRoutineBlockId, profile]);
+  }, [resetSession, ambient, refetchHistory, queryClient, isCse, isStrictModeActive, isStrictViolated, profile, setProfile]);
 
   const handleDiscardSession = useCallback(() => {
     setShowSummary(false);
