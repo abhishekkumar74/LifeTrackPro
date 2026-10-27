@@ -38,6 +38,7 @@ import { useFocusSessions } from '@/lib/hooks/use-focus-sessions';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
 import { scheduleRevisionAlert, triggerLocalFocusCompleteNotification } from '@/lib/notifications';
 import { useNotificationStore } from '@/lib/store/notification.store';
+import { getTodayLocal } from '@/lib/utils/date';
 import {
   Settings,
   Maximize2,
@@ -323,6 +324,8 @@ export default function FocusScreen(): React.JSX.Element {
     sessionGoal,
     subjectTag,
     linkedTaskId,
+    linkedRoutineBlockId,
+    setLinkedRoutine,
     pomodoroCount,
     currentMode,
     selectedPreset,
@@ -373,10 +376,13 @@ export default function FocusScreen(): React.JSX.Element {
     if (params.suggestedGoal) {
       setSessionGoal(params.suggestedGoal);
     }
+    if (params.routineBlockId) {
+      setLinkedRoutine(params.routineBlockId, params.routineStartTime, params.routineEndTime);
+    }
     if (params.standby === 'true') {
       setIsManualLandscape(true);
     }
-  }, [params.suggestedSubject, params.suggestedGoal, params.standby, setSubjectTag, setSessionGoal]);
+  }, [params.suggestedSubject, params.suggestedGoal, params.routineBlockId, params.routineStartTime, params.routineEndTime, params.standby, setSubjectTag, setSessionGoal, setLinkedRoutine]);
 
   // Timer loop interval
   useEffect(() => {
@@ -693,28 +699,33 @@ export default function FocusScreen(): React.JSX.Element {
     focusAccuracy?: 'fully_focused' | 'partially_distracted' | 'off_track' | null,
     seedsEarned?: number
   ) => {
-    if (elapsedSeconds <= 0) {
-      if (__DEV__) {
-        console.warn('Cannot save session with 0 elapsed seconds (violates check constraint).');
-      }
-      return;
-    }
-
-    const endedAt = new Date().toISOString();
-    const startedAt = new Date(Date.now() - elapsedSeconds * 1000).toISOString();
-
     const focusMinutes =
       selectedPreset === 'custom'
         ? customMinutes
         : parseInt(selectedPreset.split('/')[0], 10);
 
+    const effectiveSeconds = elapsedSeconds > 0 ? elapsedSeconds : focusMinutes * 60;
+
+    // Only skip interrupted sessions with under 60 seconds of progress
+    if (status === 'interrupted' && effectiveSeconds < 60) {
+      if (__DEV__) {
+        console.warn('Cannot save interrupted session with under 60 seconds.');
+      }
+      return;
+    }
+
+    const endedAt = new Date().toISOString();
+    const startedAt = new Date(Date.now() - effectiveSeconds * 1000).toISOString();
+
     const dbDuration = status === 'interrupted' 
-      ? Math.max(1, Math.floor(elapsedSeconds / 60)) 
+      ? Math.max(1, Math.floor(effectiveSeconds / 60)) 
       : focusMinutes;
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
+
+      const safeMood = typeof mood === 'number' && mood >= 1 && mood <= 5 ? mood : 4;
 
       let { error } = await supabase.from('focus_sessions').insert({
         user_id: session.user.id,
@@ -722,7 +733,7 @@ export default function FocusScreen(): React.JSX.Element {
         duration_min: dbDuration,
         subject: subjectTag,
         sound_used: activeSound,
-        mood: status === 'interrupted' ? null : mood,
+        mood: status === 'interrupted' ? null : safeMood,
         started_at: startedAt,
         ended_at: endedAt,
         status: status,
@@ -740,7 +751,7 @@ export default function FocusScreen(): React.JSX.Element {
           duration_min: dbDuration,
           subject: subjectTag,
           sound_used: activeSound,
-          mood: status === 'interrupted' ? null : mood,
+          mood: status === 'interrupted' ? null : safeMood,
           started_at: startedAt,
           ended_at: endedAt,
           status: status,
@@ -825,86 +836,47 @@ export default function FocusScreen(): React.JSX.Element {
         }
       }
 
-      // Refetch history list
+      // Refetch history list & invalidate queries across the app
       refetchHistory();
+      queryClient.invalidateQueries({ queryKey: ['focus_sessions'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
+      queryClient.invalidateQueries({ queryKey: ['todayStats'] });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
 
       // Trigger satisfying multi-stage completion haptics
       await playRewardingCompletionHaptics();
       FocusLiveActivity.endSession().catch(() => {});
 
       // Check if we should mark a linked routine block as done
-      if (status === 'completed' && params.routineBlockId && params.routineStartTime && params.routineEndTime) {
-        // Validation 1: must be >= 25 minutes (or >= 1 minute in development mode for easy testing)
-        const isDurationValid = __DEV__ ? focusMinutes >= 1 : focusMinutes >= 25;
-
-        // Validation 2: must be completed within the scheduled window (always valid in development)
-        const now = new Date();
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-        const timeToMinutes = (timeStr: string) => {
-          const parts = timeStr.split(':');
-          if (parts.length < 2) return 0;
-          return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-        };
-
-        const startM = timeToMinutes(params.routineStartTime);
-        let endM = timeToMinutes(params.routineEndTime);
-        if (endM < startM) {
-          endM += 1440; // crosses midnight
-        }
-
-        let isTimeWindowValid = false;
-        if (__DEV__) {
-          isTimeWindowValid = true;
-        } else {
-          const windowStart = startM - 15;
-          const windowEnd = endM + 60;
-
-          if (currentMinutes >= windowStart && currentMinutes <= windowEnd) {
-            isTimeWindowValid = true;
-          } else if (endM >= 1440) {
-            const adjMinutes = currentMinutes + 1440;
-            if (adjMinutes >= windowStart && adjMinutes <= windowEnd) {
-              isTimeWindowValid = true;
-            }
-          }
-        }
-
-        if (isDurationValid && isTimeWindowValid) {
-          const todayStr = new Date().toLocaleDateString('en-CA');
-          const { error: logError } = await supabase
-            .from('schedule_logs')
-            .upsert(
-              {
-                user_id: session.user.id,
-                block_id: params.routineBlockId,
-                date: todayStr,
-                status: 'completed',
-              },
-              { onConflict: 'user_id,block_id,date' }
-            );
-
-          if (logError) {
-            if (__DEV__) console.warn('Failed to log routine completion in database:', logError);
-          }
-          useUiStore.getState().showToast('Routine block marked Done!', 'success');
-        } else {
-          let reason = '';
-          if (!isDurationValid && !isTimeWindowValid) {
-            reason = 'Session was under 25m and outside the scheduled time window.';
-          } else if (!isDurationValid) {
-            reason = 'Session duration was under 25 minutes.';
-          } else {
-            reason = 'Completed outside the routine\'s scheduled window.';
-          }
-          Alert.alert(
-            'Routine Not Completed',
-            `Focus session saved, but routine block was not marked Done. Reason: ${reason}`
+      const routineId = params.routineBlockId || linkedRoutineBlockId;
+      if (status === 'completed' && routineId) {
+        const todayStr = getTodayLocal();
+        const { error: logError } = await supabase
+          .from('schedule_logs')
+          .upsert(
+            {
+              user_id: session.user.id,
+              block_id: routineId,
+              date: todayStr,
+              status: 'completed',
+            },
+            { onConflict: 'user_id,block_id,date' }
           );
+
+        if (logError) {
+          if (__DEV__) console.warn('Failed to log routine completion in database:', logError);
+        } else {
+          useUiStore.getState().showToast('Routine block marked Done! 🎯', 'success');
         }
+
+        // Invalidate all related routine & dashboard query caches
+        queryClient.invalidateQueries({ queryKey: ['todayStats'] });
+        queryClient.invalidateQueries({ queryKey: ['schedule_blocks_with_logs'] });
+        queryClient.invalidateQueries({ queryKey: ['routineAnalyticsList'] });
+        queryClient.invalidateQueries({ queryKey: ['routineHistoryLogs'] });
+        queryClient.invalidateQueries({ queryKey: ['schedule_blocks'] });
       } else {
-        useUiStore.getState().showToast('Session saved!', 'success');
+        useUiStore.getState().showToast('Session saved! ⚡', 'success');
       }
 
       setShowSummary(false);
@@ -1018,7 +990,7 @@ export default function FocusScreen(): React.JSX.Element {
         'Could not sync session to cloud, but timer and audio have been reset.'
       );
     }
-  }, [elapsedSeconds, selectedPreset, customMinutes, sessionGoal, subjectTag, activeSound, resetSession, ambient, refetchHistory, queryClient, isCse]);
+  }, [elapsedSeconds, selectedPreset, customMinutes, sessionGoal, subjectTag, activeSound, resetSession, ambient, refetchHistory, queryClient, isCse, params.routineBlockId, linkedRoutineBlockId, profile]);
 
   const handleDiscardSession = useCallback(() => {
     setShowSummary(false);

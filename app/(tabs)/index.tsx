@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, StatusBar, Text, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Flame, Timer, AlertCircle, AlertTriangle, Check, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { tabScrollRefs } from '@/lib/utils/tab-scroll';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
@@ -237,6 +237,12 @@ export default function HomeDashboardScreen(): React.JSX.Element {
       }
     });
   }, [router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      stats.refetch();
+    }, [stats.refetch])
+  );
 
   const handleRefreshStats = useCallback(() => {
     stats.refetch();

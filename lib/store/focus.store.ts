@@ -5,6 +5,7 @@ import { supabase } from '../supabase/client';
 import { queryClient } from '../query-client';
 import { Alert } from 'react-native';
 import { trackEvent } from '../posthog';
+import { getTodayLocal } from '../utils/date';
 
 export type SoundKey = 'rain' | 'cafe' | 'ocean' | 'lofi' | 'brown_noise';
 export type FocusPreset = '25/5' | '50/10' | '90/20' | 'custom';
@@ -22,6 +23,9 @@ export interface FocusState {
   sessionGoal: string;
   subjectTag: string | null;
   linkedTaskId: string | null;
+  linkedRoutineBlockId: string | null;
+  linkedRoutineStartTime: string | null;
+  linkedRoutineEndTime: string | null;
 
   // Pomodoro
   pomodoroCount: number;
@@ -52,6 +56,7 @@ export interface FocusState {
   setSessionGoal: (goal: string) => void;
   setSubjectTag: (subject: string | null) => void;
   setLinkedTaskId: (id: string | null) => void;
+  setLinkedRoutine: (blockId: string | null, startTime?: string | null, endTime?: string | null) => void;
   start: () => void;
   pause: () => void;
   resume: () => void;
@@ -85,12 +90,12 @@ const getBreakDuration = (preset: FocusPreset): number => {
 
 const DEFAULT_FOCUS_MINUTES = 25;
 
-const resyncFocusTimer = async (state: FocusState) => {
+export const resyncFocusTimer = async (state: FocusState) => {
   if (state.isRunning && state.sessionStartTimestamp) {
     const elapsedSeconds = Math.floor((Date.now() - state.sessionStartTimestamp) / 1000);
 
     if (elapsedSeconds >= state.totalSeconds) {
-      // Scenario C: Session completed while closed/crashed
+      // Scenario C: Session completed while closed/backgrounded
       const focusMinutes =
         state.selectedPreset === 'custom'
           ? state.customMinutes
@@ -102,27 +107,57 @@ const resyncFocusTimer = async (state: FocusState) => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
-          const { error } = await supabase.from('focus_sessions').insert({
+          let { error } = await supabase.from('focus_sessions').insert({
             user_id: session.user.id,
             session_goal: state.sessionGoal.trim() || 'Deep Focus Session',
             duration_min: focusMinutes,
             subject: state.subjectTag,
             sound_used: state.activeSound,
-            mood: null,
+            mood: 4,
             started_at: startedAt,
             ended_at: endedAt,
             status: 'completed',
           });
 
+          if (error && (error.code === 'PGRST204' || error.message?.includes('focus_accuracy') || error.message?.includes('column'))) {
+            const retryRes = await supabase.from('focus_sessions').insert({
+              user_id: session.user.id,
+              session_goal: state.sessionGoal.trim() || 'Deep Focus Session',
+              duration_min: focusMinutes,
+              subject: state.subjectTag,
+              sound_used: state.activeSound,
+              mood: 4,
+              started_at: startedAt,
+              ended_at: endedAt,
+              status: 'completed',
+            });
+            error = retryRes.error;
+          }
+
           if (error) throw error;
 
-          // Invalidate cache
+          // If linked to a study routine block, mark it done in schedule_logs
+          if (state.linkedRoutineBlockId) {
+            const todayStr = getTodayLocal();
+            await supabase.from('schedule_logs').upsert({
+              user_id: session.user.id,
+              block_id: state.linkedRoutineBlockId,
+              date: todayStr,
+              status: 'completed',
+            }, { onConflict: 'user_id,block_id,date' });
+          }
+
+          // Invalidate caches
           queryClient.invalidateQueries({ queryKey: ['stats'] });
           queryClient.invalidateQueries({ queryKey: ['todayStats'] });
+          queryClient.invalidateQueries({ queryKey: ['focus_sessions'] });
+          queryClient.invalidateQueries({ queryKey: ['schedule_blocks_with_logs'] });
+          queryClient.invalidateQueries({ queryKey: ['routineAnalyticsList'] });
+          queryClient.invalidateQueries({ queryKey: ['routineHistoryLogs'] });
 
           Alert.alert(
-            'Focus Session Completed',
-            `Your focus session "${state.sessionGoal || 'Deep Focus'}" has been successfully logged.`
+            'Focus Session Completed 🎉',
+            `Your focus session "${state.sessionGoal || 'Deep Focus'}" has been successfully logged${state.linkedRoutineBlockId ? ' and your routine block has been marked Done!' : '!'}`
           );
         }
       } catch (err) {
@@ -132,9 +167,9 @@ const resyncFocusTimer = async (state: FocusState) => {
       // Reset store state
       useFocusStore.getState().resetSession();
     } else {
-      // Scenario C: Session still active, adjust drift
+      // Session still active, adjust drift
       useFocusStore.setState({
-        secondsLeft: state.totalSeconds - elapsedSeconds,
+        secondsLeft: Math.max(0, state.totalSeconds - elapsedSeconds),
         elapsedSeconds: elapsedSeconds,
       });
     }
@@ -156,6 +191,9 @@ export const useFocusStore = create<FocusState>()(
   sessionGoal: '',
   subjectTag: null,
   linkedTaskId: null,
+  linkedRoutineBlockId: null,
+  linkedRoutineStartTime: null,
+  linkedRoutineEndTime: null,
 
   // Initial Pomodoro States
   pomodoroCount: 0,
@@ -214,6 +252,12 @@ export const useFocusStore = create<FocusState>()(
   setSubjectTag: (subject) => set({ subjectTag: subject }),
 
   setLinkedTaskId: (id) => set({ linkedTaskId: id }),
+
+  setLinkedRoutine: (blockId, startTime, endTime) => set({
+    linkedRoutineBlockId: blockId,
+    linkedRoutineStartTime: startTime || null,
+    linkedRoutineEndTime: endTime || null,
+  }),
 
   start: () => {
     const { selectedPreset, currentMode, sessionGoal, subjectTag } = get();
@@ -342,6 +386,9 @@ export const useFocusStore = create<FocusState>()(
       sessionGoal: '',
       subjectTag: null,
       linkedTaskId: null,
+      linkedRoutineBlockId: null,
+      linkedRoutineStartTime: null,
+      linkedRoutineEndTime: null,
       pomodoroCount: resetCount ? 0 : pomodoroCount,
       currentMode: 'focus',
       isBlockerActive: false,
