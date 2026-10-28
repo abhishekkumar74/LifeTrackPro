@@ -128,26 +128,28 @@ export const HabitRow = React.memo<HabitRowProps>(({
                 accessibilityLabel={`${habit.title} habit, ${isDone ? 'completed' : 'not completed'}`}
                 accessibilityHint="Tap to toggle completion status, long press to view habit history and stats"
               >
-                {/* Status Indicator */}
-                <View style={[styles.checkCircle, isDone && styles.checkCircleComplete]}>
-                  {isDone ? (
-                    <Check size={11} color="#FFFFFF" strokeWidth={3} />
-                  ) : null}
-                </View>
-
-                {/* Emoji */}
+                {/* Emoji on left */}
                 <Text style={styles.emoji}>{habit.emoji || '🔥'}</Text>
 
-                {/* Habit Title */}
-                <Text
-                  style={[
-                    styles.habitName,
-                    isDone ? styles.habitNameComplete : styles.habitNameIncomplete,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {habit.title}
-                </Text>
+                {/* Habit Title in middle */}
+                <View style={styles.habitInfo}>
+                  <Text
+                    style={[
+                      styles.habitName,
+                      isDone && styles.habitNameComplete,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {habit.title}
+                  </Text>
+                </View>
+
+                {/* Checkbox on right */}
+                <View style={[styles.checkbox, isDone && styles.checkboxChecked]}>
+                  {isDone ? (
+                    <Check size={12} color="#FFFFFF" strokeWidth={3} />
+                  ) : null}
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -204,17 +206,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   habitsWrapper: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
     width: '100%',
   },
   habitCard: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 9,
-    paddingHorizontal: 13,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     borderRadius: 12,
+    marginBottom: 8,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -227,38 +228,40 @@ const styles = StyleSheet.create({
     borderColor: BORDER_COLOR,
   },
   habitCardComplete: {
-    backgroundColor: '#F0FDF4',
+    backgroundColor: '#F8FAF8',
     borderWidth: 1,
-    borderColor: '#86EFAC',
+    borderColor: '#D1E7DD',
   },
-  checkCircle: {
-    width: 17,
-    height: 17,
-    borderRadius: 9,
+  habitInfo: {
+    flex: 1,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
     borderWidth: 1.5,
     borderColor: '#C4C4D4',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
   },
-  checkCircleComplete: {
+  checkboxChecked: {
     backgroundColor: '#10B981',
     borderColor: '#10B981',
   },
   emoji: {
-    fontSize: 14,
-    marginRight: 6,
+    fontSize: 18,
+    marginRight: 12,
   },
   habitName: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
   },
   habitNameIncomplete: {
     color: '#17172A',
   },
   habitNameComplete: {
-    color: '#15803D',
+    color: '#64748B',
   },
   emptyCard: {
     backgroundColor: '#FFFFFF',
@@ -283,9 +286,10 @@ const styles = StyleSheet.create({
   },
   // Skeleton Layouts
   skeletonCard: {
-    width: '48%',
-    height: 40,
+    width: '100%',
+    height: 48,
     borderRadius: 12,
     backgroundColor: '#ECECEF',
+    marginBottom: 8,
   },
 });
