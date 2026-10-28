@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -9,13 +9,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { Check } from 'lucide-react-native';
 import { Habit } from '@/types/app.types';
 
 // Constants
 const HEADER_TITLE = "Habits";
 const EDIT_LABEL = "Edit";
-const CHECK_MARK = "✓";
-const EMPTY_TEXT = "Add your first habit →";
+const EMPTY_TITLE = "No habits tracked yet";
+const EMPTY_LINK = "+ Add your first habit";
 const BORDER_COLOR = '#E8E7E3';
 
 interface HabitRowProps {
@@ -58,15 +59,11 @@ export const HabitRow = React.memo<HabitRowProps>(({
           <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
           <Text style={styles.editText}>{EDIT_LABEL}</Text>
         </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {[1, 2, 3].map((key) => (
-            <Animated.View key={key} style={[styles.skeletonPill, pulseStyle]} />
+        <View style={styles.habitsWrapper}>
+          {[1, 2, 3, 4].map((key) => (
+            <Animated.View key={key} style={[styles.skeletonCard, pulseStyle]} />
           ))}
-        </ScrollView>
+        </View>
       </View>
     );
   }
@@ -77,13 +74,16 @@ export const HabitRow = React.memo<HabitRowProps>(({
 
   return (
     <View style={styles.container}>
+      {/* Header Row */}
       <View style={styles.headerRow}>
-        <View style={styles.headerTitleContainer}>
+        <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
           {total > 0 && (
-            <Text style={[styles.headerCount, allDone ? styles.countMint : styles.countViolet]}>
-              {completed}/{total} done
-            </Text>
+            <View style={[styles.badge, allDone && styles.badgeAllDone]}>
+              <Text style={[styles.badgeText, allDone && styles.badgeTextAllDone]}>
+                {completed}/{total} done
+              </Text>
+            </View>
           )}
         </View>
         <TouchableOpacity 
@@ -97,24 +97,24 @@ export const HabitRow = React.memo<HabitRowProps>(({
         </TouchableOpacity>
       </View>
 
+      {/* Habits Content */}
       {habits.length === 0 ? (
-        <TouchableOpacity style={styles.emptyButton} onPress={onEdit} activeOpacity={0.6}>
-          <Text style={styles.emptyText}>{EMPTY_TEXT}</Text>
-        </TouchableOpacity>
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>{EMPTY_TITLE}</Text>
+          <TouchableOpacity onPress={onEdit} activeOpacity={0.6}>
+            <Text style={styles.emptyLink}>{EMPTY_LINK}</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
+        <View style={styles.habitsWrapper}>
           {habits.map((habit) => {
             const isDone = habit.completedToday;
             return (
               <TouchableOpacity
                 key={habit.id}
                 style={[
-                  styles.pill,
-                  isDone ? styles.pillComplete : styles.pillIncomplete,
+                  styles.habitCard,
+                  isDone ? styles.habitCardComplete : styles.habitCardIncomplete,
                 ]}
                 onPress={() => onToggle(habit.id)}
                 onLongPress={() => {
@@ -122,39 +122,36 @@ export const HabitRow = React.memo<HabitRowProps>(({
                   router.push(`/habit/${habit.id}`);
                 }}
                 activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityState={{
-                  checked: isDone
-                }}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                accessibilityState={{ checked: isDone }}
                 accessibilityRole="checkbox"
                 accessibilityLabel={`${habit.title} habit, ${isDone ? 'completed' : 'not completed'}`}
-                accessibilityHint="Double tap to toggle completion status, long press to view habit history and stats"
+                accessibilityHint="Tap to toggle completion status, long press to view habit history and stats"
               >
-                {isDone ? (
-                  <>
-                    <Text style={styles.checkMark}>{CHECK_MARK}</Text>
-                    <Text
-                      style={[styles.habitName, styles.habitNameComplete]}
-                      numberOfLines={1}
-                    >
-                      {habit.title}
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.emoji}>{habit.emoji || '🔥'}</Text>
-                    <Text
-                      style={[styles.habitName, styles.habitNameIncomplete]}
-                      numberOfLines={1}
-                    >
-                      {habit.title}
-                    </Text>
-                  </>
-                )}
+                {/* Status Indicator */}
+                <View style={[styles.checkCircle, isDone && styles.checkCircleComplete]}>
+                  {isDone ? (
+                    <Check size={11} color="#FFFFFF" strokeWidth={3} />
+                  ) : null}
+                </View>
+
+                {/* Emoji */}
+                <Text style={styles.emoji}>{habit.emoji || '🔥'}</Text>
+
+                {/* Habit Title */}
+                <Text
+                  style={[
+                    styles.habitName,
+                    isDone ? styles.habitNameComplete : styles.habitNameIncomplete,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {habit.title}
+                </Text>
               </TouchableOpacity>
             );
           })}
-        </ScrollView>
+        </View>
       )}
     </View>
   );
@@ -168,94 +165,127 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  headerTitleContainer: {
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
   headerTitle: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 13,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
     color: '#17172A',
-    fontWeight: '600',
-    marginRight: 6,
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
-  headerCount: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    fontWeight: '600',
+  badge: {
+    backgroundColor: '#EAE8FD',
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 10,
   },
-  countMint: {
-    color: '#00B894',
+  badgeAllDone: {
+    backgroundColor: '#ECFDF5',
   },
-  countViolet: {
+  badgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
     color: '#5B4FE8',
+    fontWeight: '700',
+  },
+  badgeTextAllDone: {
+    color: '#059669',
   },
   editText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 12,
+    fontSize: 13,
     color: '#5B4FE8',
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  scrollContent: {
-    paddingRight: 20, // allows sliding off-screen gracefully
+  habitsWrapper: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    width: '100%',
   },
-  pill: {
+  habitCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    marginRight: 8,
-    height: 34,
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+    borderRadius: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  pillIncomplete: {
+  habitCardIncomplete: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: BORDER_COLOR,
   },
-  pillComplete: {
-    backgroundColor: '#D4F5EE',
+  habitCardComplete: {
+    backgroundColor: '#F0FDF4',
     borderWidth: 1,
-    borderColor: '#D4F5EE',
+    borderColor: '#86EFAC',
+  },
+  checkCircle: {
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: '#C4C4D4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  checkCircleComplete: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
   },
   emoji: {
     fontSize: 14,
     marginRight: 6,
   },
-  checkMark: {
-    fontSize: 11,
-    color: '#00B894',
-    marginRight: 6,
-    fontWeight: 'bold',
-  },
   habitName: {
-    fontFamily: 'DMSans',
-    fontSize: 12,
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    fontWeight: '600',
   },
   habitNameIncomplete: {
-    color: '#5C5C70',
+    color: '#17172A',
   },
   habitNameComplete: {
-    color: '#00B894',
-    textDecorationLine: 'line-through',
+    color: '#15803D',
   },
-  emptyButton: {
-    alignSelf: 'flex-start',
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyText: {
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#9B9BAF',
+    marginBottom: 4,
+  },
+  emptyLink: {
     fontFamily: 'DMSans-Medium',
     fontSize: 13,
     color: '#5B4FE8',
     fontWeight: '600',
   },
   // Skeleton Layouts
-  skeletonPill: {
-    width: 80,
-    height: 34,
-    borderRadius: 20,
-    backgroundColor: '#E8E7E3',
-    marginRight: 8,
+  skeletonCard: {
+    width: '48%',
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#ECECEF',
   },
 });

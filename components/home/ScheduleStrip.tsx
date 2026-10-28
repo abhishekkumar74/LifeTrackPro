@@ -123,10 +123,7 @@ export const ScheduleStrip = React.memo<ScheduleStripProps>(({
     return (
       <View style={styles.outerContainer}>
         <View style={styles.headerRow}>
-          <View style={styles.headerLeft}>
-            <View style={styles.headerAccentBar} />
-            <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
-          </View>
+          <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
           <View style={styles.headerRight}>
             <Text style={[styles.addBtnText, { opacity: 0.5, marginRight: 12 }]}>+ Add block</Text>
             <Text style={styles.seeAllText}>{SEE_ALL}</Text>
@@ -149,10 +146,7 @@ export const ScheduleStrip = React.memo<ScheduleStripProps>(({
   return (
     <View style={styles.outerContainer}>
       <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          <View style={styles.headerAccentBar} />
-          <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
-        </View>
+        <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
         <View style={styles.headerRight}>
           <TouchableOpacity onPress={onAddSchedule} activeOpacity={0.6} style={styles.addBtn}>
             <Text style={styles.addBtnText}>+ Add block</Text>
@@ -289,17 +283,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerAccentBar: {
-    width: 4,
-    height: 16,
-    borderRadius: 2,
-    backgroundColor: '#F59E0B',
   },
   headerTitle: {
     fontFamily: 'DMSans-Bold',

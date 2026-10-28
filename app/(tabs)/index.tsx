@@ -527,7 +527,6 @@ export default function HomeDashboardScreen(): React.JSX.Element {
         <View style={styles.sectionWrapper}>
           <View style={styles.sectionHeaderRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <View style={styles.sectionIconDot} />
               <Text style={styles.sectionHeaderTitle}>To-Do List</Text>
               {activeTodayTasks.length > 0 && (
                 <View style={styles.tasksCountBadge}>
@@ -762,12 +761,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
-  },
-  sectionIconDot: {
-    width: 4,
-    height: 16,
-    borderRadius: 2,
-    backgroundColor: '#5B4FE8',
   },
   sectionHeaderTitle: {
     fontFamily: 'DMSans-Bold',
