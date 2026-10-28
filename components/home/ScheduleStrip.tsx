@@ -11,10 +11,10 @@ import { ScheduleBlock, ScheduleSkipEntry } from '@/types/app.types';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
 
 // Constants
-const HEADER_TITLE = "Today's schedule";
+const HEADER_TITLE = "Daily Routine";
 const SEE_ALL = "See all";
-const EMPTY_STATE = "No schedule today";
-const ADD_ROUTINE = "Add routine →";
+const EMPTY_STATE = "No routines scheduled today";
+const ADD_ROUTINE = "+ Add routine";
 const SHADOW_COLOR = '#000000';
 const BORDER_COLOR = '#E8E7E3';
 
@@ -123,7 +123,10 @@ export const ScheduleStrip = React.memo<ScheduleStripProps>(({
     return (
       <View style={styles.outerContainer}>
         <View style={styles.headerRow}>
-          <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
+          <View style={styles.headerLeft}>
+            <View style={styles.headerAccentBar} />
+            <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
+          </View>
           <View style={styles.headerRight}>
             <Text style={[styles.addBtnText, { opacity: 0.5, marginRight: 12 }]}>+ Add block</Text>
             <Text style={styles.seeAllText}>{SEE_ALL}</Text>
@@ -146,7 +149,10 @@ export const ScheduleStrip = React.memo<ScheduleStripProps>(({
   return (
     <View style={styles.outerContainer}>
       <View style={styles.headerRow}>
-        <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
+        <View style={styles.headerLeft}>
+          <View style={styles.headerAccentBar} />
+          <Text style={styles.headerTitle}>{HEADER_TITLE}</Text>
+        </View>
         <View style={styles.headerRight}>
           <TouchableOpacity onPress={onAddSchedule} activeOpacity={0.6} style={styles.addBtn}>
             <Text style={styles.addBtnText}>+ Add block</Text>
@@ -282,19 +288,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerAccentBar: {
+    width: 4,
+    height: 16,
+    borderRadius: 2,
+    backgroundColor: '#F59E0B',
   },
   headerTitle: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 13,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
     color: '#17172A',
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   seeAllText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 12,
+    fontSize: 13,
     color: '#5B4FE8',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   headerRight: {
     flexDirection: 'row',

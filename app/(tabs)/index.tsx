@@ -19,7 +19,7 @@ import { supabase } from '@/lib/supabase/client';
 
 // Import Home Dashboard Components
 import { HomeHeader } from '@/components/home/HomeHeader';
-import { TodayFocusCard } from '@/components/home/TodayFocusCard';
+import { TodayFocusCard, FocusStartPayload } from '@/components/home/TodayFocusCard';
 import { QuickStats } from '@/components/home/QuickStats';
 import { DailyReviewBanner } from '@/components/home/DailyReviewBanner';
 import { ScheduleStrip } from '@/components/home/ScheduleStrip';
@@ -372,7 +372,51 @@ export default function HomeDashboardScreen(): React.JSX.Element {
     );
   }, [stats.habits, user?.id]);
 
-  const handleStartFocus = useCallback(() => {
+  // Find routine block active right now
+  const activeRoutineBlock = useMemo(() => {
+    if (!todayScheduleSnapshot || todayScheduleSnapshot.length === 0) return null;
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    return todayScheduleSnapshot.find((block) => {
+      if (doneBlockIds.includes(block.id) || skippedBlockIds.includes(block.id)) {
+        return false;
+      }
+      const sParts = block.start_time.split(':');
+      const eParts = block.end_time.split(':');
+      if (sParts.length < 2 || eParts.length < 2) return false;
+      const sMin = parseInt(sParts[0], 10) * 60 + parseInt(sParts[1], 10);
+      const eMin = parseInt(eParts[0], 10) * 60 + parseInt(eParts[1], 10);
+      return currentMinutes >= sMin && currentMinutes < eMin;
+    }) || null;
+  }, [todayScheduleSnapshot, doneBlockIds, skippedBlockIds]);
+
+  const handleStartFocus = useCallback((target?: FocusStartPayload) => {
+    if (target?.routineBlockId) {
+      router.push({
+        pathname: '/focus',
+        params: {
+          suggestedSubject: target.subject || 'General',
+          suggestedGoal: target.goal || 'Routine Focus Session',
+          routineBlockId: target.routineBlockId,
+          routineStartTime: target.startTime,
+          routineEndTime: target.endTime,
+        }
+      });
+      return;
+    }
+
+    if (target?.goal) {
+      router.push({
+        pathname: '/focus',
+        params: {
+          suggestedSubject: target.subject || 'General',
+          suggestedGoal: target.goal,
+        }
+      });
+      return;
+    }
+
     if (isCse) {
       const isInterviewPrep = !subCategory ||
         subCategory.includes('Amazon') ||
@@ -451,9 +495,10 @@ export default function HomeDashboardScreen(): React.JSX.Element {
           />
         }
       >
-        {/* Zone B — Today's Focus Card (Obsidian themed matching mock) */}
+        {/* Zone B — Focus Hero Card */}
         <TodayFocusCard
           task={stats.topTask}
+          activeBlock={activeRoutineBlock}
           isLoading={stats.isLoading}
           onStartFocus={handleStartFocus}
           onAddTask={() => setTaskSheetVisible(true)}
@@ -478,11 +523,12 @@ export default function HomeDashboardScreen(): React.JSX.Element {
         {/* Daily Review Banner — Shown only when flashcards are due */}
         <DailyReviewBanner />
 
-        {/* Today's Tasks Section */}
+        {/* To-Do List Section */}
         <View style={styles.sectionWrapper}>
           <View style={styles.sectionHeaderRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.sectionHeaderTitle}>Today's Tasks</Text>
+              <View style={styles.sectionIconDot} />
+              <Text style={styles.sectionHeaderTitle}>To-Do List</Text>
               {activeTodayTasks.length > 0 && (
                 <View style={styles.tasksCountBadge}>
                   <Text style={styles.tasksCountBadgeText}>{activeTodayTasks.length}</Text>
@@ -549,9 +595,9 @@ export default function HomeDashboardScreen(): React.JSX.Element {
             </View>
           ) : (
             <View style={styles.emptyTasksCard}>
-              <Text style={styles.emptyTasksText}>No tasks added for today</Text>
+              <Text style={styles.emptyTasksText}>No tasks for today</Text>
               <TouchableOpacity onPress={() => setTaskSheetVisible(true)} activeOpacity={0.6}>
-                <Text style={styles.emptyTasksLink}>Add a task to stay focused</Text>
+                <Text style={styles.emptyTasksLink}>+ Add a to-do to stay organized</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -704,7 +750,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   sectionWrapper: {
-    marginTop: 24,
+    marginTop: 28,
     width: '100%',
   },
   goalWrapper: {
@@ -715,19 +761,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  sectionIconDot: {
+    width: 4,
+    height: 16,
+    borderRadius: 2,
+    backgroundColor: '#5B4FE8',
   },
   sectionHeaderTitle: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 13,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 16,
     color: '#17172A',
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   seeAllText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 12,
+    fontSize: 13,
     color: '#5B4FE8',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   tasksContainer: {
     width: '100%',
