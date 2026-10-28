@@ -114,29 +114,29 @@ export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
 
   if (activeBlock) {
     isLiveNow = true;
-    displayBadge = "⚡ LIVE ROUTINE · HAPPENING NOW";
+    displayBadge = "HAPPENING NOW";
     displayTitle = activeBlock.title;
     displaySubject = activeBlock.subject || (isCse ? 'Computer Science' : 'General');
     const startFormatted = formatTimeString(activeBlock.start_time);
     const endFormatted = formatTimeString(activeBlock.end_time);
-    displayEstimate = `${startFormatted} – ${endFormatted} · In Progress`;
+    displayEstimate = `${startFormatted} – ${endFormatted}`;
   } else if (task) {
-    displayBadge = "🎯 PRIORITY TASK · DUE TODAY";
+    displayBadge = "PRIORITY TASK";
     displayTitle = task.title;
     displaySubject = task.subject || 'General';
-    displayEstimate = 'Action item · Ready to focus';
+    displayEstimate = 'Due today';
   } else if (firstIncompleteTopic) {
-    displayBadge = "🎯 RECOMMENDED FOCUS";
+    displayBadge = "RECOMMENDED FOCUS";
     displayTitle = `${firstIncompleteTopic.chapter ? `${firstIncompleteTopic.chapter} — ` : ''}${firstIncompleteTopic.topic}`;
     displaySubject = firstIncompleteTopic.subject || (isCse ? 'Computer Science' : 'Physics');
     displayEstimate = 'Estimated 1h 45m';
   } else if (isCse) {
-    displayBadge = "🎯 RECOMMENDED FOCUS";
+    displayBadge = "RECOMMENDED FOCUS";
     displayTitle = 'Data Structures — Trees, Graphs & BFS/DFS';
     displaySubject = 'Computer Science';
     displayEstimate = 'Estimated 2h 00m';
   } else {
-    displayBadge = "🎯 RECOMMENDED FOCUS";
+    displayBadge = "RECOMMENDED FOCUS";
     displayTitle = 'Thermodynamics — Laws 1, 2 & numericals';
     displaySubject = 'Physics';
     displayEstimate = 'Estimated 2h 30m';
