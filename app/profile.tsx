@@ -1282,7 +1282,12 @@ export default function ProfileScreen(): React.JSX.Element {
               </View>
             )}
             <View style={styles.headerNameRow}>
-              <Text style={styles.profileName}>{profile?.name || 'Achiever'}{profile?.is_premium ? ' ✨' : ''}</Text>
+              <Text style={styles.profileName}>{profile?.name || 'Achiever'}</Text>
+              {profile?.is_premium && (
+                <View style={styles.goldMemberBadge}>
+                  <Text style={styles.goldMemberBadgeText}>GOLD</Text>
+                </View>
+              )}
             </View>
 
             <TouchableOpacity
@@ -2363,6 +2368,20 @@ const styles = StyleSheet.create({
     fontFamily: 'InstrumentSerif',
     fontSize: 24,
     color: '#FFFFFF',
+  },
+  goldMemberBadge: {
+    backgroundColor: '#E8A020',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  goldMemberBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    color: '#12121E',
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   categoryPill: {
     backgroundColor: '#EAE8FD',

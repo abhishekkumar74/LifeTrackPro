@@ -123,9 +123,9 @@ export default function PaywallScreen(): React.JSX.Element {
     return (
       <View style={[styles.container, styles.successContainer]}>
         <CheckCircle size={72} color="#E8A020" />
-        <Text style={styles.successTitle}>Welcome to Gold ✨</Text>
+        <Text style={styles.successTitle}>Welcome to Gold</Text>
         <Text style={styles.successSubtitle}>
-          Your LifeTrack Gold subscription is now active. Enjoy all premium themes, soundscapes, and analytics!
+          Your LifeTrack Gold access is now active. Enjoy all premium themes, soundscapes, and advanced analytics.
         </Text>
         <TouchableOpacity
           style={styles.doneButton}
@@ -207,11 +207,14 @@ export default function PaywallScreen(): React.JSX.Element {
         {/* PLAN CARD */}
         <View style={styles.planCard}>
           <View style={styles.planBadge}>
-            <Text style={styles.planBadgeText}>POPULAR</Text>
+            <Text style={styles.planBadgeText}>EARLY BIRD PASS</Text>
           </View>
-          <Text style={styles.planTitle}>Gold Access</Text>
-          <Text style={styles.planPrice}>₹199 / month</Text>
-          <Text style={styles.planOffer}>Cancel anytime. Cancel in settings instantly.</Text>
+          <Text style={styles.planTitle}>Launch Special</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.originalPrice}>₹199</Text>
+            <Text style={styles.planPrice}>FREE</Text>
+          </View>
+          <Text style={styles.planOffer}>Full access to all Gold features for early adopters</Text>
         </View>
 
         {/* ACTIONS */}
@@ -226,7 +229,7 @@ export default function PaywallScreen(): React.JSX.Element {
               {isLoading ? (
                 <ActivityIndicator color="#5B4FE8" size="small" />
               ) : (
-                <Text style={styles.downgradeButtonText}>Cancel Subscription (Free Plan)</Text>
+                <Text style={styles.downgradeButtonText}>Switch to Standard Plan</Text>
               )}
             </TouchableOpacity>
           ) : (
@@ -239,7 +242,7 @@ export default function PaywallScreen(): React.JSX.Element {
               {isLoading ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.actionButtonText}>Upgrade to Gold ✨</Text>
+                <Text style={styles.actionButtonText}>Activate Free Gold Access</Text>
               )}
             </TouchableOpacity>
           )}
@@ -370,36 +373,50 @@ const styles = StyleSheet.create({
   },
   planBadge: {
     position: 'absolute',
-    top: -10,
+    top: -11,
     backgroundColor: '#E8A020',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 3.5,
     borderRadius: 8,
   },
   planBadgeText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 9,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
     fontWeight: '700',
     color: '#12121e',
+    letterSpacing: 0.6,
   },
   planTitle: {
     fontFamily: 'DMSans-Medium',
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
-    marginBottom: 6,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginVertical: 4,
+  },
+  originalPrice: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 18,
+    color: '#9B9BAF',
+    textDecorationLine: 'line-through',
   },
   planPrice: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 24,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 26,
     fontWeight: '700',
     color: '#E8A020',
-    marginBottom: 6,
   },
   planOffer: {
     fontFamily: 'DMSans',
-    fontSize: 11,
+    fontSize: 12,
     color: '#9B9BAF',
+    marginTop: 2,
   },
   actionsContainer: {
     width: '100%',
