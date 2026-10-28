@@ -818,14 +818,16 @@ export default function FocusScreen(): React.JSX.Element {
               accuracy: focusAccuracy || (mood && mood >= 4 ? 'fully_focused' : null),
             });
 
-        const currentXp = Number(profile?.xp_points || 0);
+        // Read profile fresh from store to avoid stale closure XP values
+        const liveProfile = useAuthStore.getState().profile;
+        const currentXp = Number(liveProfile?.xp_points || 0);
         const newXp = currentXp + earned;
-        const currentLevel = Number(profile?.level || 1);
+        const currentLevel = Number(liveProfile?.level || 1);
         const newLevelInfo = calculateFocusLevel(newXp);
         const newLevel = Math.max(currentLevel, newLevelInfo.level);
 
         // 1. Immediately update local state so rewards are saved to AsyncStorage instantly
-        const optimisticProfile = profile ? { ...profile, xp_points: newXp, level: newLevel, focus_seeds: newXp } : null;
+        const optimisticProfile = liveProfile ? { ...liveProfile, xp_points: newXp, level: newLevel, focus_seeds: newXp } : null;
         if (optimisticProfile) {
           setProfile(optimisticProfile);
         }
@@ -836,7 +838,7 @@ export default function FocusScreen(): React.JSX.Element {
           focus_seeds: newXp, // keep in sync as backwards-compatible fallback
         };
 
-        // 2. Persist to Supabase
+        // 2. Persist to Supabase — use upsert to handle RLS/missing row edge cases
         const { data: updatedProfData, error: profError } = await supabase
           .from('profiles')
           .update(updatePayload)
@@ -846,8 +848,19 @@ export default function FocusScreen(): React.JSX.Element {
 
         if (updatedProfData) {
           setProfile(updatedProfData as any);
-        } else if (profError && __DEV__) {
-          console.warn('Profiles update error:', profError);
+        } else if (profError) {
+          if (__DEV__) console.warn('Profiles update error:', profError);
+          // Fallback: try upsert if update failed (e.g. row missing)
+          const { data: upsertData, error: upsertError } = await supabase
+            .from('profiles')
+            .upsert({ id: session.user.id, ...updatePayload }, { onConflict: 'id' })
+            .select()
+            .maybeSingle();
+          if (upsertData) {
+            setProfile(upsertData as any);
+          } else if (upsertError && __DEV__) {
+            console.warn('Profiles upsert fallback error:', upsertError);
+          }
         }
         queryClient.invalidateQueries({ queryKey: ['profile'] });
 
@@ -976,14 +989,16 @@ export default function FocusScreen(): React.JSX.Element {
                   hasViolation: isStrictViolated,
                   accuracy: focusAccuracy || (mood && mood >= 4 ? 'fully_focused' : null),
                 });
-            const currentXp = Number(profile?.xp_points || 0);
+            // Read fresh from store to avoid stale closure
+            const liveProfileOffline = useAuthStore.getState().profile;
+            const currentXp = Number(liveProfileOffline?.xp_points || 0);
             const newXp = currentXp + earned;
-            const currentLevel = Number(profile?.level || 1);
+            const currentLevel = Number(liveProfileOffline?.level || 1);
             const newLevelInfo = calculateFocusLevel(newXp);
             const newLevel = Math.max(currentLevel, newLevelInfo.level);
 
-            const offlineProfile = profile
-              ? { ...profile, xp_points: newXp, level: newLevel, focus_seeds: newXp }
+            const offlineProfile = liveProfileOffline
+              ? { ...liveProfileOffline, xp_points: newXp, level: newLevel, focus_seeds: newXp }
               : null;
             if (offlineProfile) {
               setProfile(offlineProfile);
