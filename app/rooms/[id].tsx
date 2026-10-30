@@ -709,25 +709,30 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     return Math.max(120, baseMins);
   }, [members.length]);
 
-  // Synchronize DB member count from the host's client
+  // Synchronize DB member count to record the peak / highest participant count ever reached
   useEffect(() => {
-    if (!room || room.host_id !== currentUserId || !room.is_active) return;
+    if (!room?.id) return;
+    const currentOnline = Math.max(1, members.length);
+    const existingPeak = Number(room.member_count || 1);
 
-    const updateDbCount = async () => {
-      try {
-        await supabase
-          .from('study_rooms')
-          .update({ member_count: memberCount })
-          .eq('id', room.id);
-      } catch (e) {
-        if (__DEV__) {
-          console.warn('Failed to update DB member count:', e);
+    // Only update if current count exceeds the highest number recorded so far
+    if (currentOnline > existingPeak) {
+      const updateDbCount = async () => {
+        try {
+          await supabase
+            .from('study_rooms')
+            .update({ member_count: currentOnline })
+            .eq('id', room.id);
+        } catch (e) {
+          if (__DEV__) {
+            console.warn('Failed to update DB peak member count:', e);
+          }
         }
-      }
-    };
+      };
 
-    updateDbCount();
-  }, [memberCount, room?.id, room?.host_id, room?.is_active, currentUserId]);
+      updateDbCount();
+    }
+  }, [members.length, room?.id, room?.member_count]);
 
   // Listen for real-time room inactivation or deletion
   useEffect(() => {
