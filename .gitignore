@@ -55,7 +55,11 @@ Icon?
 !**/icon.png
 *.html
 !privacy.html
-!docs/*.html
+!delete-account.html
+!data-deletion.html
+!delete-account/**
+!data-deletion/**
+!docs/**
 *.pem
 
 # typescript

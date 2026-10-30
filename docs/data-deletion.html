@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account and Data Deletion - LifeTrack Pro</title>
+  <meta name="description" content="Request account and data deletion for LifeTrack Pro. Complete instructions for in-app deletion and web-based deletion requests.">
+  <style>
+    :root {
+      --primary: #5B4FE8;
+      --primary-dark: #4338CA;
+      --bg: #F8F9FA;
+      --card-bg: #FFFFFF;
+      --text: #1E293B;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+      --accent-badge: #EEF2FF;
+      --accent-badge-text: #4338CA;
+      --danger: #EF4444;
+      --danger-soft: #FEF2F2;
+      --success: #10B981;
+      --success-soft: #ECFDF5;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --primary: #818CF8;
+        --primary-dark: #6366F1;
+        --bg: #0F172A;
+        --card-bg: #1E293B;
+        --text: #F1F5F9;
+        --text-muted: #94A3B8;
+        --border: #334155;
+        --accent-badge: rgba(99, 102, 241, 0.15);
+        --accent-badge-text: #A5B4FC;
+        --danger-soft: rgba(239, 68, 68, 0.15);
+        --success-soft: rgba(16, 185, 129, 0.15);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.7;
+      color: var(--text);
+      background-color: var(--bg);
+      padding: 24px 16px;
+    }
+
+    .container {
+      max-width: 820px;
+      margin: 20px auto;
+      background: var(--card-bg);
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 4px 25px rgba(0, 0, 0, 0.06);
+      border: 1px solid var(--border);
+    }
+
+    @media (max-width: 640px) {
+      .container {
+        padding: 24px 18px;
+        margin: 10px auto;
+      }
+    }
+
+    .header-badge {
+      display: inline-block;
+      background: var(--accent-badge);
+      color: var(--accent-badge-text);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      color: var(--text);
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+
+    .meta-bar {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .meta-item strong {
+      color: var(--text);
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      margin-top: 32px;
+      margin-bottom: 12px;
+    }
+
+    p {
+      color: var(--text-muted);
+      font-size: 15px;
+      margin-bottom: 14px;
+    }
+
+    ul, ol {
+      padding-left: 22px;
+      margin-bottom: 16px;
+    }
+
+    li {
+      color: var(--text-muted);
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    li strong {
+      color: var(--text);
+    }
+
+    a {
+      color: var(--primary);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    a:hover {
+      opacity: 0.85;
+    }
+
+    .callout-box {
+      background: var(--accent-badge);
+      border-left: 4px solid var(--primary);
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+
+    .callout-box p {
+      color: var(--text);
+      margin-bottom: 0;
+      font-size: 14.5px;
+    }
+
+    .step-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin: 16px 0;
+    }
+
+    .step-card h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-size: 14.5px;
+    }
+
+    .data-table th, .data-table td {
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      text-align: left;
+    }
+
+    .data-table th {
+      background: var(--accent-badge);
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .data-table td {
+      color: var(--text-muted);
+    }
+
+    .badge-deleted {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .request-form {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      margin: 24px 0;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14.5px;
+      background: var(--card-bg);
+      color: var(--text);
+    }
+
+    .btn-submit {
+      display: inline-block;
+      background: var(--primary);
+      color: #FFFFFF;
+      padding: 12px 22px;
+      border-radius: 8px;
+      font-size: 14.5px;
+      font-weight: 600;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .btn-submit:hover {
+      background: var(--primary-dark);
+      opacity: 1;
+    }
+
+    .contact-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 20px;
+      border-radius: 12px;
+      margin-top: 24px;
+    }
+
+    .contact-card p {
+      margin-bottom: 6px;
+    }
+
+    .contact-card strong {
+      color: var(--text);
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 36px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <span class="header-badge">Google Play Data Safety Compliance</span>
+    <h1>Account and Data Deletion</h1>
+
+    <div class="meta-bar">
+      <div class="meta-item"><strong>App Name:</strong> LifeTrack Pro</div>
+      <div class="meta-item"><strong>Package ID:</strong> com.lifetrackpro.app</div>
+      <div class="meta-item"><strong>Developer:</strong> Abhishek Kumar</div>
+      <div class="meta-item"><strong>Policy Status:</strong> Active</div>
+    </div>
+
+    <p>LifeTrack Pro is committed to protecting your privacy and giving you total control over your personal information. In compliance with Google Play Developer Policy, this page describes how you can delete your account and associated data at any time, both from inside the app and through a web request.</p>
+
+    <div class="callout-box">
+      <p><strong>Summary:</strong> You can delete your account instantly from within the LifeTrack Pro app or submit a deletion request below using your registered email address. All your personal data, focus sessions, journal notes, and habit history will be permanently deleted within 30 days.</p>
+    </div>
+
+    <h2>1. Method 1: In-App Account Deletion (Instant)</h2>
+    <p>If you have the LifeTrack Pro app installed on your Android device, you can delete your account directly:</p>
+    
+    <div class="step-card">
+      <ol>
+        <li>Open the <strong>LifeTrack Pro</strong> app on your device.</li>
+        <li>Tap the <strong>Profile</strong> icon on the bottom navigation bar.</li>
+        <li>Tap <strong>Account Settings</strong> or scroll to the <strong>Danger Zone</strong> section.</li>
+        <li>Select <strong>Schedule Account Deletion</strong> or <strong>Delete Account</strong>.</li>
+        <li>Confirm your choice in the confirmation dialog.</li>
+      </ol>
+      <p style="margin-top: 10px; margin-bottom: 0; font-size: 13.5px;"><em>Once confirmed, your active session is immediately terminated, and your account and data are queued for permanent deletion.</em></p>
+    </div>
+
+    <h2>2. Method 2: Web Deletion Request (Without App Installed)</h2>
+    <p>If you have uninstalled the app or cannot access your device, you can submit an account or data deletion request directly via email:</p>
+
+    <div class="request-form">
+      <h3 style="margin-bottom: 12px; font-size: 16px; color: var(--text);">Submit Deletion Request</h3>
+      <p style="font-size: 13.5px; margin-bottom: 16px;">Enter your registered account email address to generate a pre-formatted deletion request:</p>
+      
+      <div class="form-group">
+        <label for="userEmail">Registered Account Email:</label>
+        <input type="email" id="userEmail" class="form-control" placeholder="your-email@example.com" required>
+      </div>
+
+      <div class="form-group">
+        <label for="deletionType">Request Type:</label>
+        <select id="deletionType" class="form-control">
+          <option value="complete">Complete Account and All Data Deletion</option>
+          <option value="history_only">Delete Study, Focus, and Habit Logs Only (Keep Account)</option>
+          <option value="journal_only">Delete Secret Journal Vault Data Only</option>
+        </select>
+      </div>
+
+      <a id="emailBtn" href="mailto:abhishekkumar86448@gmail.com?subject=Account%20and%20Data%20Deletion%20Request%20-%20LifeTrack%20Pro&body=Please%20delete%20my%20LifeTrack%20Pro%20account%20and%20all%20associated%20data.%0A%0ARegistered%20Email:%20" class="btn-submit">Send Deletion Request Email</a>
+    </div>
+
+    <h2>3. Types of Data Deleted vs. Retained</h2>
+    <p>When an account deletion request is processed, the following actions are taken on your data stored in our cloud infrastructure (Supabase):</p>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Data Category</th>
+          <th>What It Includes</th>
+          <th>Retention Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Account Information</strong></td>
+          <td>Email address, username, profile category, user settings</td>
+          <td><span class="badge-deleted">Permanently Deleted</span></td>
+        </tr>
+        <tr>
+          <td><strong>Focus & Productivity Logs</strong></td>
+          <td>Focus sessions, timer durations, subjects, earned XP points, streaks</td>
+          <td><span class="badge-deleted">Permanently Deleted</span></td>
+        </tr>
+        <tr>
+          <td><strong>Habit & Routine Tracking</strong></td>
+          <td>Daily habit completions, schedules, milestone records</td>
+          <td><span class="badge-deleted">Permanently Deleted</span></td>
+        </tr>
+        <tr>
+          <td><strong>Journal & Notes</strong></td>
+          <td>Encrypted diary entries, gratitude notes, mood tracking</td>
+          <td><span class="badge-deleted">Permanently Deleted</span></td>
+        </tr>
+        <tr>
+          <td><strong>Syllabus Progress</strong></td>
+          <td>Exam syllabus trackers, chapter completions, revision schedules</td>
+          <td><span class="badge-deleted">Permanently Deleted</span></td>
+        </tr>
+        <tr>
+          <td><strong>Diagnostics & Crash Telemetry</strong></td>
+          <td>Anonymous error logs (Sentry/PostHog)</td>
+          <td><span class="badge-deleted">Anonymized / Purged</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. Data Retention and Processing Period</h2>
+    <p>Following your deletion request:</p>
+    <ul>
+      <li><strong>Immediate Action:</strong> Your account access is immediately suspended, and data is hidden from all public/leaderboard services.</li>
+      <li><strong>Grace Period & Permanent Erasure:</strong> All database records are permanently deleted from our primary servers within <strong>48 hours</strong>. Complete deletion across all encrypted backup snapshots occurs within a maximum of <strong>30 days</strong>.</li>
+      <li><strong>No Additional Retention:</strong> LifeTrack Pro does not retain any identifying user data after the 30-day window.</li>
+    </ul>
+
+    <h2>5. Request Partial Data Deletion</h2>
+    <p>If you wish to retain your account but delete specific datasets (e.g. wipe your study history or reset habit logs), you can either:</p>
+    <ul>
+      <li>Use the in-app data reset options under <em>Settings &rarr; Storage and Reset</em>.</li>
+      <li>Select "Delete Study, Focus, and Habit Logs Only" in the request form above.</li>
+    </ul>
+
+    <h2>6. Developer Contact & Support</h2>
+    <div class="contact-card">
+      <p>If you have any questions or require assistance with your account deletion request, please contact our support team:</p>
+      <p><strong>Developer:</strong> Abhishek Kumar</p>
+      <p><strong>App:</strong> LifeTrack Pro (com.lifetrackpro.app)</p>
+      <p><strong>Support Email:</strong> <a href="mailto:abhishekkumar86448@gmail.com">abhishekkumar86448@gmail.com</a></p>
+      <p><strong>Privacy Policy:</strong> <a href="privacy.html">LifeTrack Pro Privacy Policy</a></p>
+      <p><strong>Location:</strong> India</p>
+    </div>
+
+    <footer>
+      &copy; 2026 LifeTrack Pro. All rights reserved.
+    </footer>
+  </div>
+
+  <script>
+    const emailInput = document.getElementById('userEmail');
+    const typeSelect = document.getElementById('deletionType');
+    const emailBtn = document.getElementById('emailBtn');
+
+    function updateMailto() {
+      const email = encodeURIComponent(emailInput.value.trim());
+      const type = encodeURIComponent(typeSelect.options[typeSelect.selectedIndex].text);
+      const subject = encodeURIComponent('Account and Data Deletion Request - LifeTrack Pro');
+      const body = encodeURIComponent(
+        'Hello LifeTrack Pro Support Team,\n\n' +
+        'I am requesting the following deletion for my account:\n' +
+        'Request Type: ' + typeSelect.options[typeSelect.selectedIndex].text + '\n' +
+        'Registered Account Email: ' + (emailInput.value.trim() || '[Please enter your registered email]') + '\n\n' +
+        'Please process this request and confirm once my data has been removed.\n\n' +
+        'Thank you.'
+      );
+      emailBtn.href = 'mailto:abhishekkumar86448@gmail.com?subject=' + subject + '&body=' + body;
+    }
+
+    emailInput.addEventListener('input', updateMailto);
+    typeSelect.addEventListener('change', updateMailto);
+  </script>
+</body>
+</html>
