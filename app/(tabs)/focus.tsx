@@ -482,7 +482,7 @@ export default function FocusScreen(): React.JSX.Element {
           const newXp = currentXp - STREAK_SHIELD_XP_COST;
           supabase
             .from('profiles')
-            .update({ xp_points: newXp, focus_seeds: newXp })
+            .update({ xp_points: newXp })
             .eq('id', session.user.id)
             .then(() => {}, () => {});
         }
@@ -589,7 +589,6 @@ export default function FocusScreen(): React.JSX.Element {
             .update({
               xp_points: curProf.xp_points,
               level: curProf.level,
-              focus_seeds: curProf.xp_points,
             })
             .eq('id', authSession.user.id);
         }
@@ -629,7 +628,7 @@ export default function FocusScreen(): React.JSX.Element {
             // Local has higher XP (e.g. from session finished offline), sync to Supabase
             await supabase
               .from('profiles')
-              .update({ xp_points: cachedXp, level: cached?.level || 1, focus_seeds: cachedXp })
+              .update({ xp_points: cachedXp, level: cached?.level || 1 })
               .eq('id', session.user.id);
           } else {
             setProfile(data as any);
@@ -833,7 +832,7 @@ export default function FocusScreen(): React.JSX.Element {
         const newLevel = Math.max(currentLevel, newLevelInfo.level);
 
         // 1. Immediately update local state so rewards are saved to AsyncStorage instantly
-        const optimisticProfile = liveProfile ? { ...liveProfile, xp_points: newXp, level: newLevel, focus_seeds: newXp } : null;
+        const optimisticProfile = liveProfile ? { ...liveProfile, xp_points: newXp, level: newLevel } : null;
         if (optimisticProfile) {
           setProfile(optimisticProfile);
         }
@@ -841,7 +840,6 @@ export default function FocusScreen(): React.JSX.Element {
         const updatePayload: Record<string, any> = {
           xp_points: newXp,
           level: newLevel,
-          focus_seeds: newXp, // keep in sync as backwards-compatible fallback
         };
 
         // 2. Persist to Supabase — use upsert to handle RLS/missing row edge cases
@@ -1005,7 +1003,7 @@ export default function FocusScreen(): React.JSX.Element {
             const newLevel = Math.max(currentLevel, newLevelInfo.level);
 
             const offlineProfile = liveProfileOffline
-              ? { ...liveProfileOffline, xp_points: newXp, level: newLevel, focus_seeds: newXp }
+              ? { ...liveProfileOffline, xp_points: newXp, level: newLevel }
               : null;
             if (offlineProfile) {
               setProfile(offlineProfile);

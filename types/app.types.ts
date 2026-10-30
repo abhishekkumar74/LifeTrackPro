@@ -79,8 +79,6 @@ export interface UserProfile {
   xp_points: number;
   level: number;
   is_premium: boolean;
-  focus_seeds: number;
-  unlocked_plants: string[];
   ai_insight: string | null;
   ai_insight_updated_at: string | null;
   created_at?: string;

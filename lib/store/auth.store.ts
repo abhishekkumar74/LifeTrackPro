@@ -38,11 +38,10 @@ export const useAuthStore = create<AuthState>()(
           if (!incomingProfile) return { profile: null };
           if (!state.profile) return { profile: incomingProfile };
 
-          // Defensive Protection: Never allow XP, Level, or Focus Seeds to decrease
+          // Defensive Protection: Never allow XP or Level to decrease
           // due to stale network cache, offline mode, or subscription status changes
           const safeXp = Math.max(Number(state.profile.xp_points || 0), Number(incomingProfile.xp_points || 0));
           const safeLevel = Math.max(Number(state.profile.level || 1), Number(incomingProfile.level || 1));
-          const safeSeeds = Math.max(Number(state.profile.focus_seeds || 0), Number(incomingProfile.focus_seeds || 0));
 
           return {
             profile: {
@@ -50,7 +49,6 @@ export const useAuthStore = create<AuthState>()(
               ...incomingProfile,
               xp_points: safeXp,
               level: safeLevel,
-              focus_seeds: safeSeeds,
             },
           };
         }),
@@ -66,7 +64,6 @@ export const useAuthStore = create<AuthState>()(
             profile: {
               ...state.profile,
               xp_points: newXp,
-              focus_seeds: newXp,
             },
           };
         });

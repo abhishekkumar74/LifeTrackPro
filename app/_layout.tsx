@@ -347,7 +347,7 @@ function RootLayout() {
             // Sync higher XP to Supabase in the background
             supabase
               .from('profiles')
-              .update({ xp_points: cachedXp, level: userProf.level, focus_seeds: cachedXp })
+              .update({ xp_points: cachedXp, level: userProf.level })
               .eq('id', userProf.id)
               .then(() => {}, () => {});
           }

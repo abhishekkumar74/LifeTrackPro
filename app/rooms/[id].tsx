@@ -235,17 +235,17 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           status: 'completed',
         });
 
-        const earnedSeeds = Math.min(15, Math.max(2, Math.floor(durationMin / 5)));
-        const currentSeeds = profile?.focus_seeds || 0;
+        const earnedXp = Math.min(150, Math.max(20, Math.floor(durationMin / 5) * 10));
+        const currentXp = profile?.xp_points || 0;
         await supabase
           .from('profiles')
-          .update({ focus_seeds: currentSeeds + earnedSeeds })
+          .update({ xp_points: currentXp + earnedXp })
           .eq('id', currentUserId);
       } catch (e) {
         if (__DEV__) console.warn('Failed to save in-room study session:', e);
       }
     }
-  }, [currentUserId, room?.name, room?.subject, profile?.focus_seeds]);
+  }, [currentUserId, room?.name, room?.subject, profile?.xp_points]);
 
   // Music State
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
