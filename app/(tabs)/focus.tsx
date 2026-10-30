@@ -36,7 +36,12 @@ import { useFocusStore, SoundKey, FocusPreset } from '@/lib/store/focus.store';
 import { useAmbientSound } from '@/lib/hooks/use-ambient-sound';
 import { useFocusSessions } from '@/lib/hooks/use-focus-sessions';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
-import { scheduleRevisionAlert, triggerLocalFocusCompleteNotification } from '@/lib/notifications';
+import {
+  scheduleRevisionAlert,
+  triggerLocalFocusCompleteNotification,
+  showActiveFocusNotification,
+  dismissActiveFocusNotification,
+} from '@/lib/notifications';
 import { useNotificationStore } from '@/lib/store/notification.store';
 import { getTodayLocal } from '@/lib/utils/date';
 import {
@@ -676,6 +681,7 @@ export default function FocusScreen(): React.JSX.Element {
       setShowSummary(true);
       playRewardingCompletionHaptics().catch(() => {});
       FocusLiveActivity.endSession().catch(() => {});
+      dismissActiveFocusNotification().catch(() => {});
     }
     prevModeRef.current = currentMode;
   }, [currentMode]);
@@ -905,6 +911,7 @@ export default function FocusScreen(): React.JSX.Element {
       // Trigger satisfying multi-stage completion haptics
       await playRewardingCompletionHaptics();
       FocusLiveActivity.endSession().catch(() => {});
+      dismissActiveFocusNotification().catch(() => {});
 
       // Check if we should mark a linked routine block as done
       const routineId = effectiveRoutineId || params.routineBlockId;
@@ -1027,6 +1034,7 @@ export default function FocusScreen(): React.JSX.Element {
           await ambient.stop();
           resetSession();
           FocusLiveActivity.endSession().catch(() => {});
+          dismissActiveFocusNotification().catch(() => {});
 
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           Alert.alert(
@@ -1047,6 +1055,7 @@ export default function FocusScreen(): React.JSX.Element {
       await ambient.stop().catch(() => {});
       resetSession();
       FocusLiveActivity.endSession().catch(() => {});
+      dismissActiveFocusNotification().catch(() => {});
       Alert.alert(
         'Session Ended',
         'Could not sync session to cloud, but timer and audio have been reset.'
@@ -1059,6 +1068,7 @@ export default function FocusScreen(): React.JSX.Element {
     resetSession();
     ambient.stop().catch(() => {});
     FocusLiveActivity.endSession().catch(() => {});
+    dismissActiveFocusNotification().catch(() => {});
   }, [resetSession, ambient]);
 
   const handlePlayPause = useCallback(async () => {
@@ -1066,9 +1076,23 @@ export default function FocusScreen(): React.JSX.Element {
     if (isRunning) {
       pause();
       FocusLiveActivity.updateSession(true, secondsLeft, sessionGoal).catch(() => {});
+      showActiveFocusNotification({
+        title: 'Focus Session Paused ⏸️',
+        goal: sessionGoal,
+        subject: subjectTag,
+        activeSound: activeSound,
+        durationMinutes: Math.ceil(secondsLeft / 60),
+      }).catch(() => {});
     } else if (isPaused) {
       resume();
       FocusLiveActivity.updateSession(false, secondsLeft, sessionGoal).catch(() => {});
+      showActiveFocusNotification({
+        title: 'Deep Focus in Progress ⚡',
+        goal: sessionGoal,
+        subject: subjectTag,
+        activeSound: activeSound,
+        durationMinutes: Math.ceil(secondsLeft / 60),
+      }).catch(() => {});
     } else {
       start();
       FocusLiveActivity.startSession({
@@ -1077,8 +1101,15 @@ export default function FocusScreen(): React.JSX.Element {
         sessionGoal: sessionGoal.trim() || 'Focus Session',
         accentHex: TIMER_THEMES.find((t) => t.id === activeTheme)?.color || '#5B4FE8',
       }).catch(() => {});
+      showActiveFocusNotification({
+        title: 'Deep Focus in Progress ⚡',
+        goal: sessionGoal,
+        subject: subjectTag,
+        activeSound: activeSound,
+        durationMinutes: Math.ceil(secondsLeft / 60),
+      }).catch(() => {});
     }
-  }, [isRunning, isPaused, pause, resume, start, secondsLeft, sessionGoal]);
+  }, [isRunning, isPaused, pause, resume, start, secondsLeft, sessionGoal, subjectTag, activeSound]);
 
   const handleReset = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1105,6 +1136,7 @@ export default function FocusScreen(): React.JSX.Element {
                 await ambient.stop().catch(() => {});
                 resetSession();
                 FocusLiveActivity.endSession().catch(() => {});
+                dismissActiveFocusNotification().catch(() => {});
               }
             },
           },
@@ -1115,6 +1147,7 @@ export default function FocusScreen(): React.JSX.Element {
               await ambient.stop().catch(() => {});
               resetSession();
               FocusLiveActivity.endSession().catch(() => {});
+              dismissActiveFocusNotification().catch(() => {});
             },
           },
           {
@@ -1140,6 +1173,7 @@ export default function FocusScreen(): React.JSX.Element {
               await ambient.stop().catch(() => {});
               resetSession();
               FocusLiveActivity.endSession().catch(() => {});
+              dismissActiveFocusNotification().catch(() => {});
             },
           },
           {
@@ -1198,6 +1232,13 @@ export default function FocusScreen(): React.JSX.Element {
               AdRewarded.showRewardAd(async () => {
                 setSound(key);
                 await ambient.play(key, soundVolume);
+                showActiveFocusNotification({
+                  title: isRunning ? 'Deep Focus in Progress ⚡' : 'Ambient Soundscape Playing 🎧',
+                  goal: sessionGoal,
+                  subject: subjectTag,
+                  activeSound: key,
+                  durationMinutes: Math.ceil(secondsLeft / 60),
+                }).catch(() => {});
               });
             },
           },
@@ -1210,10 +1251,28 @@ export default function FocusScreen(): React.JSX.Element {
     if (key) {
       lastActiveSoundRef.current = key;
       await ambient.play(key, soundVolume);
+      showActiveFocusNotification({
+        title: isRunning ? 'Deep Focus in Progress ⚡' : 'Ambient Soundscape Playing 🎧',
+        goal: sessionGoal,
+        subject: subjectTag,
+        activeSound: key,
+        durationMinutes: Math.ceil(secondsLeft / 60),
+      }).catch(() => {});
     } else {
       await ambient.stop();
+      if (!isRunning) {
+        dismissActiveFocusNotification().catch(() => {});
+      } else {
+        showActiveFocusNotification({
+          title: 'Deep Focus in Progress ⚡',
+          goal: sessionGoal,
+          subject: subjectTag,
+          activeSound: null,
+          durationMinutes: Math.ceil(secondsLeft / 60),
+        }).catch(() => {});
+      }
     }
-  }, [isPremium, profile?.level, profile?.xp_points, setSound, ambient, soundVolume]);
+  }, [isPremium, profile?.level, profile?.xp_points, setSound, ambient, soundVolume, isRunning, sessionGoal, subjectTag, secondsLeft]);
 
   const handleVolumeChange = useCallback(async (vol: number) => {
     setVolume(vol);

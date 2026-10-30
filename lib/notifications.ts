@@ -93,6 +93,15 @@ export async function requestNotificationPermission(): Promise<boolean> {
           importance: Notifications.AndroidImportance.DEFAULT,
           sound: 'default',
         });
+        await Notifications.setNotificationChannelAsync('active_focus_channel', {
+          name: 'Active Focus & Soundscapes',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: null,
+          enableVibrate: false,
+          lightColor: '#5B4FE8',
+          sound: null,
+          showBadge: true,
+        });
       } catch (channelErr) {
         if (__DEV__) console.warn('Notification channels could not be registered:', channelErr);
       }
@@ -264,6 +273,71 @@ export async function triggerLocalFocusCompleteNotification(
   }
 }
 
+// 3.8.1 showActiveFocusNotification (Ongoing system notification for Android notification shade & Foreground Service)
+export const ACTIVE_FOCUS_NOTIF_ID = 'lifetrack_active_focus_session';
+
+export async function showActiveFocusNotification(params: {
+  title?: string;
+  goal?: string;
+  subject?: string | null;
+  activeSound?: string | null;
+  durationMinutes?: number;
+}): Promise<void> {
+  if (!Notifications) return;
+  try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('active_focus_channel', {
+        name: 'Active Focus & Soundscapes',
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: null,
+        enableVibrate: false,
+        vibrationPattern: null,
+        lightColor: '#5B4FE8',
+        showBadge: true,
+      }).catch(() => {});
+    }
+
+    const goalText = params.goal && params.goal.trim() ? params.goal.trim() : 'Focus Session';
+    const soundText = params.activeSound && params.activeSound !== 'none'
+      ? ` • 🎧 ${params.activeSound.charAt(0).toUpperCase() + params.activeSound.slice(1)}`
+      : '';
+    const subjectText = params.subject ? `[${params.subject}] ` : '';
+    const durationText = params.durationMinutes ? ` (${params.durationMinutes}m)` : '';
+    const titleText = params.title || `Deep Focus Active${durationText} ⚡`;
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: ACTIVE_FOCUS_NOTIF_ID,
+      content: {
+        title: titleText,
+        body: `${subjectText}${goalText}${soundText} in progress`,
+        data: { screen: '/(tabs)/focus', type: 'focus_active' },
+        sound: false,
+        sticky: true,
+        autoDismiss: false,
+        priority: 'high',
+        color: '#5B4FE8',
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        channelId: 'active_focus_channel',
+        seconds: 1,
+      },
+    }).catch(() => {});
+  } catch (err) {
+    if (__DEV__) console.warn('showActiveFocusNotification failed:', err);
+  }
+}
+
+export async function dismissActiveFocusNotification(): Promise<void> {
+  if (!Notifications) return;
+  try {
+    await Notifications.dismissNotificationAsync(ACTIVE_FOCUS_NOTIF_ID).catch(() => {});
+    await Notifications.cancelScheduledNotificationAsync(ACTIVE_FOCUS_NOTIF_ID).catch(() => {});
+  } catch (err) {
+    if (__DEV__) console.warn('dismissActiveFocusNotification failed:', err);
+  }
+}
+
 // 3.9 sendTestNotification
 export async function sendTestNotification(): Promise<boolean> {
   const granted = await requestNotificationPermission();
@@ -380,7 +454,7 @@ export function useNotificationResponse() {
       // Listener 1: When a notification arrives (foreground or background trigger)
       receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
         const { title, body, data } = notification.request.content;
-        if (title) {
+        if (title && data?.type !== 'focus_active') {
           useNotificationStore.getState().addNotification({
             type: (data?.type as any) || 'brief',
             title,
@@ -399,7 +473,7 @@ export function useNotificationResponse() {
         const screen = data?.screen;
 
         // Add or ensure recorded in in-app store, and mark as read
-        if (content.title) {
+        if (content.title && data?.type !== 'focus_active') {
           useNotificationStore.getState().addNotification({
             type: (data?.type as any) || 'brief',
             title: content.title,

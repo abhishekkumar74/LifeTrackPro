@@ -22,6 +22,7 @@ import { HomeHeader } from '@/components/home/HomeHeader';
 import { TodayFocusCard, FocusStartPayload } from '@/components/home/TodayFocusCard';
 import { QuickStats } from '@/components/home/QuickStats';
 import { DailyReviewBanner } from '@/components/home/DailyReviewBanner';
+import { AnnouncementBanner } from '@/components/home/AnnouncementBanner';
 import { ScheduleStrip } from '@/components/home/ScheduleStrip';
 import { HabitRow } from '@/components/home/HabitRow';
 import { GoalBar } from '@/components/home/GoalBar';
@@ -519,6 +520,9 @@ export default function HomeDashboardScreen(): React.JSX.Element {
             sparklines={stats.sparklines}
           />
         </View>
+
+        {/* Remote In-App Announcement Banner */}
+        <AnnouncementBanner />
 
         {/* Daily Review Banner — Shown only when flashcards are due */}
         <DailyReviewBanner />
