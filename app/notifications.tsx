@@ -35,6 +35,7 @@ import {
   useNotificationStore,
   AppNotification,
   NotificationType,
+  formatNotificationTime,
 } from '@/lib/store/notification.store';
 import {
   requestNotificationPermission,
@@ -70,16 +71,15 @@ export default function NotificationsScreen() {
     return false;
   });
 
-  // Auto-generate today's activity & nudges if inbox is empty
+  // Sync notification schedules on mount without injecting fake notifications
   useEffect(() => {
-    refreshDailyNudges();
+    syncNotificationSchedules().catch(() => {});
   }, []);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    refreshDailyNudges();
-    await syncNotificationSchedules();
+    await syncNotificationSchedules().catch(() => {});
     setTimeout(() => {
       setRefreshing(false);
     }, 450);
@@ -169,7 +169,7 @@ export default function NotificationsScreen() {
             >
               {item.title}
             </Text>
-            <Text style={styles.cardTime}>{item.time}</Text>
+            <Text style={styles.cardTime}>{formatNotificationTime(item.timestamp, item.time)}</Text>
           </View>
 
           <Text style={styles.cardBody} numberOfLines={2}>
@@ -234,7 +234,7 @@ export default function NotificationsScreen() {
                 </View>
               )}
             </View>
-            <Text style={styles.headerSub}>LifeTrack Pro Activity & Nudges</Text>
+            <Text style={styles.headerSub}>LifeTrack Pro Activity & Alerts</Text>
           </View>
         </View>
 
@@ -319,20 +319,12 @@ export default function NotificationsScreen() {
             <View style={styles.emptyIconCircle}>
               <BellOff size={32} color={COLORS.t3} />
             </View>
-            <Text style={styles.emptyTitle}>All Caught Up!</Text>
+            <Text style={styles.emptyTitle}>All Caught Up</Text>
             <Text style={styles.emptySub}>
               {activeFilter === 'all'
-                ? 'No pending notifications right now. Operating at peak focus!'
-                : `No ${activeFilter} alerts to display.`}
+                ? 'No notifications right now. Your workspace is clear.'
+                : `No ${activeFilter} notifications to display.`}
             </Text>
-            <TouchableOpacity
-              style={styles.refreshNudgesBtn}
-              onPress={handleRefresh}
-              activeOpacity={0.8}
-            >
-              <RefreshCw size={15} color="#FFFFFF" />
-              <Text style={styles.refreshNudgesBtnText}>Generate Today's Nudges</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.feedWrapper}>
@@ -407,7 +399,7 @@ export default function NotificationsScreen() {
 
               <View style={styles.settingItem}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.settingLabel}>Streak Saver Alerts 🔥</Text>
+                  <Text style={styles.settingLabel}>Streak Saver Alerts</Text>
                   <Text style={styles.settingSub}>Remind at 9:00 PM before streak breaks</Text>
                 </View>
                 <Switch
@@ -433,7 +425,7 @@ export default function NotificationsScreen() {
 
               <View style={styles.settingItem}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.settingLabel}>Spaced Repetition Alerts 🧠</Text>
+                  <Text style={styles.settingLabel}>Spaced Repetition Alerts</Text>
                   <Text style={styles.settingSub}>Optimal memory review interval notifications</Text>
                 </View>
                 <Switch
@@ -465,8 +457,8 @@ export default function NotificationsScreen() {
                   const ok = await sendTestNotification();
                   if (ok) {
                     Alert.alert(
-                      'Test Alert Dispatched 🔔',
-                      'Check your device notification shade! An alert has also been added to your in-app notification center.'
+                      'Test Alert Dispatched',
+                      'Check your device notification shade. An alert has also been added to your in-app notification center.'
                     );
                   }
                 }}

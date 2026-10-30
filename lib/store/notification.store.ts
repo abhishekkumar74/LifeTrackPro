@@ -10,7 +10,7 @@ export interface AppNotification {
   type: NotificationType;
   title: string;
   body: string;
-  time: string;
+  time?: string;
   timestamp: number;
   isRead: boolean;
   targetScreen: string;
@@ -29,6 +29,7 @@ export interface NotificationSettings {
 interface NotificationState {
   notifications: AppNotification[];
   settings: NotificationSettings;
+  lastClearedAt: number | null;
 
   // Actions
   markAsRead: (id: string) => void;
@@ -41,52 +42,22 @@ interface NotificationState {
   resetDefaults: () => void;
 }
 
-const DEFAULT_NOTIFICATIONS: AppNotification[] = [
-  {
-    id: 'notif-1',
-    type: 'brief',
-    title: 'Daily Morning Brief ☀️',
-    body: "Today's priority: Complete your planned focus blocks and keep your momentum high!",
-    time: '8:00 AM',
-    timestamp: Date.now() - 1000 * 60 * 60 * 2,
-    isRead: false,
-    targetScreen: '/',
-    actionText: 'View Today Brief',
-  },
-  {
-    id: 'notif-2',
-    type: 'streak',
-    title: "Don't break your 7-day streak! 🔥",
-    body: 'Complete at least 1 habit before midnight to keep your streak shield alive.',
-    time: '2h ago',
-    timestamp: Date.now() - 1000 * 60 * 120,
-    isRead: false,
-    targetScreen: '/habits',
-    actionText: 'Log Habits Now',
-  },
-  {
-    id: 'notif-3',
-    type: 'revision',
-    title: 'Spaced Repetition Nudge 🧠',
-    body: 'Time to review "Data Structures & Algorithms" to lock memory retention.',
-    time: 'Yesterday',
-    timestamp: Date.now() - 1000 * 60 * 60 * 24,
-    isRead: true,
-    targetScreen: '/(tabs)/learn',
-    actionText: 'Start Review',
-  },
-  {
-    id: 'notif-4',
-    type: 'milestone',
-    title: 'Focus Goal Unlocked! 🏆',
-    body: 'Congratulations! You reached over 10 cumulative hours of deep focus session.',
-    time: '2 days ago',
-    timestamp: Date.now() - 1000 * 60 * 60 * 48,
-    isRead: true,
-    targetScreen: '/(tabs)/focus',
-    actionText: 'View Focus Stats',
-  },
-];
+export function formatNotificationTime(timestamp?: number, fallback = 'Just now'): string {
+  if (!timestamp) return fallback;
+  const now = Date.now();
+  const diff = Math.max(0, now - timestamp);
+
+  if (diff < 60 * 1000) return 'Just now';
+  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / (60 * 1000))}m ago`;
+  if (diff < 24 * 60 * 60 * 1000) {
+    const hours = Math.floor(diff / (60 * 60 * 1000));
+    return `${hours}h ago`;
+  }
+  if (diff < 48 * 60 * 60 * 1000) return 'Yesterday';
+
+  const date = new Date(timestamp);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 const DEFAULT_SETTINGS: NotificationSettings = {
   morningBriefEnabled: true,
@@ -100,12 +71,13 @@ const DEFAULT_SETTINGS: NotificationSettings = {
 export const useNotificationStore = create<NotificationState>()(
   persist(
     (set, get) => ({
-      notifications: DEFAULT_NOTIFICATIONS,
+      notifications: [],
       settings: DEFAULT_SETTINGS,
+      lastClearedAt: null,
 
       markAsRead: (id: string) => {
         set((state) => ({
-          notifications: state.notifications.map((n) =>
+          notifications: (state.notifications || []).map((n) =>
             n.id === id ? { ...n, isRead: true } : n
           ),
         }));
@@ -114,50 +86,53 @@ export const useNotificationStore = create<NotificationState>()(
       markAllAsRead: () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         set((state) => ({
-          notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
+          notifications: (state.notifications || []).map((n) => ({ ...n, isRead: true })),
         }));
       },
 
       deleteNotification: (id: string) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         set((state) => ({
-          notifications: state.notifications.filter((n) => n.id !== id),
+          notifications: (state.notifications || []).filter((n) => n.id !== id),
         }));
       },
 
       clearAll: () => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        set({ notifications: [] });
+        set({
+          notifications: [],
+          lastClearedAt: Date.now(),
+        });
       },
 
       addNotification: (item) => {
         const now = Date.now();
-        const existingRecent = get().notifications.find(
-          (n) => n.title === item.title && now - n.timestamp < 1000 * 60 * 60 * 4
+        const currentNotifications = get().notifications || [];
+
+        // Deduplication: Avoid duplicate notifications with identical title & type within 5 minutes
+        const isDuplicate = currentNotifications.some(
+          (n) =>
+            n.title === item.title &&
+            n.type === item.type &&
+            Math.abs(now - n.timestamp) < 1000 * 60 * 5
         );
 
-        if (existingRecent) {
-          // Update the recent notification rather than duplicating
-          set((state) => ({
-            notifications: state.notifications.map((n) =>
-              n.id === existingRecent.id
-                ? { ...n, body: item.body, time: 'Just now', timestamp: now, isRead: false }
-                : n
-            ),
-          }));
+        if (isDuplicate) {
           return;
         }
 
         const newNotif: AppNotification = {
           ...item,
-          id: `notif-${now}-${Math.random().toString(36).substr(2, 4)}`,
+          id: `notif_${now}_${Math.random().toString(36).substring(2, 7)}`,
           timestamp: now,
+          time: 'Just now',
           isRead: false,
         };
 
-        set((state) => ({
-          notifications: [newNotif, ...state.notifications],
-        }));
+        // Prepend and cap at maximum 50 notifications to prevent unbounded memory growth
+        set({
+          notifications: [newNotif, ...currentNotifications].slice(0, 50),
+        });
       },
 
       refreshDailyNudges: () => {
@@ -165,75 +140,56 @@ export const useNotificationStore = create<NotificationState>()(
         const now = Date.now();
         const currentNotifications = state.notifications || [];
 
-        // Check if we already have today's nudges
+        // If user explicitly cleared notifications recently (within last 12 hours), respect user intent
+        if (state.lastClearedAt && now - state.lastClearedAt < 1000 * 60 * 60 * 12) {
+          return;
+        }
+
+        if (state.settings.doNotDisturb) {
+          return;
+        }
+
+        const currentHour = new Date(now).getHours();
         const hasRecentType = (type: NotificationType) =>
-          currentNotifications.some((n) => n.type === type && now - n.timestamp < 1000 * 60 * 60 * 18);
+          currentNotifications.some(
+            (n) => n.type === type && Math.abs(now - n.timestamp) < 1000 * 60 * 60 * 18
+          );
 
         const newItems: AppNotification[] = [];
 
-        // 1. Daily Morning Brief (if not created in last 18 hours)
-        if (!hasRecentType('brief') && state.settings.morningBriefEnabled) {
+        // Morning Brief (6:00 AM - 11:59 AM)
+        if (currentHour >= 6 && currentHour < 12 && !hasRecentType('brief') && state.settings.morningBriefEnabled) {
           newItems.push({
-            id: `notif-brief-${now}`,
+            id: `notif_brief_${now}`,
             type: 'brief',
-            title: 'Daily Morning Brief ☀️',
-            body: "Your daily focus targets are set! Plan your deep work sessions and maintain peak momentum today.",
-            time: '8:00 AM',
-            timestamp: now - 1000 * 60 * 60,
+            title: 'Daily Morning Brief',
+            body: 'Your focus goals are ready. Plan your deep work sessions and maintain peak momentum today.',
+            time: 'Just now',
+            timestamp: now,
             isRead: false,
             targetScreen: '/',
             actionText: "View Today's Plan",
           });
         }
 
-        // 2. Streak Saver Alert
-        if (!hasRecentType('streak') && state.settings.streakAlertsEnabled) {
+        // Streak saver (7:00 PM - 11:59 PM)
+        if (currentHour >= 19 && !hasRecentType('streak') && state.settings.streakAlertsEnabled) {
           newItems.push({
-            id: `notif-streak-${now}`,
+            id: `notif_streak_${now}`,
             type: 'streak',
-            title: "Keep Your Streak Alive! 🔥",
-            body: 'Check in on your daily habits today to protect your active streak shield.',
-            time: 'Nudge',
-            timestamp: now - 1000 * 60 * 30,
+            title: 'Keep Your Streak Active',
+            body: 'Check in on your daily habits today to keep your streak shield intact.',
+            time: 'Just now',
+            timestamp: now,
             isRead: false,
             targetScreen: '/habits',
             actionText: 'Log Habits Now',
           });
         }
 
-        // 3. Spaced Repetition Nudge
-        if (!hasRecentType('revision') && state.settings.revisionAlertsEnabled) {
-          newItems.push({
-            id: `notif-revision-${now}`,
-            type: 'revision',
-            title: 'Spaced Repetition Review 🧠',
-            body: 'Active recall time! Review your flashcards and topic notes to maximize retention.',
-            time: 'Active',
-            timestamp: now - 1000 * 60 * 15,
-            isRead: false,
-            targetScreen: '/(tabs)/learn',
-            actionText: 'Review Cards',
-          });
-        }
-
-        // 4. Milestone / Deep Work Nudge
-        if (!hasRecentType('milestone')) {
-          newItems.push({
-            id: `notif-milestone-${now}`,
-            type: 'milestone',
-            title: 'Deep Work Milestone 🏆',
-            body: 'Commit to at least 25 minutes of uninterrupted deep focus block today to level up your XP.',
-            time: 'Goal',
-            timestamp: now - 1000 * 60 * 5,
-            isRead: false,
-            targetScreen: '/(tabs)/focus',
-            actionText: 'Start Focus Block',
-          });
-        }
-
-        if (newItems.length > 0 || currentNotifications.length === 0) {
+        if (newItems.length > 0) {
           set({
-            notifications: [...newItems, ...currentNotifications],
+            notifications: [...newItems, ...currentNotifications].slice(0, 50),
           });
         }
       },
@@ -250,14 +206,48 @@ export const useNotificationStore = create<NotificationState>()(
 
       resetDefaults: () => {
         set({
-          notifications: DEFAULT_NOTIFICATIONS,
+          notifications: [],
           settings: DEFAULT_SETTINGS,
+          lastClearedAt: null,
         });
       },
     }),
     {
       name: 'lifetrack_notification_storage',
       storage: createJSONStorage(() => AsyncStorage),
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
+        if (!persistedState) {
+          return {
+            notifications: [],
+            settings: DEFAULT_SETTINGS,
+            lastClearedAt: null,
+          };
+        }
+        // Purge legacy hardcoded mock notification IDs and emoji mocks
+        const legacyDummyIds = new Set(['notif-1', 'notif-2', 'notif-3', 'notif-4']);
+        const cleanedNotifications = Array.isArray(persistedState.notifications)
+          ? persistedState.notifications.filter(
+              (n: any) =>
+                n &&
+                !legacyDummyIds.has(n.id) &&
+                !n.title?.includes('☀️') &&
+                !n.title?.includes('🔥') &&
+                !n.title?.includes('🧠') &&
+                !n.title?.includes('🏆')
+            )
+          : [];
+
+        return {
+          ...persistedState,
+          notifications: cleanedNotifications,
+          lastClearedAt: persistedState.lastClearedAt ?? null,
+          settings: {
+            ...DEFAULT_SETTINGS,
+            ...(persistedState.settings || {}),
+          },
+        };
+      },
     }
   )
 );

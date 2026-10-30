@@ -115,7 +115,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
           try {
             await requestNotificationPermission();
             await syncNotificationSchedules();
-            useNotificationStore.getState().refreshDailyNudges();
           } catch (err) {
             if (__DEV__) console.warn('Failed bootstrapping notifications:', err);
           }

@@ -888,7 +888,7 @@ export default function FocusScreen(): React.JSX.Element {
         triggerLocalFocusCompleteNotification(dbDuration, earned).catch(() => {});
         useNotificationStore.getState().addNotification({
           type: 'milestone',
-          title: 'Focus Session Completed! 🏆',
+          title: 'Focus Session Completed',
           body: `You logged ${dbDuration}m of deep work${effectiveSubject ? ` on "${effectiveSubject}"` : ''} (+${earned} XP earned).`,
           time: 'Just now',
           targetScreen: '/(tabs)/focus',

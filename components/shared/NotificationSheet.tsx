@@ -27,6 +27,7 @@ import {
   useNotificationStore,
   AppNotification,
   NotificationType,
+  formatNotificationTime,
 } from '@/lib/store/notification.store';
 import { syncNotificationSchedules } from '@/lib/notifications';
 
@@ -178,26 +179,8 @@ export const NotificationSheet: React.FC<NotificationSheetProps> = ({
                 <View style={styles.emptyIconCircle}>
                   <BellOff size={26} color="#A8A29E" />
                 </View>
-                <Text style={styles.emptyTitle}>All Caught Up!</Text>
+                <Text style={styles.emptyTitle}>All Caught Up</Text>
                 <Text style={styles.emptySub}>No active notifications right now.</Text>
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: '#5B4FE8',
-                    paddingHorizontal: 16,
-                    paddingVertical: 8,
-                    borderRadius: 16,
-                    marginTop: 12,
-                  }}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    refreshDailyNudges();
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={{ fontFamily: 'DMSans-Bold', fontSize: 12, color: '#FFFFFF' }}>
-                    Generate Today's Nudges
-                  </Text>
-                </TouchableOpacity>
               </View>
             ) : (
               notifications.slice(0, 5).map((item) => {
@@ -234,7 +217,7 @@ export const NotificationSheet: React.FC<NotificationSheetProps> = ({
                         >
                           {item.title}
                         </Text>
-                        <Text style={styles.cardTime}>{item.time}</Text>
+                        <Text style={styles.cardTime}>{formatNotificationTime(item.timestamp, item.time)}</Text>
                       </View>
                       <Text style={styles.cardBody} numberOfLines={2}>
                         {item.body}

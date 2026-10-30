@@ -123,7 +123,7 @@ export async function scheduleMorningBrief(topTaskTitle: string, hour = 8, minut
     await Notifications.scheduleNotificationAsync({
       identifier: 'morning_brief',
       content: {
-        title: 'Good morning! ☀️',
+        title: 'Good morning!',
         body: `Today's priority: ${topTaskTitle || 'Complete your planned focus blocks'}`,
         data: { screen: '/', type: 'brief', actionText: "View Today's Plan" },
         sound: 'default',
@@ -149,7 +149,7 @@ export async function scheduleHabitReminder(hour = 14, minute = 30): Promise<voi
     await Notifications.scheduleNotificationAsync({
       identifier: 'afternoon_habit',
       content: {
-        title: 'Habit Check-in 🎯',
+        title: 'Habit Check-in',
         body: 'Keep your momentum high! Check off your daily habits before the evening rush.',
         data: { screen: '/habits', type: 'streak', actionText: 'Log Habits Now' },
         sound: 'default',
@@ -175,7 +175,7 @@ export async function scheduleStreakAlert(hour = 21, minute = 0): Promise<void> 
     await Notifications.scheduleNotificationAsync({
       identifier: 'streak_alert',
       content: {
-        title: "Don't break your streak! 🔥",
+        title: "Don't break your streak!",
         body: 'Complete at least 1 habit before midnight to protect your active streak shield.',
         data: { screen: '/habits', type: 'streak', actionText: 'Save Streak' },
         sound: 'default',
@@ -201,7 +201,7 @@ export async function scheduleEveningReview(hour = 22, minute = 0): Promise<void
     await Notifications.scheduleNotificationAsync({
       identifier: 'evening_review',
       content: {
-        title: 'Daily Wrap-up 🌙',
+        title: 'Daily Wrap-up',
         body: 'Take 1 minute to reflect on today’s focus achievements and review your stats.',
         data: { screen: '/(tabs)/stats', type: 'brief', actionText: 'View Stats' },
         sound: 'default',
@@ -231,7 +231,7 @@ export async function scheduleRevisionAlert(topicTitle: string, delayDays: numbe
     await Notifications.scheduleNotificationAsync({
       identifier: `revision_${cleanTitle.replace(/\s+/g, '_')}_${delayDays}`,
       content: {
-        title: 'Time to Revise! 🧠',
+        title: 'Time to Revise!',
         body: `It's time to review "${cleanTitle}" to boost long-term memory retention!`,
         sound: 'default',
         data: { screen: '/(tabs)/learn', type: 'revision', actionText: 'Start Review' },
@@ -257,7 +257,7 @@ export async function triggerLocalFocusCompleteNotification(
     await Notifications.scheduleNotificationAsync({
       identifier: `focus_complete_${Date.now()}`,
       content: {
-        title: 'Focus Session Complete! 🏆',
+        title: 'Focus Session Complete',
         body: `Phenomenal work! You completed ${durationMin}m of deep work (+${xpEarned} XP earned).`,
         data: { screen: '/(tabs)/focus', type: 'milestone', actionText: 'View Focus Stats' },
         sound: 'default',
@@ -299,11 +299,11 @@ export async function showActiveFocusNotification(params: {
 
     const goalText = params.goal && params.goal.trim() ? params.goal.trim() : 'Focus Session';
     const soundText = params.activeSound && params.activeSound !== 'none'
-      ? ` • 🎧 ${params.activeSound.charAt(0).toUpperCase() + params.activeSound.slice(1)}`
+      ? ` • ${params.activeSound.charAt(0).toUpperCase() + params.activeSound.slice(1)}`
       : '';
     const subjectText = params.subject ? `[${params.subject}] ` : '';
     const durationText = params.durationMinutes ? ` (${params.durationMinutes}m)` : '';
-    const titleText = params.title || `Deep Focus Active${durationText} ⚡`;
+    const titleText = params.title || `Deep Focus Active${durationText}`;
 
     await Notifications.scheduleNotificationAsync({
       identifier: ACTIVE_FOCUS_NOTIF_ID,
@@ -343,7 +343,7 @@ export async function sendTestNotification(): Promise<boolean> {
   const granted = await requestNotificationPermission();
   if (!granted) return false;
 
-  const title = 'LifeTrack Pro Alert 🔔';
+  const title = 'LifeTrack Pro Alert';
   const body = 'Notifications are working smoothly! Streak reminders, briefs, and study nudges are active.';
 
   // 1. Send push to device notification shade
