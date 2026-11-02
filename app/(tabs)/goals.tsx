@@ -18,10 +18,14 @@ import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { Plus, Mountain, Target, Trophy, CheckCircle2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { useUiStore } from '@/lib/store/ui.store';
 
 import { useGoals, useUpdateGoal, useDeleteGoal, AssembledGoal } from '@/lib/hooks/use-goals';
-import { useUpdateMilestoneStatus, useDeleteMilestone } from '@/lib/hooks/use-milestones';
+import {
+  useUpdateMilestoneStatus,
+  useDeleteMilestone,
+  useCreateMilestone,
+} from '@/lib/hooks/use-milestones';
 import {
   useTasks,
   useCompleteTask,
@@ -66,6 +70,7 @@ export default function GoalsScreen(): React.JSX.Element {
   // Mutation Hooks
   const { mutate: updateMilestoneStatus } = useUpdateMilestoneStatus();
   const { mutate: deleteMilestone } = useDeleteMilestone();
+  const createMilestoneMutation = useCreateMilestone();
   const { mutate: completeTask } = useCompleteTask();
   const { mutate: rescheduleTask } = useRescheduleTask();
   const { mutate: deleteTask } = useDeleteTask();
@@ -129,39 +134,6 @@ export default function GoalsScreen(): React.JSX.Element {
     return () => {
       delete tabScrollRefs['goals'];
     };
-  }, []);
-  
-  const [isFabOpen, setIsFabOpen] = useState(false);
-  const animValue = useSharedValue(0);
-
-  useEffect(() => {
-    animValue.value = withTiming(isFabOpen ? 1 : 0, { duration: 200 });
-  }, [isFabOpen]);
-
-  const animatedMenuStyle = useAnimatedStyle(() => {
-    return {
-      opacity: animValue.value,
-      transform: [
-        {
-          translateY: (1 - animValue.value) * 20,
-        },
-      ],
-    };
-  });
-
-  const animatedIconStyle = useAnimatedStyle(() => {
-    return {
-      transform: [
-        {
-          rotate: `${animValue.value * 45}deg`,
-        },
-      ],
-    };
-  });
-
-  const handleFabPress = useCallback(async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    setIsFabOpen((prev) => !prev);
   }, []);
 
   const handleRefresh = useCallback(async () => {
@@ -380,24 +352,60 @@ export default function GoalsScreen(): React.JSX.Element {
     );
   }, [deleteGoal]);
 
+  const handleQuickAddMilestone = useCallback((goalId: string, title: string) => {
+    const goal = activeGoalsQuery.data?.find((g) => g.id === goalId);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    createMilestoneMutation.mutate(
+      {
+        goal_id: goalId,
+        title: title.trim(),
+        due_date: goal?.deadline || null,
+        status: 'pending',
+        order_index: (goal?.milestones?.length || 0),
+      },
+      {
+        onSuccess: () => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          useUiStore.getState().showToast(`Milestone added: ${title}`, 'success');
+        },
+        onError: (err: any) => {
+          Alert.alert('Error', err?.message || 'Could not add milestone');
+        },
+      }
+    );
+  }, [createMilestoneMutation, activeGoalsQuery.data]);
+
+  const handleToggleMilestoneStatus = useCallback((
+    milestoneId: string,
+    goalId: string,
+    currentStatus: 'pending' | 'completed'
+  ) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    const nextStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+    updateMilestoneStatus({ id: milestoneId, goalId, status: nextStatus });
+  }, [updateMilestoneStatus]);
+
   const renderGoalItem = useCallback(({ item }: { item: AssembledGoal }) => (
     <GoalCard
       goal={item}
       isPrimary={item.is_primary}
       onAddMilestone={handleAddMilestone}
+      onQuickAddMilestone={handleQuickAddMilestone}
+      onToggleMilestoneStatus={handleToggleMilestoneStatus}
       onToggleStatus={handleToggleGoalStatus}
       onDeleteGoal={handleDeleteGoal}
     />
-  ), [handleAddMilestone, handleToggleGoalStatus, handleDeleteGoal]);
+  ), [handleAddMilestone, handleQuickAddMilestone, handleToggleMilestoneStatus, handleToggleGoalStatus, handleDeleteGoal]);
 
   const renderAchievedGoalItem = useCallback(({ item }: { item: AssembledGoal }) => (
     <GoalCard
       goal={item}
       isPrimary={item.is_primary}
+      onToggleMilestoneStatus={handleToggleMilestoneStatus}
       onToggleStatus={handleToggleGoalStatus}
       onDeleteGoal={handleDeleteGoal}
     />
-  ), [handleToggleGoalStatus, handleDeleteGoal]);
+  ), [handleToggleMilestoneStatus, handleToggleGoalStatus, handleDeleteGoal]);
 
   const handleDeleteMilestone = useCallback((id: string, goalId: string, title: string) => {
     Alert.alert(
@@ -524,9 +532,28 @@ export default function GoalsScreen(): React.JSX.Element {
           />
         }
         ListFooterComponent={
-          standaloneTasks.length > 0 ? (
-            <View style={styles.tasksSection}>
-              <Text style={styles.sectionHeader}>{SECTION_TASKS}</Text>
+          <View style={styles.tasksSection}>
+            <View style={styles.tasksSectionHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.sectionHeader}>{SECTION_TASKS}</Text>
+                {standaloneTasks.length > 0 && (
+                  <View style={styles.tasksCountBadge}>
+                    <Text style={styles.tasksCountBadgeText}>{standaloneTasks.length}</Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity
+                style={styles.addTaskInlineBtn}
+                onPress={() => handleOpenCreateTask(null)}
+                activeOpacity={0.7}
+                accessibilityLabel="Add Task"
+              >
+                <Plus size={13} color="#5B4FE8" strokeWidth={2.6} />
+                <Text style={styles.addTaskInlineText}>Add task</Text>
+              </TouchableOpacity>
+            </View>
+
+            {standaloneTasks.length > 0 ? (
               <View style={styles.tasksContainer}>
                 {standaloneTasks.map((task) => (
                   <TaskItem
@@ -538,8 +565,19 @@ export default function GoalsScreen(): React.JSX.Element {
                   />
                 ))}
               </View>
-            </View>
-          ) : null
+            ) : (
+              <View style={styles.tasksEmptyContainer}>
+                <Text style={styles.tasksEmptyText}>No tasks created</Text>
+                <TouchableOpacity
+                  style={styles.emptyAddTaskButton}
+                  onPress={() => handleOpenCreateTask(null)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.emptyAddTaskText}>+ Add a task to stay organized</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         }
       />
     );
@@ -689,68 +727,6 @@ export default function GoalsScreen(): React.JSX.Element {
         {selectedTab === 'achieved' && renderAchievedTab()}
       </View>
 
-      {/* Semi-transparent backdrop when FAB is open */}
-      {isFabOpen && (
-        <TouchableOpacity
-          style={styles.backdropOverlay}
-          activeOpacity={1}
-          onPress={() => setIsFabOpen(false)}
-        />
-      )}
-
-      {/* Floating Action Button (FAB) only visible on Active tab */}
-      {selectedTab === 'active' && (
-        <View style={styles.fabContainer} pointerEvents="box-none">
-          {/* Action buttons (Option 1 & 2) */}
-          <Animated.View style={[styles.fabMenu, animatedMenuStyle]} pointerEvents={isFabOpen ? 'auto' : 'none'}>
-            {/* Option 2: New Task */}
-            <TouchableOpacity
-              style={styles.fabOptionRow}
-              onPress={() => {
-                setIsFabOpen(false);
-                handleOpenCreateTask(null);
-              }}
-              activeOpacity={0.8}
-            >
-              <View style={styles.fabOptionLabelPill}>
-                <Text style={styles.fabOptionLabelText}>New Task</Text>
-              </View>
-              <View style={[styles.fabOptionCircle, { backgroundColor: '#00B894' }]}>
-                <Plus size={16} color="#FFFFFF" strokeWidth={3} />
-              </View>
-            </TouchableOpacity>
-
-            {/* Option 1: New Goal */}
-            <TouchableOpacity
-              style={styles.fabOptionRow}
-              onPress={() => {
-                setIsFabOpen(false);
-                handleOpenCreateGoal();
-              }}
-              activeOpacity={0.8}
-            >
-              <View style={styles.fabOptionLabelPill}>
-                <Text style={styles.fabOptionLabelText}>New Goal</Text>
-              </View>
-              <View style={[styles.fabOptionCircle, { backgroundColor: '#E8A020' }]}>
-                <Plus size={16} color="#FFFFFF" strokeWidth={3} />
-              </View>
-            </TouchableOpacity>
-          </Animated.View>
-
-          {/* Main FAB Trigger Button */}
-          <TouchableOpacity
-            style={[styles.fab, isFabOpen && styles.fabOpen]}
-            onPress={handleFabPress}
-            activeOpacity={0.8}
-          >
-            <Animated.View style={animatedIconStyle}>
-              <Plus size={24} color="#FFFFFF" strokeWidth={2.5} />
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {/* Goal Creation Bottom Sheet */}
       <CreateGoalSheet
         ref={createGoalSheetRef}
@@ -824,17 +800,20 @@ const styles = StyleSheet.create({
   },
   tabPill: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 18,
-    backgroundColor: 'transparent',
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8E7E3',
   },
   tabPillActive: {
     backgroundColor: '#5B4FE8',
+    borderColor: '#5B4FE8',
   },
   tabText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 13,
-    color: '#9B9BAF',
+    color: '#7E8098',
     fontWeight: '500',
   },
   tabTextActive: {
@@ -901,81 +880,66 @@ const styles = StyleSheet.create({
     borderColor: '#E8E7E3',
     overflow: 'hidden',
   },
+  tasksSectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   sectionHeader: {
     fontFamily: 'DMSans-Medium',
     fontSize: 16,
     color: '#17172A',
     fontWeight: '600',
-    marginBottom: 12,
   },
-  backdropOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(23, 23, 42, 0.4)',
-    zIndex: 99,
+  tasksCountBadge: {
+    backgroundColor: 'rgba(91, 79, 232, 0.1)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
-  fabContainer: {
-    position: 'absolute',
-    bottom: 30,
-    right: 20,
-    alignItems: 'flex-end',
-    zIndex: 100,
+  tasksCountBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#5B4FE8',
   },
-  fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#5B4FE8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#5B4FE8',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  fabOpen: {
-    backgroundColor: '#17172A',
-  },
-  fabMenu: {
-    alignItems: 'flex-end',
-    marginBottom: 16,
-    gap: 12,
-  },
-  fabOptionRow: {
+  addTaskInlineBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 4,
+    backgroundColor: 'rgba(91, 79, 232, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
   },
-  fabOptionLabelPill: {
+  addTaskInlineText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12,
+    color: '#5B4FE8',
+  },
+  tasksEmptyContainer: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E8E7E3',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  fabOptionLabelText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    color: '#17172A',
-    fontWeight: '600',
-  },
-  fabOptionCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
+    padding: 24,
     alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 2,
+    justifyContent: 'center',
+  },
+  tasksEmptyText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#9B9BAF',
+    marginBottom: 8,
+  },
+  emptyAddTaskButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  emptyAddTaskText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
+    color: '#5B4FE8',
   },
   // Loaders & Empty states
   loadingContainer: {

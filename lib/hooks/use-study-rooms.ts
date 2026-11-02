@@ -42,7 +42,7 @@ interface RoomDbRow extends StudyRoom {
 }
 
 // 1. useActiveRooms
-export function useActiveRooms() {
+export function useActiveRooms(options?: { refetchInterval?: number }) {
   return useQuery<RoomWithHost[]>({
     queryKey: ['activeRooms'],
     queryFn: async () => {
@@ -77,6 +77,7 @@ export function useActiveRooms() {
         created_at: r.created_at,
       }));
     },
+    refetchInterval: options?.refetchInterval ?? 30000,
   });
 }
 

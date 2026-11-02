@@ -446,15 +446,8 @@ export default function ProfileScreen(): React.JSX.Element {
 
   const getSubcategoriesList = useCallback(
     (cat: UserCategory): { key: string; label: string; color?: string; exam_type?: string }[] => {
-      if (cat === 'aspirant') {
-        const sarkariList = studentExamOptions.filter((e) => e.exam_type === 'sarkari');
-        return [...sarkariList, { key: 'Other', label: 'Other', exam_type: 'other' as const, color: '#9CA3AF' }];
-      }
-      if (cat === 'student') {
-        const entranceList = studentExamOptions.filter(
-          (e) => e.exam_type === 'entrance' || e.exam_type === 'board'
-        );
-        return [...entranceList, { key: 'Other', label: 'Other', exam_type: 'other' as const, color: '#9CA3AF' }];
+      if (cat === 'student' || cat === 'aspirant') {
+        return [...studentExamOptions, { key: 'Other', label: 'Other', exam_type: 'other' as const, color: '#9CA3AF' }];
       }
       if (cat === 'cse_student') {
         const predefined = (SUBCATEGORIES.cse_student || []).map((s) => ({
@@ -695,12 +688,13 @@ export default function ProfileScreen(): React.JSX.Element {
 
   const getExamCategory = useCallback((itemKey: string, label: string, userCat: UserCategory): string => {
     const s = (itemKey + ' ' + label).toLowerCase();
-    if (userCat === 'aspirant') {
+    if (userCat === 'student' || userCat === 'aspirant') {
       if (
         s.includes('rrb') ||
         s.includes('rpf') ||
         s.includes('railway') ||
         s.includes('loco pilot') ||
+        s.includes('alp') ||
         s.includes('technician') ||
         s.includes('junior engineer') ||
         s.includes('ministerial') ||
@@ -736,6 +730,23 @@ export default function ProfileScreen(): React.JSX.Element {
         return 'upsc';
       }
       if (
+        s.includes('jee') ||
+        s.includes('engineering') ||
+        s.includes('gate') ||
+        s.includes('bitsat') ||
+        s.includes('iit')
+      ) {
+        return 'engineering';
+      }
+      if (
+        s.includes('neet') ||
+        s.includes('medical') ||
+        s.includes('aiims') ||
+        s.includes('mbbs')
+      ) {
+        return 'medical';
+      }
+      if (
         s.includes('bank') ||
         s.includes('ibps') ||
         s.includes('sbi') ||
@@ -755,32 +766,12 @@ export default function ProfileScreen(): React.JSX.Element {
       ) {
         return 'defence';
       }
-      return 'other';
-    }
-
-    if (userCat === 'student') {
-      if (
-        s.includes('jee') ||
-        s.includes('engineering') ||
-        s.includes('gate') ||
-        s.includes('btech') ||
-        s.includes('bitsat') ||
-        s.includes('iit')
-      ) {
-        return 'engineering';
-      }
-      if (
-        s.includes('neet') ||
-        s.includes('medical') ||
-        s.includes('aiims') ||
-        s.includes('mbbs')
-      ) {
-        return 'medical';
-      }
       if (
         s.includes('board') ||
         s.includes('class 10') ||
         s.includes('class 12') ||
+        s.includes('10th') ||
+        s.includes('12th') ||
         s.includes('cbse') ||
         s.includes('icse')
       ) {
@@ -793,7 +784,10 @@ export default function ProfileScreen(): React.JSX.Element {
         s.includes('xat') ||
         s.includes('law') ||
         s.includes('mba') ||
-        s.includes('cuet')
+        s.includes('cuet') ||
+        s.includes('ca foundation') ||
+        s.includes('cs foundation') ||
+        s.includes('commerce')
       ) {
         return 'management';
       }
@@ -852,23 +846,16 @@ export default function ProfileScreen(): React.JSX.Element {
       }).length;
     };
 
-    if (category === 'aspirant') {
+    if (category === 'student' || category === 'aspirant') {
       return [
         { id: 'all', label: 'All Exams', selectedCount: countSelected('all') },
         { id: 'railway', label: '🚆 Railways & RPF', selectedCount: countSelected('railway') },
         { id: 'ssc', label: '🏛️ SSC', selectedCount: countSelected('ssc') },
         { id: 'upsc', label: '🇮🇳 UPSC & State PCS', selectedCount: countSelected('upsc') },
-        { id: 'banking', label: '🏦 Banking', selectedCount: countSelected('banking') },
-        { id: 'defence', label: '🛡️ Defence', selectedCount: countSelected('defence') },
-        { id: 'other', label: 'Other', selectedCount: countSelected('other') },
-      ];
-    }
-
-    if (category === 'student') {
-      return [
-        { id: 'all', label: 'All Exams', selectedCount: countSelected('all') },
         { id: 'engineering', label: '⚡ Engineering (JEE/GATE)', selectedCount: countSelected('engineering') },
         { id: 'medical', label: '🩺 Medical (NEET)', selectedCount: countSelected('medical') },
+        { id: 'banking', label: '🏦 Banking', selectedCount: countSelected('banking') },
+        { id: 'defence', label: '🛡️ Defence', selectedCount: countSelected('defence') },
         { id: 'boards', label: '📚 Boards (10th/12th)', selectedCount: countSelected('boards') },
         { id: 'management', label: '📈 Management & Law', selectedCount: countSelected('management') },
         { id: 'other', label: 'Other', selectedCount: countSelected('other') },
@@ -980,14 +967,13 @@ export default function ProfileScreen(): React.JSX.Element {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const [profiles, goals, milestones, tasks, habits, habit_logs, notes, focus_sessions, schedule_blocks, syllabus_topics, study_rooms, daily_checkins] = await Promise.all([
+      const [profiles, goals, milestones, tasks, habits, habit_logs, focus_sessions, schedule_blocks, syllabus_topics, study_rooms, daily_checkins] = await Promise.all([
         supabase.from('profiles').select('*').single(),
         supabase.from('goals').select('*'),
         supabase.from('milestones').select('*'),
         supabase.from('tasks').select('*'),
         supabase.from('habits').select('*'),
         supabase.from('habit_logs').select('*'),
-        supabase.from('notes').select('*'),
         supabase.from('focus_sessions').select('*'),
         supabase.from('schedule_blocks').select('*'),
         supabase.from('syllabus_topics').select('*'),
@@ -1003,7 +989,6 @@ export default function ProfileScreen(): React.JSX.Element {
         tasks: tasks.data || [],
         habits: habits.data || [],
         habit_logs: habit_logs.data || [],
-        notes: notes.data || [],
         focus_sessions: focus_sessions.data || [],
         schedule_blocks: schedule_blocks.data || [],
         syllabus_topics: syllabus_topics.data || [],

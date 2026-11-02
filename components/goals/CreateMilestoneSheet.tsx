@@ -65,9 +65,9 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
 
     const handleCreate = () => {
       const trimmedTitle = title.trim();
-      if (trimmedTitle.length === 0 || !dueDate || !goalId) return;
+      if (trimmedTitle.length === 0 || !goalId) return;
 
-      const formattedDueDate = dueDate.toISOString().split('T')[0];
+      const formattedDueDate = dueDate ? dueDate.toISOString().split('T')[0] : null;
       const subjectPrefix = selectedSubject ? `[${selectedSubject}] ` : '';
       const sanitizedTitle = trimmedTitle.replace(/[<>"';&]/g, '').trim();
       if (sanitizedTitle.length === 0) return;
@@ -118,7 +118,7 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
     );
 
     const isSaving = createMilestoneMutation.isPending;
-    const isValid = title.trim().length > 0 && dueDate !== null;
+    const isValid = title.trim().length > 0;
 
     // Minimum date: today
     const today = new Date();
@@ -163,7 +163,7 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
           />
 
           {/* Due Date Selector */}
-          <Text style={styles.fieldLabel}>Due Date</Text>
+          <Text style={styles.fieldLabel}>Due Date (Optional)</Text>
           <TouchableOpacity
             style={styles.datePickerButton}
             onPress={() => {
@@ -173,7 +173,7 @@ export const CreateMilestoneSheet = React.forwardRef<BottomSheet, CreateMileston
             activeOpacity={0.7}
           >
             <Text style={styles.datePickerText}>
-              {dueDate ? formatDeadline(dueDate.toISOString()) : 'Select due date'}
+              {dueDate ? formatDeadline(dueDate.toISOString()) : 'Select due date (Optional)'}
             </Text>
           </TouchableOpacity>
 

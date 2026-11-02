@@ -1,14 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, AlertButton } from 'react-native';
 import { Goal, Milestone } from '@/types/app.types';
 import { ProgressRing } from './ProgressRing';
 import { calculateOnTrackStatus } from '@/lib/utils/on-track';
 import { formatDeadline } from '@/lib/utils/date';
-import { CheckCircle2, RotateCcw, Trash2 } from 'lucide-react-native';
+import { MoreVertical, Plus, Check } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 
 // Constants
-const LABEL_BIG_GOAL = "BIG GOAL";
-const BADGE_PRIMARY = "Primary";
+const LABEL_BIG_GOAL = 'BIG GOAL';
 const SHADOW_COLOR = '#000000';
 const BORDER_COLOR = '#E8E7E3';
 
@@ -21,6 +21,12 @@ interface GoalCardProps {
   onPress?: () => void;
   isPrimary: boolean;
   onAddMilestone?: (goalId: string) => void;
+  onQuickAddMilestone?: (goalId: string, title: string) => void;
+  onToggleMilestoneStatus?: (
+    milestoneId: string,
+    goalId: string,
+    currentStatus: 'pending' | 'completed'
+  ) => void;
   onToggleStatus?: (
     goalId: string,
     currentStatus: 'active' | 'achieved',
@@ -30,15 +36,93 @@ interface GoalCardProps {
   onDeleteGoal?: (goalId: string, title: string) => void;
 }
 
+// Smart Milestone Suggestions based on Goal Title & Category
+const getMilestoneSuggestions = (
+  goalTitle: string,
+  category?: string,
+  existingMilestoneTitles: string[] = []
+): string[] => {
+  const lowerTitle = `${goalTitle} ${category || ''}`.toLowerCase();
+  let pool: string[] = [];
+
+  if (
+    lowerTitle.includes('placement') ||
+    lowerTitle.includes('job') ||
+    lowerTitle.includes('intern') ||
+    lowerTitle.includes('career') ||
+    lowerTitle.includes('dsa') ||
+    lowerTitle.includes('cse')
+  ) {
+    pool = [
+      'Complete DSA Patterns',
+      'System Design & OS',
+      '2 Fullstack Projects',
+      'Resume & Mock Interview',
+    ];
+  } else if (
+    lowerTitle.includes('exam') ||
+    lowerTitle.includes('gate') ||
+    lowerTitle.includes('upsc') ||
+    lowerTitle.includes('cat') ||
+    lowerTitle.includes('jee') ||
+    lowerTitle.includes('study')
+  ) {
+    pool = [
+      'Syllabus First Pass',
+      'PYQ Practice (5 Years)',
+      'Short Notes Revision',
+      '5 Full-length Mocks',
+    ];
+  } else if (
+    lowerTitle.includes('fit') ||
+    lowerTitle.includes('health') ||
+    lowerTitle.includes('gym') ||
+    lowerTitle.includes('weight')
+  ) {
+    pool = [
+      'Calorie Deficit Routine',
+      '4x Weekly Workouts',
+      '10k Daily Steps',
+      'Body Composition Check',
+    ];
+  } else if (
+    lowerTitle.includes('app') ||
+    lowerTitle.includes('code') ||
+    lowerTitle.includes('software') ||
+    lowerTitle.includes('dev') ||
+    lowerTitle.includes('build')
+  ) {
+    pool = [
+      'Architecture & DB Schema',
+      'MVP Core Features',
+      'Beta Testing & Feedback',
+      'Production Launch',
+    ];
+  } else {
+    pool = [
+      'Phase 1: Foundations',
+      'Phase 2: Core Sprint',
+      'Phase 3: Review & Polish',
+      'Final Milestone',
+    ];
+  }
+
+  // Filter out already existing milestones
+  const existingSet = new Set(existingMilestoneTitles.map((t) => t.toLowerCase().trim()));
+  return pool.filter((p) => !existingSet.has(p.toLowerCase().trim()));
+};
+
 export const GoalCard = React.memo<GoalCardProps>(({
   goal,
   onPress,
   isPrimary,
   onAddMilestone,
+  onQuickAddMilestone,
+  onToggleMilestoneStatus,
   onToggleStatus,
   onDeleteGoal,
 }) => {
-  const [isExpanded, setIsExpanded] = React.useState(false);
+  const [isExpanded, setIsExpanded] = React.useState(true);
   const deadlineFormatted = formatDeadline(goal.deadline);
 
   // Raw Days Left Calculation
@@ -83,26 +167,42 @@ export const GoalCard = React.memo<GoalCardProps>(({
       ? doneItems / totalItems
       : 0;
 
-  // Pace calculation: remaining items / remaining days
   const remainingItems = totalItems - doneItems;
-  const dailyNeeded =
-    remainingItems > 0 && rawDaysLeft > 0
-      ? (remainingItems / rawDaysLeft).toFixed(2)
-      : '0.00';
 
-  // Dynamic Status Badge Calculation
+  // Dynamic Status Badge Calculation with dark mode variants for Primary Card
   const getDynamicStatusTheme = () => {
     if (goal.status === 'achieved') {
-      return { bg: 'rgba(0, 184, 148, 0.15)', text: '#00B894', label: 'Achieved' };
+      return {
+        bg: 'rgba(0, 184, 148, 0.15)',
+        text: '#00B894',
+        bgPrimary: 'rgba(16, 185, 129, 0.20)',
+        borderPrimary: 'rgba(16, 185, 129, 0.40)',
+        textPrimary: '#34D399',
+        label: 'Achieved',
+      };
     }
 
     if (rawDaysLeft < 0) {
       const absDays = Math.abs(rawDaysLeft);
-      return { bg: 'rgba(232, 88, 88, 0.15)', text: '#E85858', label: `Expired (${absDays}d overdue)` };
+      return {
+        bg: 'rgba(232, 88, 88, 0.15)',
+        text: '#E85858',
+        bgPrimary: 'rgba(239, 68, 68, 0.18)',
+        borderPrimary: 'rgba(239, 68, 68, 0.35)',
+        textPrimary: '#F87171',
+        label: `Expired (${absDays}d overdue)`,
+      };
     }
 
     if (rawDaysLeft === 0) {
-      return { bg: 'rgba(232, 160, 32, 0.18)', text: '#E8A020', label: 'Due Today' };
+      return {
+        bg: 'rgba(232, 160, 32, 0.18)',
+        text: '#E8A020',
+        bgPrimary: 'rgba(245, 158, 11, 0.18)',
+        borderPrimary: 'rgba(245, 158, 11, 0.35)',
+        textPrimary: '#FBBF24',
+        label: 'Due Today',
+      };
     }
 
     const statusType = calculateOnTrackStatus(
@@ -114,12 +214,33 @@ export const GoalCard = React.memo<GoalCardProps>(({
 
     switch (statusType) {
       case 'on_track':
-        return { bg: '#D4F5EE', text: '#00B894', label: 'On track' };
+        return {
+          bg: '#D4F5EE',
+          text: '#00B894',
+          bgPrimary: 'rgba(16, 185, 129, 0.18)',
+          borderPrimary: 'rgba(16, 185, 129, 0.35)',
+          textPrimary: '#34D399',
+          label: 'On track',
+        };
       case 'at_risk':
-        return { bg: '#FEF3DC', text: '#E8A020', label: 'At risk' };
+        return {
+          bg: '#FEF3DC',
+          text: '#E8A020',
+          bgPrimary: 'rgba(245, 158, 11, 0.18)',
+          borderPrimary: 'rgba(245, 158, 11, 0.35)',
+          textPrimary: '#FBBF24',
+          label: 'At risk',
+        };
       case 'behind':
       default:
-        return { bg: '#FDE8E8', text: '#E85858', label: 'Behind' };
+        return {
+          bg: '#FDE8E8',
+          text: '#E85858',
+          bgPrimary: 'rgba(239, 68, 68, 0.18)',
+          borderPrimary: 'rgba(239, 68, 68, 0.35)',
+          textPrimary: '#F87171',
+          label: 'Behind',
+        };
     }
   };
 
@@ -139,6 +260,55 @@ export const GoalCard = React.memo<GoalCardProps>(({
     }
   };
 
+  const handleOpenOptions = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    const buttons: AlertButton[] = [];
+
+    if (onToggleStatus) {
+      if (goal.status === 'achieved') {
+        buttons.push({
+          text: 'Re-activate Goal',
+          onPress: () => {
+            setTimeout(() => {
+              onToggleStatus(goal.id, 'achieved', goal.title, remainingItems);
+            }, 100);
+          },
+        });
+      } else {
+        buttons.push({
+          text: 'Mark as Achieved',
+          onPress: () => {
+            setTimeout(() => {
+              onToggleStatus(goal.id, 'active', goal.title, remainingItems);
+            }, 100);
+          },
+        });
+      }
+    }
+
+    if (onDeleteGoal) {
+      buttons.push({
+        text: 'Delete Goal',
+        style: 'destructive',
+        onPress: () => {
+          setTimeout(() => {
+            onDeleteGoal(goal.id, goal.title);
+          }, 100);
+        },
+      });
+    }
+
+    buttons.push({
+      text: 'Cancel',
+      style: 'cancel',
+    });
+
+    Alert.alert(goal.title, 'Goal actions', buttons);
+  };
+
+  const existingMilestoneTitles = goal.milestones.map((m) => m.title);
+  const suggestions = getMilestoneSuggestions(goal.title, goal.description || '', existingMilestoneTitles);
+
   return (
     <TouchableOpacity
       style={[
@@ -146,21 +316,46 @@ export const GoalCard = React.memo<GoalCardProps>(({
         isPrimary ? styles.containerPrimary : styles.containerNormal,
       ]}
       onPress={handlePress}
-      activeOpacity={0.9}
+      activeOpacity={0.92}
       accessibilityLabel={`Goal: ${goal.title}`}
       accessibilityRole="button"
       accessibilityState={{ expanded: isExpanded }}
       accessibilityHint="Double tap to expand or collapse milestones"
     >
-      {/* Top Row */}
+      {/* Decorative ambient circular shapes for primary goal (matching TodayFocusCard) */}
+      {isPrimary && (
+        <>
+          <View style={styles.decorativeCircleOuter} pointerEvents="none" />
+          <View style={styles.decorativeCircleInner} pointerEvents="none" />
+        </>
+      )}
+
+      {/* Top Header Row */}
       <View style={styles.topRow}>
-        <Text style={[styles.bigGoalLabel, isPrimary ? styles.textMutedPrimary : styles.textMutedNormal]}>
-          {LABEL_BIG_GOAL}
-        </Text>
-        {isPrimary && (
-          <View style={styles.primaryBadge}>
-            <Text style={styles.primaryBadgeText}>{BADGE_PRIMARY}</Text>
-          </View>
+        <View style={styles.topBadgeRow}>
+          {isPrimary && <View style={styles.livePulseDot} />}
+          <Text
+            style={[
+              styles.bigGoalLabel,
+              isPrimary ? styles.bigGoalLabelPrimary : styles.bigGoalLabelNormal,
+            ]}
+          >
+            {isPrimary ? 'PRIMARY GOAL' : LABEL_BIG_GOAL}
+          </Text>
+        </View>
+
+        {(onDeleteGoal || onToggleStatus) && (
+          <TouchableOpacity
+            style={styles.moreOptionsButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleOpenOptions();
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel="Goal Options"
+          >
+            <MoreVertical size={16} color={isPrimary ? 'rgba(255, 255, 255, 0.7)' : '#7E8098'} />
+          </TouchableOpacity>
         )}
       </View>
 
@@ -175,7 +370,7 @@ export const GoalCard = React.memo<GoalCardProps>(({
         {goal.title}
       </Text>
 
-      {/* Goal Meta */}
+      {/* Goal Meta Subtitle */}
       <Text
         style={[
           styles.goalMeta,
@@ -185,7 +380,7 @@ export const GoalCard = React.memo<GoalCardProps>(({
         {metaText}
       </Text>
 
-      {/* Bottom Area: Ring + Stats */}
+      {/* Center Metrics Row: Ring + Human Readable Stats */}
       <View style={styles.bottomRow}>
         <ProgressRing
           size={70}
@@ -199,13 +394,19 @@ export const GoalCard = React.memo<GoalCardProps>(({
 
         <View style={styles.statsColumn}>
           <View style={styles.statRow}>
-            <Text style={styles.statLabel}>Tasks done</Text>
+            <Text style={[styles.statLabel, isPrimary && styles.statLabelPrimary]}>Tasks done</Text>
             <Text style={[styles.statValue, isPrimary ? styles.statValPrimary : styles.statValNormal]}>
               {`${doneItems}/${totalItems}`}
             </Text>
           </View>
           <View style={styles.statRow}>
-            <Text style={styles.statLabel}>Days left</Text>
+            <Text style={[styles.statLabel, isPrimary && styles.statLabelPrimary]}>Pending</Text>
+            <Text style={[styles.statValue, isPrimary ? styles.statValPrimary : styles.statValNormal]}>
+              {`${remainingItems} items pending`}
+            </Text>
+          </View>
+          <View style={styles.statRow}>
+            <Text style={[styles.statLabel, isPrimary && styles.statLabelPrimary]}>Days left</Text>
             <Text
               style={[
                 styles.statValue,
@@ -216,107 +417,164 @@ export const GoalCard = React.memo<GoalCardProps>(({
               {renderDaysLeftText()}
             </Text>
           </View>
-          <View style={styles.statRow}>
-            <Text style={styles.statLabel}>Daily needed</Text>
-            <Text style={[styles.statValue, isPrimary ? styles.statValPrimary : styles.statValNormal]}>
-              {`${dailyNeeded}/d`}
-            </Text>
-          </View>
         </View>
       </View>
 
       {/* Expanded Collapsible Section */}
       {isExpanded && (
         <View style={styles.expandedSection}>
-          <View style={styles.divider} />
-          <Text style={[styles.expandedTitle, isPrimary ? styles.expandedTitlePrimary : styles.expandedTitleNormal]}>
-            Milestones
-          </Text>
+          <View style={[styles.divider, isPrimary && styles.dividerPrimary]} />
+          
+          <View style={styles.milestonesHeaderRow}>
+            <Text style={[styles.expandedTitle, isPrimary ? styles.expandedTitlePrimary : styles.expandedTitleNormal]}>
+              Milestones
+            </Text>
+            <Text style={[styles.milestonesCounter, isPrimary ? styles.textMutedPrimary : styles.textMutedNormal]}>
+              {`${doneMilestones}/${totalMilestones}`}
+            </Text>
+          </View>
+
           {goal.milestones.length === 0 ? (
             <Text style={[styles.emptyMilestonesText, isPrimary ? styles.emptyTextPrimary : styles.emptyTextNormal]}>
-              No milestones created yet
+              No milestones created yet. Tap a suggestion below to start!
             </Text>
           ) : (
             goal.milestones.map((milestone) => (
-              <View key={milestone.id} style={styles.milestoneRow}>
-                <View style={[styles.milestoneDot, milestone.status === 'completed' ? styles.milestoneDotCompleted : styles.milestoneDotPending]} />
+              <TouchableOpacity
+                key={milestone.id}
+                style={styles.milestoneInteractiveRow}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onToggleMilestoneStatus?.(milestone.id, goal.id, milestone.status);
+                }}
+                activeOpacity={0.7}
+                accessibilityLabel={`Milestone: ${milestone.title}, ${milestone.status === 'completed' ? 'completed' : 'pending'}`}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: milestone.status === 'completed' }}
+              >
+                <View
+                  style={[
+                    styles.milestoneCheckbox,
+                    milestone.status === 'completed'
+                      ? styles.milestoneCheckboxCompleted
+                      : isPrimary
+                      ? styles.milestoneCheckboxPrimary
+                      : styles.milestoneCheckboxNormal,
+                  ]}
+                >
+                  {milestone.status === 'completed' && (
+                    <Check size={11} color="#FFFFFF" strokeWidth={3} />
+                  )}
+                </View>
                 <Text
                   style={[
                     styles.milestoneText,
                     isPrimary ? styles.milestoneTextPrimary : styles.milestoneTextNormal,
-                    milestone.status === 'completed' && styles.milestoneTextCompleted
+                    milestone.status === 'completed' && styles.milestoneTextCompleted,
                   ]}
                   numberOfLines={1}
                 >
                   {milestone.title}
                 </Text>
-              </View>
+              </TouchableOpacity>
             ))
           )}
 
+          {/* 1-Tap Suggested Milestones Chips */}
+          {suggestions.length > 0 && onQuickAddMilestone && (
+            <View style={styles.suggestionsContainer}>
+              <Text
+                style={[
+                  styles.suggestionsHeader,
+                  isPrimary ? styles.suggestionsHeaderPrimary : styles.suggestionsHeaderNormal,
+                ]}
+              >
+                Suggested Milestones (1-Tap Add):
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.suggestionsScroll}
+                keyboardShouldPersistTaps="handled"
+              >
+                {suggestions.map((suggestion) => (
+                  <TouchableOpacity
+                    key={suggestion}
+                    style={[
+                      styles.suggestionChip,
+                      isPrimary ? styles.suggestionChipPrimary : styles.suggestionChipNormal,
+                    ]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onQuickAddMilestone(goal.id, suggestion);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Plus
+                      size={11}
+                      color={isPrimary ? '#A89EF8' : '#5B4FE8'}
+                      strokeWidth={2.6}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text
+                      style={[
+                        styles.suggestionChipText,
+                        isPrimary ? styles.suggestionChipTextPrimary : styles.suggestionChipTextNormal,
+                      ]}
+                    >
+                      {suggestion}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Action Row */}
           <View style={styles.expandedActionsRow}>
             {onAddMilestone && (
               <TouchableOpacity
                 style={styles.addMilestoneRow}
-                onPress={() => onAddMilestone(goal.id)}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onAddMilestone(goal.id);
+                }}
                 activeOpacity={0.7}
-                accessibilityLabel="Add Milestone"
-                accessibilityRole="button"
-                accessibilityHint="Add a new milestone to this goal"
-              >
-                <Text style={styles.addMilestoneText}>+ Add Milestone</Text>
-              </TouchableOpacity>
-            )}
-
-            {onDeleteGoal && (
-              <TouchableOpacity
-                style={styles.deleteGoalRow}
-                onPress={() => onDeleteGoal(goal.id, goal.title)}
-                activeOpacity={0.7}
-                accessibilityLabel="Delete Goal"
+                accessibilityLabel="Add Custom Milestone"
                 accessibilityRole="button"
               >
-                <Trash2 size={13} color="#E85858" />
-                <Text style={styles.deleteGoalText}>Delete Goal</Text>
+                <Text style={[styles.addMilestoneText, isPrimary && styles.addMilestoneTextPrimary]}>
+                  + Add Custom Milestone
+                </Text>
               </TouchableOpacity>
             )}
           </View>
         </View>
       )}
 
-      {/* Status Badge & Actions Row */}
+      {/* Bottom Status Badge Row */}
       <View style={styles.statusActionRow}>
-        <View style={[styles.statusBadge, { backgroundColor: statusTheme.bg }]}>
-          <Text style={[styles.statusBadgeText, { color: statusTheme.text }]}>
+        <View
+          style={[
+            styles.statusBadge,
+            isPrimary
+              ? {
+                  backgroundColor: statusTheme.bgPrimary,
+                  borderColor: statusTheme.borderPrimary,
+                  borderWidth: 1,
+                }
+              : { backgroundColor: statusTheme.bg },
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusBadgeText,
+              { color: isPrimary ? statusTheme.textPrimary : statusTheme.text },
+            ]}
+          >
             {statusTheme.label}
           </Text>
         </View>
-
-        {onToggleStatus && (
-          <TouchableOpacity
-            style={[
-              styles.achieveActionBtn,
-              goal.status === 'achieved' && styles.achieveActionBtnActive,
-            ]}
-            onPress={(e) => {
-              e.stopPropagation();
-              onToggleStatus(goal.id, goal.status as 'active' | 'achieved', goal.title, remainingItems);
-            }}
-            activeOpacity={0.8}
-          >
-            {goal.status === 'achieved' ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <RotateCcw size={12} color="#5B4FE8" />
-                <Text style={[styles.achieveActionText, { color: '#5B4FE8' }]}>Re-activate</Text>
-              </View>
-            ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <CheckCircle2 size={12} color="#00B894" />
-                <Text style={styles.achieveActionText}>Mark Achieved</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
       </View>
     </TouchableOpacity>
   );
@@ -324,73 +582,107 @@ export const GoalCard = React.memo<GoalCardProps>(({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 20,
-    marginBottom: 12,
+    marginBottom: 14,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  containerPrimary: {
+    backgroundColor: '#131422',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  containerNormal: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
     shadowColor: SHADOW_COLOR,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
-  containerPrimary: {
-    backgroundColor: '#17172A',
-    borderWidth: 0,
+  decorativeCircleOuter: {
+    position: 'absolute',
+    top: -55,
+    right: -45,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: 'rgba(39, 36, 78, 0.45)',
   },
-  containerNormal: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: BORDER_COLOR,
+  decorativeCircleInner: {
+    position: 'absolute',
+    top: -20,
+    right: -20,
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    backgroundColor: 'rgba(51, 48, 102, 0.55)',
   },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    zIndex: 2,
+  },
+  topBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  livePulseDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#6366F1',
   },
   bigGoalLabel: {
-    fontFamily: 'DMSans',
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 1.2,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
   },
-  textMutedPrimary: {
+  bigGoalLabelPrimary: {
+    color: '#8E8EA8',
+  },
+  bigGoalLabelNormal: {
     color: '#9B9BAF',
   },
-  textMutedNormal: {
-    color: '#9B9BAF',
-  },
-  primaryBadge: {
-    backgroundColor: '#FEF3DC',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  primaryBadgeText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 10,
-    color: '#E8A020',
-    fontWeight: '600',
+  moreOptionsButton: {
+    padding: 4,
   },
   goalTitle: {
+    marginTop: 6,
+    zIndex: 2,
+  },
+  titlePrimary: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 20,
+    color: '#FFFFFF',
+    lineHeight: 26,
+  },
+  titleNormal: {
     fontFamily: 'InstrumentSerif',
     fontSize: 22,
     lineHeight: 26,
-    marginTop: 8,
-  },
-  titlePrimary: {
-    color: '#FFFFFF',
-  },
-  titleNormal: {
     color: '#17172A',
   },
   goalMeta: {
-    fontFamily: 'DMSans',
-    fontSize: 12,
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12.5,
     marginTop: 4,
     marginBottom: 16,
+    zIndex: 2,
   },
   metaPrimary: {
-    color: 'rgba(255, 255, 255, 0.45)',
+    color: '#7E8098',
   },
   metaNormal: {
     color: '#5C5C70',
@@ -398,6 +690,7 @@ const styles = StyleSheet.create({
   bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    zIndex: 2,
   },
   statsColumn: {
     flex: 1,
@@ -414,31 +707,31 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9B9BAF',
   },
+  statLabelPrimary: {
+    color: '#8E8EA8',
+  },
   statValue: {
     fontFamily: 'DMSans-Medium',
     fontSize: 11,
     fontWeight: '600',
   },
   statValPrimary: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: '#FFFFFF',
   },
   statValNormal: {
     color: '#17172A',
   },
-  deleteIconBtn: {
-    padding: 4,
-  },
   statusActionRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     marginTop: 14,
+    zIndex: 2,
   },
   statusBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -447,38 +740,39 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  achieveActionBtn: {
-    backgroundColor: 'rgba(0, 184, 148, 0.12)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 184, 148, 0.3)',
-  },
-  achieveActionBtnActive: {
-    backgroundColor: 'rgba(91, 79, 232, 0.12)',
-    borderColor: 'rgba(91, 79, 232, 0.3)',
-  },
-  achieveActionText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    color: '#00B894',
-    fontWeight: '600',
-  },
   expandedSection: {
     marginTop: 16,
     width: '100%',
+    zIndex: 2,
   },
   divider: {
     height: 1,
     backgroundColor: 'rgba(155, 155, 175, 0.2)',
     marginBottom: 12,
   },
+  dividerPrimary: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  milestonesHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   expandedTitle: {
     fontFamily: 'DMSans-Medium',
     fontSize: 13,
     fontWeight: '600',
-    marginBottom: 8,
+  },
+  milestonesCounter: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+  },
+  textMutedPrimary: {
+    color: '#8E8EA8',
+  },
+  textMutedNormal: {
+    color: '#9B9BAF',
   },
   expandedTitlePrimary: {
     color: '#FFFFFF',
@@ -489,75 +783,120 @@ const styles = StyleSheet.create({
   emptyMilestonesText: {
     fontFamily: 'DMSans',
     fontSize: 12,
-    marginBottom: 8,
+    marginBottom: 10,
+    lineHeight: 18,
   },
   emptyTextPrimary: {
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: 'rgba(255, 255, 255, 0.55)',
   },
   emptyTextNormal: {
-    color: '#9B9BAF',
+    color: '#7E8098',
   },
-  milestoneRow: {
+  milestoneInteractiveRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
+    paddingVertical: 2,
   },
-  milestoneDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 8,
+  milestoneCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
-  milestoneDotPending: {
-    backgroundColor: '#E8A020',
+  milestoneCheckboxNormal: {
+    borderColor: '#C4C2D6',
+    backgroundColor: 'transparent',
   },
-  milestoneDotCompleted: {
-    backgroundColor: '#00B894',
+  milestoneCheckboxPrimary: {
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  milestoneCheckboxCompleted: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
   },
   milestoneText: {
-    fontFamily: 'DMSans',
+    fontFamily: 'DMSans-Medium',
     fontSize: 13,
     flex: 1,
   },
   milestoneTextPrimary: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#E0E0F0',
   },
   milestoneTextNormal: {
-    color: '#5C5C70',
+    color: '#151628',
   },
   milestoneTextCompleted: {
     textDecorationLine: 'line-through',
-    opacity: 0.6,
+    opacity: 0.5,
   },
-  addMilestoneRow: {
-    paddingVertical: 6,
-    alignItems: 'flex-start',
+  suggestionsContainer: {
+    marginTop: 10,
+    marginBottom: 6,
   },
-  addMilestoneText: {
+  suggestionsHeader: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 11,
+    marginBottom: 6,
+    letterSpacing: 0.2,
+  },
+  suggestionsHeaderPrimary: {
+    color: 'rgba(255, 255, 255, 0.55)',
+  },
+  suggestionsHeaderNormal: {
+    color: '#7E8098',
+  },
+  suggestionsScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  suggestionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  suggestionChipPrimary: {
+    backgroundColor: 'rgba(91, 79, 232, 0.22)',
+    borderColor: 'rgba(168, 158, 248, 0.35)',
+  },
+  suggestionChipNormal: {
+    backgroundColor: 'rgba(91, 79, 232, 0.08)',
+    borderColor: 'rgba(91, 79, 232, 0.2)',
+  },
+  suggestionChipText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11.5,
+  },
+  suggestionChipTextPrimary: {
+    color: '#D8D4FC',
+  },
+  suggestionChipTextNormal: {
     color: '#5B4FE8',
   },
   expandedActionsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
   },
-  deleteGoalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(232, 88, 88, 0.08)',
+  addMilestoneRow: {
+    paddingVertical: 4,
+    alignItems: 'flex-start',
   },
-  deleteGoalText: {
+  addMilestoneText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '600',
-    color: '#E85858',
+    color: '#5B4FE8',
+  },
+  addMilestoneTextPrimary: {
+    color: '#818CF8',
   },
 });

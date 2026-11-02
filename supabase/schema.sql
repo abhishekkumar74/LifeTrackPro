@@ -175,25 +175,6 @@ CREATE TABLE IF NOT EXISTS public.habit_logs (
 );
 COMMENT ON TABLE public.habit_logs IS 'Daily completion records tracking streaks, with strict unique constraints per habit and date.';
 
--- Table 8: notes
-CREATE TABLE IF NOT EXISTS public.notes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  title TEXT NOT NULL CHECK (char_length(title) > 0),
-  content JSONB NOT NULL DEFAULT '{}'::jsonb,
-  subject TEXT,
-  chapter TEXT,
-  tags TEXT[] NOT NULL DEFAULT '{}',
-  is_pinned BOOLEAN NOT NULL DEFAULT false,
-  next_review DATE,
-  review_count INTEGER NOT NULL DEFAULT 0 CHECK (review_count >= 0),
-  ease_factor DOUBLE PRECISION NOT NULL DEFAULT 2.5 CHECK (ease_factor >= 1.3),
-  interval_days INTEGER NOT NULL DEFAULT 0 CHECK (interval_days >= 0),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-COMMENT ON TABLE public.notes IS 'Spaced repetition revision notes storing raw rich text structures and SM-2 schedules.';
-
 -- Table 7: focus_sessions
 CREATE TABLE IF NOT EXISTS public.focus_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -312,9 +293,6 @@ CREATE TRIGGER update_habit_logs_updated_at BEFORE UPDATE ON public.habit_logs F
 DROP TRIGGER IF EXISTS update_focus_sessions_updated_at ON public.focus_sessions;
 CREATE TRIGGER update_focus_sessions_updated_at BEFORE UPDATE ON public.focus_sessions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-DROP TRIGGER IF EXISTS update_notes_updated_at ON public.notes;
-CREATE TRIGGER update_notes_updated_at BEFORE UPDATE ON public.notes FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
 DROP TRIGGER IF EXISTS update_schedule_blocks_updated_at ON public.schedule_blocks;
 CREATE TRIGGER update_schedule_blocks_updated_at BEFORE UPDATE ON public.schedule_blocks FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
@@ -361,7 +339,6 @@ CREATE INDEX IF NOT EXISTS idx_habits_user_id ON public.habits(user_id);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_id ON public.habit_logs(habit_id);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_user_id ON public.habit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_focus_sessions_user_id ON public.focus_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_notes_user_id ON public.notes(user_id);
 CREATE INDEX IF NOT EXISTS idx_schedule_blocks_user_id ON public.schedule_blocks(user_id);
 CREATE INDEX IF NOT EXISTS idx_syllabus_topics_user_id ON public.syllabus_topics(user_id);
 CREATE INDEX IF NOT EXISTS idx_study_rooms_host_id ON public.study_rooms(host_id);
@@ -369,7 +346,6 @@ CREATE INDEX IF NOT EXISTS idx_daily_checkins_user_id ON public.daily_checkins(u
 CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON public.tasks(due_date);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON public.habit_logs(date);
 CREATE INDEX IF NOT EXISTS idx_focus_sessions_started_at ON public.focus_sessions(started_at);
-CREATE INDEX IF NOT EXISTS idx_notes_next_review ON public.notes(next_review);
 CREATE INDEX IF NOT EXISTS idx_daily_checkins_date ON public.daily_checkins(date);
 CREATE INDEX IF NOT EXISTS idx_study_rooms_is_active_is_public ON public.study_rooms(is_active, is_public);
 
@@ -390,7 +366,6 @@ ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.habits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.habit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.focus_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.schedule_blocks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.syllabus_topics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.study_rooms ENABLE ROW LEVEL SECURITY;
@@ -487,19 +462,6 @@ CREATE POLICY "Allow update focus_sessions for owner" ON public.focus_sessions F
 
 DROP POLICY IF EXISTS "Allow delete focus_sessions for owner" ON public.focus_sessions;
 CREATE POLICY "Allow delete focus_sessions for owner" ON public.focus_sessions FOR DELETE TO authenticated USING (user_id = auth.uid());
-
--- 6.8 notes policies
-DROP POLICY IF EXISTS "Allow select notes for owner" ON public.notes;
-CREATE POLICY "Allow select notes for owner" ON public.notes FOR SELECT TO authenticated USING (user_id = auth.uid());
-
-DROP POLICY IF EXISTS "Allow insert notes for owner" ON public.notes;
-CREATE POLICY "Allow insert notes for owner" ON public.notes FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
-
-DROP POLICY IF EXISTS "Allow update notes for owner" ON public.notes;
-CREATE POLICY "Allow update notes for owner" ON public.notes FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
-
-DROP POLICY IF EXISTS "Allow delete notes for owner" ON public.notes;
-CREATE POLICY "Allow delete notes for owner" ON public.notes FOR DELETE TO authenticated USING (user_id = auth.uid());
 
 -- 6.9 schedule_blocks policies
 DROP POLICY IF EXISTS "Allow select schedule_blocks for owner" ON public.schedule_blocks;

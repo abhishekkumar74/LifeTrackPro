@@ -50,7 +50,14 @@ export function useSyllabus() {
         }
 
         // 2. Fetch user's chapter progress delta (only tracks in_progress & done)
-        const progressMap = new Map<string, { status: SyllabusStatus; completed_at?: string | null }>();
+        const progressMap = new Map<
+          string,
+          {
+            status: SyllabusStatus;
+            completed_at?: string | null;
+            topicStatuses?: Record<string, SyllabusStatus> | null;
+          }
+        >();
         try {
           const { data: progressRows, error: pErr } = await supabase
             .from('user_chapter_progress')
@@ -58,9 +65,18 @@ export function useSyllabus() {
             .eq('user_id', userId);
           if (!pErr && progressRows) {
             progressRows.forEach((p: any) => {
+              let topicStatuses: Record<string, SyllabusStatus> | null = null;
+              if (p.notes && typeof p.notes === 'string' && p.notes.startsWith('{')) {
+                try {
+                  topicStatuses = JSON.parse(p.notes);
+                } catch {
+                  // ignore
+                }
+              }
               progressMap.set(p.chapter_id, {
                 status: p.status as SyllabusStatus,
                 completed_at: p.completed_at,
+                topicStatuses,
               });
             });
           }
@@ -95,19 +111,29 @@ export function useSyllabus() {
         // 4. Fetch master curriculum for each active exam and synthesize topics
         const combinedTopics: SyllabusTopic[] = [...customTopics];
         const existingKeys = new Set(
-          customTopics.map((t) => `${t.subject.toLowerCase().trim()}:::${t.chapter.toLowerCase().trim()}`)
+          customTopics.map(
+            (t) =>
+              `${t.subject.toLowerCase().trim()}:::${t.chapter.toLowerCase().trim()}:::${t.topic.toLowerCase().trim()}`
+          )
         );
 
         for (const slug of Array.from(activeSlugs)) {
           try {
             const masterExam = await fetchExamSyllabusTopics(slug);
             if (masterExam && masterExam.topics.length > 0) {
+              const examSlugToAdd = masterExam.examSlug || slug;
               masterExam.topics.forEach((mt) => {
-                const key = `${mt.subject.toLowerCase().trim()}:::${mt.chapter.toLowerCase().trim()}`;
+                const key = `${mt.subject.toLowerCase().trim()}:::${mt.chapter.toLowerCase().trim()}:::${mt.topic.toLowerCase().trim()}`;
+                const topicSlug = mt.exam_slug || examSlugToAdd;
                 if (!existingKeys.has(key)) {
                   existingKeys.add(key);
                   const progress = mt.chapter_id ? progressMap.get(mt.chapter_id) : undefined;
-                  const status: SyllabusStatus = progress ? progress.status : 'not_started';
+                  let status: SyllabusStatus = 'not_started';
+                  if (progress?.topicStatuses && mt.id && progress.topicStatuses[mt.id]) {
+                    status = progress.topicStatuses[mt.id];
+                  } else if (progress) {
+                    status = progress.status;
+                  }
                   combinedTopics.push({
                     id: mt.id || `master-ch-${mt.chapter_id || mt.chapter}`,
                     user_id: userId,
@@ -116,10 +142,27 @@ export function useSyllabus() {
                     topic: mt.topic,
                     status,
                     order_index: mt.order_index,
-                    exam_slug: mt.exam_slug || slug,
+                    exam_slug: topicSlug,
                     chapter_id: mt.chapter_id,
                     created_at: new Date().toISOString(),
                   });
+                } else {
+                  // Already present: append exam slug so shared subjects link to both exams
+                  const existingTopic = combinedTopics.find(
+                    (t) =>
+                      `${t.subject.toLowerCase().trim()}:::${t.chapter.toLowerCase().trim()}:::${t.topic.toLowerCase().trim()}` ===
+                      key
+                  );
+                  if (existingTopic && topicSlug) {
+                    const currentSlugs = (existingTopic.exam_slug || '')
+                      .split(',')
+                      .map((s) => s.trim().toLowerCase());
+                    if (!currentSlugs.includes(topicSlug.toLowerCase())) {
+                      existingTopic.exam_slug = existingTopic.exam_slug
+                        ? `${existingTopic.exam_slug},${topicSlug}`
+                        : topicSlug;
+                    }
+                  }
                 }
               });
             }
@@ -232,7 +275,7 @@ export function useUpdateTopicStatus() {
 
       const chapterId =
         matchedTopic?.chapter_id ||
-        (topicId.startsWith('master-ch-') ? topicId.replace('master-ch-', '') : null);
+        (topicId.startsWith('master-ch-') ? topicId.replace('master-ch-', '').replace(/-[0-9]+$/, '') : null);
 
       const isChapterUuid = Boolean(
         chapterId &&
@@ -240,22 +283,49 @@ export function useUpdateTopicStatus() {
       );
 
       // 2. Storage-Optimized Progress update:
-      // If chapterId is a valid UUID, update user_chapter_progress table
+      // If chapterId is a valid UUID, update user_chapter_progress table with topic-level notes
       if (isChapterUuid && chapterId) {
         try {
-          if (newStatus === 'done' || newStatus === 'in_progress' || newStatus === 'needs_revision') {
+          const { data: existingProg } = await supabase
+            .from('user_chapter_progress')
+            .select('notes, status')
+            .eq('user_id', currentUserId)
+            .eq('chapter_id', chapterId)
+            .maybeSingle();
+
+          let currentTopicMap: Record<string, SyllabusStatus> = {};
+          if (existingProg?.notes && existingProg.notes.startsWith('{')) {
+            try {
+              currentTopicMap = JSON.parse(existingProg.notes);
+            } catch {
+              // ignore
+            }
+          }
+
+          if (newStatus === 'not_started') {
+            delete currentTopicMap[topicId];
+          } else {
+            currentTopicMap[topicId] = newStatus;
+          }
+
+          const hasActiveTopics = Object.keys(currentTopicMap).length > 0;
+          if (hasActiveTopics) {
+            const allDone = Object.values(currentTopicMap).every((st) => st === 'done');
+            const overallChapterStatus = allDone ? 'done' : 'in_progress';
+
             const { error: progErr } = await supabase.from('user_chapter_progress').upsert(
               {
                 user_id: currentUserId,
                 chapter_id: chapterId,
-                status: newStatus,
-                completed_at: newStatus === 'done' ? new Date().toISOString() : null,
+                status: overallChapterStatus,
+                notes: JSON.stringify(currentTopicMap),
+                completed_at: allDone ? new Date().toISOString() : null,
               },
               { onConflict: 'user_id,chapter_id' }
             );
             if (progErr) console.warn('user_chapter_progress upsert warning:', progErr);
           } else {
-            // 'not_started' -> delete to keep zero storage overhead on Supabase!
+            // If no active topics remain, delete row to keep zero storage overhead on Supabase!
             await supabase
               .from('user_chapter_progress')
               .delete()
@@ -371,7 +441,7 @@ export function useBulkUpdateTopics() {
 
       topicIds.forEach((id) => {
         if (id.startsWith('master-ch-')) {
-          const rawId = id.replace('master-ch-', '');
+          const rawId = id.replace('master-ch-', '').replace(/-[0-9]+$/, '');
           if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId)) {
             masterChapterIds.push(rawId);
           }
@@ -501,6 +571,23 @@ export function useCreateTopic() {
   });
 }
 
+export function useUserExamEnrollments() {
+  const { user } = useAuthStore();
+  return useQuery<{ exam_id: string; exam_slug: string }[]>({
+    queryKey: ['user_exam_enrollments', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from('user_exam_enrollments')
+        .select('exam_id, exam_slug')
+        .eq('user_id', user.id);
+      if (error) return [];
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+}
+
 export function useSetupSyllabus() {
   const queryClient = useQueryClient();
 
@@ -516,23 +603,55 @@ export function useSetupSyllabus() {
 
       // 1. Storage-Optimized Enrollment: Register user into user_exam_enrollments
       // Does NOT clone duplicate chapter text rows into database, saving 95%+ storage!
-      const examSlugs = Array.from(new Set(topics.map((t) => t.exam_slug).filter(Boolean))) as string[];
-      for (const slug of examSlugs) {
+      const rawSlugs = Array.from(new Set(topics.map((t) => t.exam_slug).filter(Boolean))) as string[];
+      for (const rawSlug of rawSlugs) {
         try {
-          const { data: ex } = await supabase.from('exams').select('id').eq('slug', slug).maybeSingle();
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawSlug);
+          let ex: { id: string; slug: string } | null = null;
+
+          if (isUuid) {
+            const { data } = await supabase.from('exams').select('id, slug').eq('id', rawSlug).maybeSingle();
+            ex = data;
+          } else {
+            const { data } = await supabase.from('exams').select('id, slug').eq('slug', rawSlug).maybeSingle();
+            ex = data;
+            if (!ex) {
+              const clean = rawSlug.replace(/[-_]/g, ' ').replace(/[()]/g, '').trim();
+              const { data: byName } = await supabase.from('exams').select('id, slug').ilike('name', `%${clean}%`).maybeSingle();
+              ex = byName;
+            }
+          }
+
           if (ex?.id) {
+            const canonicalSlug = ex.slug || rawSlug;
             await supabase.from('user_exam_enrollments').upsert(
               {
                 user_id: userId,
                 exam_id: ex.id,
-                exam_slug: slug,
+                exam_slug: canonicalSlug,
                 is_primary: true,
               },
               { onConflict: 'user_id,exam_id' }
             );
+
+            // Sync user's sub_category in profiles table and Zustand store
+            const currentSubCats = Array.isArray(useAuthStore.getState().profile?.sub_category)
+              ? [...(useAuthStore.getState().profile!.sub_category || [])]
+              : [];
+            if (!currentSubCats.includes(canonicalSlug)) {
+              const updatedSubCat = [canonicalSlug, ...currentSubCats.filter((s) => s !== canonicalSlug)];
+              await supabase.from('profiles').update({ sub_category: updatedSubCat }).eq('id', userId);
+              const currentProf = useAuthStore.getState().profile;
+              if (currentProf) {
+                useAuthStore.getState().setProfile({
+                  ...currentProf,
+                  sub_category: updatedSubCat,
+                });
+              }
+            }
           }
-        } catch {
-          // ignore if table not yet created
+        } catch (enrollErr) {
+          console.warn('user_exam_enrollments sync warning:', enrollErr);
         }
       }
 
@@ -554,7 +673,172 @@ export function useSetupSyllabus() {
       await queryClient.invalidateQueries({ queryKey: ['syllabus'] });
       await queryClient.invalidateQueries({ queryKey: ['profile_subjects'] });
       await queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      await queryClient.invalidateQueries({ queryKey: ['user_exam_enrollments'] });
     },
   });
 }
+
+export function useRemoveExamEnrollment() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    void,
+    Error,
+    { examSlug?: string; examId?: string; examName?: string }
+  >({
+    mutationFn: async ({ examSlug, examId, examName }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId =
+        session?.user?.id ||
+        useAuthStore.getState().user?.id ||
+        useAuthStore.getState().profile?.id;
+      if (!userId) throw new Error('Not authenticated. Please log in again.');
+
+      const targetSlug = (examSlug || '').trim().toLowerCase();
+      const targetId = (examId || '').trim();
+      const targetName = (examName || '').trim().toLowerCase();
+
+      let resolvedId = targetId;
+      let resolvedSlug = targetSlug;
+
+      if (!resolvedSlug && targetName) {
+        const clean = targetName.replace(/[-_]/g, ' ').replace(/[()]/g, '').trim();
+        const { data: byName } = await supabase
+          .from('exams')
+          .select('id, slug')
+          .ilike('name', `%${clean}%`)
+          .maybeSingle();
+        if (byName) {
+          resolvedId = byName.id;
+          resolvedSlug = byName.slug;
+        }
+      }
+
+      const matchSlugs = Array.from(
+        new Set(
+          [targetSlug, resolvedSlug, targetId, resolvedId]
+            .filter(Boolean)
+            .map((s) => s.toLowerCase())
+        )
+      );
+
+      // 1. Delete matching rows from user_exam_enrollments
+      try {
+        let deleteQuery = supabase
+          .from('user_exam_enrollments')
+          .delete()
+          .eq('user_id', userId);
+
+        const orConditions: string[] = [];
+        matchSlugs.forEach((slug) => {
+          orConditions.push(`exam_slug.eq.${slug}`);
+        });
+        if (resolvedId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedId)) {
+          orConditions.push(`exam_id.eq.${resolvedId}`);
+        }
+        if (orConditions.length > 0) {
+          deleteQuery = deleteQuery.or(orConditions.join(','));
+        }
+
+        const { error: delErr } = await deleteQuery;
+        if (delErr) {
+          console.warn('user_exam_enrollments delete warning:', delErr);
+        }
+      } catch (err) {
+        console.warn('Error deleting user_exam_enrollment:', err);
+      }
+
+      // 2. Update profiles.sub_category and Zustand store
+      try {
+        const currentProfile = useAuthStore.getState().profile;
+        const currentSubCats = Array.isArray(currentProfile?.sub_category)
+          ? [...(currentProfile?.sub_category || [])]
+          : [];
+
+        const updatedSubCats = currentSubCats.filter((cat) => {
+          const lowerCat = (cat || '').toLowerCase().trim();
+          return !matchSlugs.includes(lowerCat);
+        });
+
+        const updates: Record<string, any> = { sub_category: updatedSubCats };
+
+        if (
+          (matchSlugs.includes('btech-cse') || matchSlugs.includes('cse')) &&
+          currentProfile?.category === 'cse_student'
+        ) {
+          updates.category = 'student';
+        }
+
+        await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', userId);
+
+        if (currentProfile) {
+          useAuthStore.getState().setProfile({
+            ...currentProfile,
+            ...updates,
+          });
+        }
+      } catch (err) {
+        console.warn('Error updating profile sub_category:', err);
+      }
+
+      // 3. Delete custom syllabus_topics for this exam
+      try {
+        for (const slug of matchSlugs) {
+          await supabase
+            .from('syllabus_topics')
+            .delete()
+            .eq('user_id', userId)
+            .ilike('exam_slug', `%${slug}%`);
+        }
+      } catch (err) {
+        console.warn('Error deleting syllabus_topics for exam:', err);
+      }
+
+      // 4. Clean up user_chapter_progress for this exam's chapters
+      try {
+        for (const slug of matchSlugs) {
+          const masterExam = await fetchExamSyllabusTopics(slug);
+          if (masterExam?.topics?.length) {
+            const chapterIds = masterExam.topics
+              .map((t) => t.chapter_id)
+              .filter(Boolean) as string[];
+            if (chapterIds.length > 0) {
+              await supabase
+                .from('user_chapter_progress')
+                .delete()
+                .eq('user_id', userId)
+                .in('chapter_id', chapterIds);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error cleaning up user_chapter_progress:', err);
+      }
+
+      // 5. Invalidate local AsyncStorage caches
+      try {
+        await AsyncStorage.multiRemove([
+          `syllabus_grouped_${userId}`,
+          `syllabus_grouped_v3_${userId}`,
+          `syllabus_grouped_v4_${userId}`,
+          `syllabus_grouped_v5_${userId}`,
+          `user_exams_${userId}`,
+        ]);
+      } catch {
+        // ignore
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['syllabus'] });
+      await queryClient.invalidateQueries({ queryKey: ['user_exam_enrollments'] });
+      await queryClient.invalidateQueries({ queryKey: ['profile'] });
+      await queryClient.invalidateQueries({ queryKey: ['profile_subjects'] });
+      await queryClient.invalidateQueries({ queryKey: ['subjects'] });
+    },
+  });
+}
+
 

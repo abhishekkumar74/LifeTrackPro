@@ -10,7 +10,7 @@ import {
   TouchableWithoutFeedback,
   Platform,
 } from 'react-native';
-import { ChevronRight, ChevronDown, Check, BookOpen, RotateCcw, Minus, X } from 'lucide-react-native';
+import { ChevronRight, ChevronDown, Check, BookOpen, RotateCcw, Minus, X, Clock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { SyllabusTopic, SyllabusStatus } from '@/types/app.types';
 
@@ -55,19 +55,35 @@ const HighlightText = ({ text, query, style }: { text: string; query: string; st
   );
 };
 
-// Map status to abbreviation indicators
+// Map status to clean label
+export const getStatusLabel = (status: SyllabusStatus): string => {
+  switch (status) {
+    case 'not_started':
+      return 'To Do';
+    case 'in_progress':
+      return 'Studying';
+    case 'done':
+      return 'Completed';
+    case 'needs_revision':
+      return 'Revise';
+    default:
+      return 'To Do';
+  }
+};
+
+// Map status to abbreviation indicators (backward compatibility)
 export const getStatusSymbol = (status: SyllabusStatus): string => {
   switch (status) {
     case 'not_started':
-      return '—';
+      return 'To Do';
     case 'in_progress':
-      return '📖';
+      return 'Studying';
     case 'done':
-      return '✓';
+      return 'Done';
     case 'needs_revision':
-      return '↺';
+      return 'Revise';
     default:
-      return '—';
+      return 'To Do';
   }
 };
 
@@ -75,22 +91,22 @@ export const getStatusSymbol = (status: SyllabusStatus): string => {
 export const getStatusBgColor = (status: SyllabusStatus): string => {
   switch (status) {
     case 'not_started':
-      return '#F2F1EE';
+      return '#F3F3EE';
     case 'in_progress':
-      return '#EAE8FD';
+      return '#EEEDFA';
     case 'done':
       return '#E2F9F3';
     case 'needs_revision':
       return '#FEF3DC';
     default:
-      return '#F2F1EE';
+      return '#F3F3EE';
   }
 };
 
 export const getStatusTextColor = (status: SyllabusStatus): string => {
   switch (status) {
     case 'not_started':
-      return '#5C5C70';
+      return '#717188';
     case 'in_progress':
       return '#5B4FE8';
     case 'done':
@@ -98,14 +114,14 @@ export const getStatusTextColor = (status: SyllabusStatus): string => {
     case 'needs_revision':
       return '#E8A020';
     default:
-      return '#5C5C70';
+      return '#717188';
   }
 };
 
 export const getStatusBorderColor = (status: SyllabusStatus): string => {
   switch (status) {
     case 'not_started':
-      return '#E8E7E3';
+      return '#ECEBE6';
     case 'in_progress':
       return '#D6D1F9';
     case 'done':
@@ -113,7 +129,7 @@ export const getStatusBorderColor = (status: SyllabusStatus): string => {
     case 'needs_revision':
       return '#FCE8C3';
     default:
-      return '#E8E7E3';
+      return '#ECEBE6';
   }
 };
 
@@ -142,22 +158,36 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
     onToggle();
   };
 
+  const handleToggleDone = (topic: SyllabusTopic) => {
+    if (isMultiSelectMode) {
+      onToggleSelectTopic(topic.id);
+      return;
+    }
+    const nextStatus: SyllabusStatus = topic.status === 'done' ? 'not_started' : 'done';
+    if (nextStatus === 'done') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    onTopicStatusChange(topic.id, nextStatus);
+  };
+
   const handleStatusSelectorPress = (topic: SyllabusTopic) => {
     if (isMultiSelectMode) {
       onToggleSelectTopic(topic.id);
       return;
     }
 
-    const options = ['Cancel', 'Not Started', 'In Progress', 'Done ✓', 'Needs Revision ↺'];
-    const statusValues: SyllabusStatus[] = ['not_started', 'in_progress', 'done', 'needs_revision'];
+    const options = ['Cancel', 'Mark Completed', 'In Progress', 'Needs Revision', 'Reset to Not Started'];
+    const statusValues: SyllabusStatus[] = ['done', 'in_progress', 'needs_revision', 'not_started'];
 
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options,
           cancelButtonIndex: 0,
-          title: 'Update Status',
-          message: `Set progress status for "${topic.topic}":`,
+          title: 'Topic Progress',
+          message: `Update status for "${topic.topic}":`,
         },
         (buttonIndex) => {
           if (buttonIndex > 0) {
@@ -192,38 +222,57 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
       {/* Chapter Header */}
       <TouchableOpacity
         onPress={handleTogglePress}
-        style={styles.chapterHeader}
+        style={[
+          styles.chapterHeader,
+          isExpanded && styles.chapterHeaderExpanded,
+        ]}
         activeOpacity={0.7}
       >
         <View style={styles.chapterHeaderTop}>
           <View style={styles.leftRow}>
-            {isExpanded ? (
-              <ChevronDown size={14} color="#5C5C70" style={styles.chevron} />
-            ) : (
-              <ChevronRight size={14} color="#5C5C70" style={styles.chevron} />
-            )}
+            <View style={[styles.chapterChevronWrap, isExpanded && styles.chapterChevronWrapExpanded]}>
+              {isExpanded ? (
+                <ChevronDown size={13} color="#5B4FE8" />
+              ) : (
+                <ChevronRight size={13} color="#717188" />
+              )}
+            </View>
             <HighlightText
               text={isCse ? `${chapter} (${totalCount} topics)` : chapter}
               query={searchQuery}
-              style={styles.chapterText}
+              style={[styles.chapterText, isExpanded && styles.chapterTextExpanded]}
             />
           </View>
 
-          <Text style={styles.countText}>{`${doneCount} / ${totalCount}`}</Text>
+          <View style={[styles.countBadge, doneCount === totalCount && totalCount > 0 && styles.countBadgeAllDone]}>
+            {doneCount === totalCount && totalCount > 0 && (
+              <Check size={11} color="#00B894" style={{ marginRight: 3 }} strokeWidth={2.5} />
+            )}
+            <Text
+              style={[
+                styles.countText,
+                doneCount === totalCount && totalCount > 0 && styles.countTextAllDone,
+              ]}
+            >
+              {`${doneCount}/${totalCount}`}
+            </Text>
+          </View>
         </View>
 
-        {/* Mini progress bar */}
-        <View style={styles.miniProgressContainer}>
-          <View
-            style={[
-              styles.miniProgressBarFill,
-              {
-                backgroundColor: subjectColor,
-                width: `${completionPercent}%`,
-              },
-            ]}
-          />
-        </View>
+        {/* Clean progress bar - only shown when completionPercent > 0 */}
+        {completionPercent > 0 && (
+          <View style={styles.miniProgressTrack}>
+            <View
+              style={[
+                styles.miniProgressFill,
+                {
+                  backgroundColor: subjectColor || '#5B4FE8',
+                  width: `${completionPercent}%`,
+                },
+              ]}
+            />
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Topics list */}
@@ -231,17 +280,39 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
         <View style={styles.topicsList}>
           {topics.map((topic) => {
             const isSelected = selectedTopicIds.includes(topic.id);
-            const statusBgColor = getStatusBgColor(topic.status as SyllabusStatus);
-            const statusTextColor = getStatusTextColor(topic.status as SyllabusStatus);
-            const statusBorderColor = getStatusBorderColor(topic.status as SyllabusStatus);
+            const isDone = topic.status === 'done';
+            const isInProgress = topic.status === 'in_progress';
+            const isRevision = topic.status === 'needs_revision';
 
             return (
               <View
                 key={topic.id}
                 style={[styles.topicRow, isSelected && styles.topicRowSelected]}
               >
+                {/* Checkbox button (1-tap toggle done/not started) */}
                 <TouchableOpacity
-                  style={styles.topicLeft}
+                  style={[
+                    styles.checkboxCircle,
+                    isDone && styles.checkboxCircleDone,
+                    isInProgress && styles.checkboxCircleProgress,
+                    isRevision && styles.checkboxCircleRevision,
+                    isSelected && styles.checkboxCircleSelected,
+                  ]}
+                  onPress={() => handleToggleDone(topic)}
+                  onLongPress={() => onLongPressTopic(topic.id)}
+                  delayLongPress={450}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  activeOpacity={0.7}
+                  accessibilityLabel={`Mark ${topic.topic} ${isDone ? 'incomplete' : 'complete'}`}
+                >
+                  {isDone && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+                  {isInProgress && <Clock size={11} color="#5B4FE8" strokeWidth={2.5} />}
+                  {isRevision && <RotateCcw size={10} color="#E8A020" strokeWidth={2.5} />}
+                </TouchableOpacity>
+
+                {/* Topic Title */}
+                <TouchableOpacity
+                  style={styles.topicCenter}
                   onPress={() => {
                     if (isMultiSelectMode) {
                       onToggleSelectTopic(topic.id);
@@ -250,48 +321,45 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
                     }
                   }}
                   onLongPress={() => onLongPressTopic(topic.id)}
-                  delayLongPress={500}
+                  delayLongPress={450}
                   activeOpacity={0.7}
                 >
-                  {/* Selection Checkbox */}
-                  {isMultiSelectMode ? (
-                    <View
-                      style={[
-                        styles.checkbox,
-                        isSelected && styles.checkboxSelected,
-                      ]}
-                    >
-                      {isSelected && <Text style={styles.checkmarkText}>✓</Text>}
-                    </View>
-                  ) : (
-                    /* Normal status dot */
-                    <View
-                      style={[styles.statusDot, { backgroundColor: statusTextColor }]}
-                    />
-                  )}
                   <HighlightText
                     text={topic.topic}
                     query={searchQuery}
-                    style={[styles.topicText, isSelected && styles.topicTextSelected]}
+                    style={[
+                      styles.topicText,
+                      isDone && styles.topicTextDone,
+                      isSelected && styles.topicTextSelected,
+                    ]}
                   />
                 </TouchableOpacity>
 
-                {/* Status indicator pill: tap to open status selection popup */}
+                {/* Status indicator capsule: tap to open status selection sheet */}
                 {!isMultiSelectMode && (
                   <TouchableOpacity
                     style={[
                       styles.statusPill,
-                      {
-                        backgroundColor: statusBgColor,
-                        borderColor: statusBorderColor,
-                      },
+                      isDone && styles.statusPillDone,
+                      isInProgress && styles.statusPillProgress,
+                      isRevision && styles.statusPillRevision,
                     ]}
                     onPress={() => handleStatusSelectorPress(topic)}
                     activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
-                    <Text style={[styles.statusSymbolText, { color: statusTextColor }]}>
-                      {getStatusSymbol(topic.status as SyllabusStatus)}
+                    {isDone && <Check size={10} color="#00B894" style={{ marginRight: 3 }} strokeWidth={2.5} />}
+                    {isInProgress && <Clock size={10} color="#5B4FE8" style={{ marginRight: 3 }} strokeWidth={2.5} />}
+                    {isRevision && <RotateCcw size={10} color="#E8A020" style={{ marginRight: 3 }} strokeWidth={2.5} />}
+                    <Text
+                      style={[
+                        styles.statusPillText,
+                        isDone && styles.statusPillTextDone,
+                        isInProgress && styles.statusPillTextProgress,
+                        isRevision && styles.statusPillTextRevision,
+                      ]}
+                    >
+                      {getStatusLabel(topic.status as SyllabusStatus)}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -301,10 +369,10 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
         </View>
       )}
 
-      {/* Cross-Platform Status Selector Modal */}
+      {/* Status Picker Modal for Android */}
       <Modal
         visible={!!modalTopic}
-        transparent={true}
+        transparent
         animationType="fade"
         onRequestClose={() => setModalTopic(null)}
       >
@@ -337,7 +405,7 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
                       <Check size={16} color="#00B894" />
                     </View>
                     <View style={styles.statusOptionTextWrap}>
-                      <Text style={[styles.statusOptionTitle, { color: '#00B894' }]}>Done</Text>
+                      <Text style={[styles.statusOptionTitle, { color: '#00B894' }]}>Completed</Text>
                       <Text style={styles.statusOptionSub}>Topic completed and mastered</Text>
                     </View>
                     {modalTopic?.status === 'done' && <Check size={18} color="#00B894" />}
@@ -351,8 +419,8 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
                     onPress={() => handleSelectStatusFromModal('in_progress')}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.statusOptionIconCircle, { backgroundColor: '#EAE8FD' }]}>
-                      <BookOpen size={16} color="#5B4FE8" />
+                    <View style={[styles.statusOptionIconCircle, { backgroundColor: '#EEEDFA' }]}>
+                      <Clock size={16} color="#5B4FE8" />
                     </View>
                     <View style={styles.statusOptionTextWrap}>
                       <Text style={[styles.statusOptionTitle, { color: '#5B4FE8' }]}>In Progress</Text>
@@ -387,14 +455,14 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
                     onPress={() => handleSelectStatusFromModal('not_started')}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.statusOptionIconCircle, { backgroundColor: '#F2F1EE' }]}>
-                      <Minus size={16} color="#5C5C70" />
+                    <View style={[styles.statusOptionIconCircle, { backgroundColor: '#F3F3EE' }]}>
+                      <Minus size={16} color="#717188" />
                     </View>
                     <View style={styles.statusOptionTextWrap}>
-                      <Text style={[styles.statusOptionTitle, { color: '#5C5C70' }]}>Not Started</Text>
-                      <Text style={styles.statusOptionSub}>Reset progress status</Text>
+                      <Text style={[styles.statusOptionTitle, { color: '#717188' }]}>Not Started</Text>
+                      <Text style={styles.statusOptionSub}>Reset topic progress</Text>
                     </View>
-                    {modalTopic?.status === 'not_started' && <Check size={18} color="#5C5C70" />}
+                    {modalTopic?.status === 'not_started' && <Check size={18} color="#717188" />}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -414,14 +482,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderTopWidth: 1,
-    borderTopColor: '#F2F1EE',
+    borderTopColor: '#F0EFEA',
     backgroundColor: '#FFFFFF',
+  },
+  chapterHeaderExpanded: {
+    backgroundColor: '#FAF9F6',
   },
   chapterHeaderTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
   },
   leftRow: {
     flexDirection: 'row',
@@ -429,54 +499,208 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10,
   },
-  chevron: {
-    marginRight: 6,
+  chapterChevronWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#F3F3EE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  chapterChevronWrapExpanded: {
+    backgroundColor: '#EEEDFA',
   },
   chapterText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 13,
-    color: '#5C5C70',
-    fontWeight: '500',
+    fontSize: 13.5,
+    color: '#17172A',
+    fontWeight: '600',
+    flex: 1,
+  },
+  chapterTextExpanded: {
+    color: '#17172A',
+    fontWeight: '700',
+  },
+  countBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F3EE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  countBadgeAllDone: {
+    backgroundColor: '#E2F9F3',
   },
   countText: {
+    fontFamily: 'DMMono-Medium',
+    fontSize: 11,
+    color: '#717188',
+    fontWeight: '600',
+  },
+  countTextAllDone: {
+    color: '#00B894',
+    fontWeight: '700',
+  },
+  miniProgressTrack: {
+    height: 3,
+    backgroundColor: '#EAE9E4',
+    borderRadius: 1.5,
+    width: '100%',
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  miniProgressFill: {
+    height: '100%',
+    borderRadius: 1.5,
+  },
+  topicsList: {
+    backgroundColor: '#FCFCFA',
+    paddingVertical: 2,
+  },
+  topicRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingLeft: 18,
+    paddingRight: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F5F4EE',
+    minHeight: 46,
+  },
+  topicRowSelected: {
+    backgroundColor: '#EEEDFA40',
+  },
+  checkboxCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#C7C6BF',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  checkboxCircleDone: {
+    backgroundColor: '#00B894',
+    borderColor: '#00B894',
+  },
+  checkboxCircleProgress: {
+    backgroundColor: '#EEEDFA',
+    borderColor: '#5B4FE8',
+  },
+  checkboxCircleRevision: {
+    backgroundColor: '#FEF3DC',
+    borderColor: '#E8A020',
+  },
+  checkboxCircleSelected: {
+    backgroundColor: '#5B4FE8',
+    borderColor: '#5B4FE8',
+  },
+  topicCenter: {
+    flex: 1,
+    marginRight: 10,
+  },
+  topicText: {
     fontFamily: 'DMSans',
-    fontSize: 12,
+    fontSize: 13,
+    color: '#17172A',
+    lineHeight: 18,
+  },
+  topicTextDone: {
     color: '#9B9BAF',
+    textDecorationLine: 'line-through',
+  },
+  topicTextSelected: {
+    fontWeight: '600',
+    color: '#5B4FE8',
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F3EE',
+    borderWidth: 1,
+    borderColor: '#ECEBE6',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  statusPillDone: {
+    backgroundColor: '#E2F9F3',
+    borderColor: '#B3F2E3',
+  },
+  statusPillProgress: {
+    backgroundColor: '#EEEDFA',
+    borderColor: '#D6D1F9',
+  },
+  statusPillRevision: {
+    backgroundColor: '#FEF3DC',
+    borderColor: '#FCE8C3',
+  },
+  statusPillText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#717188',
+  },
+  statusPillTextDone: {
+    color: '#00B894',
+    fontWeight: '700',
+  },
+  statusPillTextProgress: {
+    color: '#5B4FE8',
+    fontWeight: '700',
+  },
+  statusPillTextRevision: {
+    color: '#E8A020',
+    fontWeight: '700',
+  },
+  highlightTextMatched: {
+    backgroundColor: '#FFE57F',
+    color: '#17172A',
+    fontWeight: 'bold',
+    borderRadius: 2,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 14, 23, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
   },
   modalCard: {
+    width: '100%',
+    maxWidth: 340,
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 36,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 10,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#ECEBE6',
   },
   modalHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingBottom: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F1EE',
-    marginBottom: 12,
+    borderBottomColor: '#F2F1ED',
   },
   modalTitle: {
     fontFamily: 'DMSans-Bold',
     fontSize: 15,
+    fontWeight: '700',
     color: '#17172A',
     flex: 1,
     marginRight: 12,
-    fontWeight: '700',
   },
   modalCloseBtn: {
     padding: 4,
@@ -487,12 +711,11 @@ const styles = StyleSheet.create({
   statusModalOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    padding: 12,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#F2F1EE',
-    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#ECEBE6',
+    backgroundColor: '#FAFAF8',
     gap: 12,
   },
   statusModalOptionActiveDone: {
@@ -508,8 +731,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFBF0',
   },
   statusModalOptionActiveDefault: {
-    borderColor: '#E8E7E3',
-    backgroundColor: '#F7F6F3',
+    borderColor: '#ECEBE6',
+    backgroundColor: '#F5F4EE',
   },
   statusOptionIconCircle: {
     width: 32,
@@ -522,102 +745,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statusOptionTitle: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 14,
-    fontWeight: '600',
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13.5,
+    fontWeight: '700',
   },
   statusOptionSub: {
     fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#9B9BAF',
-    marginTop: 2,
-  },
-  miniProgressContainer: {
-    height: 3,
-    backgroundColor: '#E8E7E3',
-    borderRadius: 1.5,
-    width: '100%',
-    overflow: 'hidden',
-  },
-  miniProgressBarFill: {
-    height: '100%',
-    borderRadius: 1.5,
-  },
-  topicsList: {
-    backgroundColor: '#FAF9F6',
-  },
-  topicRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingLeft: 32,
-    paddingRight: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F7F6F3',
-    minHeight: 44,
-  },
-  topicRowSelected: {
-    backgroundColor: 'rgba(91, 79, 232, 0.05)',
-  },
-  topicLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 10,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 12,
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#E8E7E3',
-    marginRight: 12,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxSelected: {
-    backgroundColor: '#5B4FE8',
-    borderColor: '#5B4FE8',
-  },
-  checkmarkText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  topicText: {
-    fontFamily: 'DMSans',
-    fontSize: 13,
-    color: '#17172A',
-    flex: 1,
-  },
-  topicTextSelected: {
-    fontWeight: '500',
-  },
-  statusPill: {
-    borderWidth: 1,
-    borderRadius: 12,
-    minWidth: 32,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  statusSymbolText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  highlightTextMatched: {
-    backgroundColor: '#FFEB3B',
-    color: '#17172A',
-    fontWeight: 'bold',
+    fontSize: 11.5,
+    color: '#717188',
+    marginTop: 1,
   },
 });
 

@@ -44,7 +44,7 @@ const DEFAULT_CONFIG: Record<string, any> = {
     enable_study_rooms: true,
     enable_ambient_sounds: true,
     enable_ai_insights: true,
-    enable_flashcards: true,
+    enable_flashcards: false,
   },
 };
 

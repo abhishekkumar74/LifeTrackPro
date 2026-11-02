@@ -4,7 +4,6 @@ import { Tabs } from 'expo-router';
 import { Home, Target, Timer, BookOpen, BarChart2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tabScrollRefs, scrollToTop } from '@/lib/utils/tab-scroll';
-import { useDueRevisions } from '@/lib/hooks/use-notes';
 
 const ACTIVE_COLOR = '#5B4FE8';
 const INACTIVE_COLOR = '#9B9BAF';
@@ -13,8 +12,6 @@ const BORDER_COLOR = '#E8E7E3';
 
 export default function TabLayout(): React.JSX.Element {
   const insets = useSafeAreaInsets();
-  const dueRevisionsQuery = useDueRevisions();
-  const dueCount = dueRevisionsQuery.data?.length || 0;
 
   return (
     <Tabs
@@ -85,17 +82,10 @@ export default function TabLayout(): React.JSX.Element {
       <Tabs.Screen
         name="learn"
         options={{
-          title: 'Learn',
+          title: 'Syllabus',
           tabBarIcon: ({ color, focused }) => (
             <BookOpen size={20} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
-          tabBarBadge: dueCount > 0 ? dueCount : undefined,
-          tabBarBadgeStyle: {
-            backgroundColor: '#E85858',
-            color: '#FFFFFF',
-            fontSize: 10,
-            fontFamily: 'DMSans-Bold',
-          },
         }}
         listeners={({ navigation }) => ({
           tabPress: () => {

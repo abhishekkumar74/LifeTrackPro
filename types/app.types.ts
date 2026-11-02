@@ -161,6 +161,24 @@ export interface FocusSession {
   focus_accuracy?: 'fully_focused' | 'partially_distracted' | 'off_track' | null;
 }
 
+export interface Flashcard {
+  id: string;
+  user_id: string;
+  front: string;
+  back: string;
+  subject: string;
+  chapter?: string | null;
+  topic_id?: string | null;
+  note_id?: string | null;
+  tags: string[];
+  ease_factor: number;
+  interval_days: number;
+  review_count: number;
+  next_review: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Note {
   id: string;
   user_id: string;

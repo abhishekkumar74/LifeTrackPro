@@ -270,6 +270,7 @@ export default function FocusScreen(): React.JSX.Element {
     routineStartTime?: string;
     routineEndTime?: string;
     standby?: string;
+    autoStart?: string;
   }>();
   const { profile, setProfile } = useAuthStore();
   const isCse = profile?.category === 'cse_student';
@@ -508,15 +509,26 @@ export default function FocusScreen(): React.JSX.Element {
       setStreakShields(newShields);
       await setStreakShieldCount(newShields);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      useUiStore.getState().showToast('🛡️ Streak Shield Claimed via Ad! Streak is safe.', 'success');
+      useUiStore.getState().showToast('Streak Shield Claimed via Ad! Streak is safe.', 'success');
     });
   };
 
-  // AppState listener for Strict focus mode accountability
+  // AppState listener for Strict focus mode accountability & background notification updates
   useEffect(() => {
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
         backgroundStartTimestampRef.current = Date.now();
+        if (isRunning || isPaused) {
+          showActiveFocusNotification({
+            goal: sessionGoal,
+            subject: subjectTag,
+            activeSound: activeSound,
+            secondsLeft: secondsLeft,
+            isPaused: isPaused,
+            mode: currentMode,
+          }).catch(() => {});
+          FocusLiveActivity.updateSession(isPaused, secondsLeft, sessionGoal).catch(() => {});
+        }
       } else if (nextAppState === 'active') {
         if (backgroundStartTimestampRef.current) {
           const secondsOut = (Date.now() - backgroundStartTimestampRef.current) / 1000;
@@ -533,7 +545,7 @@ export default function FocusScreen(): React.JSX.Element {
     return () => {
       subscription.remove();
     };
-  }, [isStrictModeActive, isRunning, setStrictViolated]);
+  }, [isStrictModeActive, isRunning, isPaused, secondsLeft, sessionGoal, subjectTag, activeSound, currentMode, setStrictViolated]);
 
   // Synchronize pomodoroCount in store based on actual database completions today
   useEffect(() => {
@@ -1075,21 +1087,25 @@ export default function FocusScreen(): React.JSX.Element {
       pause();
       FocusLiveActivity.updateSession(true, secondsLeft, sessionGoal).catch(() => {});
       showActiveFocusNotification({
-        title: 'Focus Session Paused ⏸️',
+        title: 'Focus Session Paused',
         goal: sessionGoal,
         subject: subjectTag,
         activeSound: activeSound,
-        durationMinutes: Math.ceil(secondsLeft / 60),
+        secondsLeft: secondsLeft,
+        isPaused: true,
+        mode: currentMode,
       }).catch(() => {});
     } else if (isPaused) {
       resume();
       FocusLiveActivity.updateSession(false, secondsLeft, sessionGoal).catch(() => {});
       showActiveFocusNotification({
-        title: 'Deep Focus in Progress ⚡',
+        title: 'Deep Focus Active',
         goal: sessionGoal,
         subject: subjectTag,
         activeSound: activeSound,
-        durationMinutes: Math.ceil(secondsLeft / 60),
+        secondsLeft: secondsLeft,
+        isPaused: false,
+        mode: currentMode,
       }).catch(() => {});
     } else {
       start();
@@ -1100,14 +1116,22 @@ export default function FocusScreen(): React.JSX.Element {
         accentHex: TIMER_THEMES.find((t) => t.id === activeTheme)?.color || '#5B4FE8',
       }).catch(() => {});
       showActiveFocusNotification({
-        title: 'Deep Focus in Progress ⚡',
+        title: 'Deep Focus Active',
         goal: sessionGoal,
         subject: subjectTag,
         activeSound: activeSound,
-        durationMinutes: Math.ceil(secondsLeft / 60),
+        secondsLeft: secondsLeft,
+        isPaused: false,
+        mode: currentMode,
       }).catch(() => {});
     }
-  }, [isRunning, isPaused, pause, resume, start, secondsLeft, sessionGoal, subjectTag, activeSound]);
+  }, [isRunning, isPaused, pause, resume, start, secondsLeft, sessionGoal, subjectTag, activeSound, currentMode, activeTheme]);
+
+  useEffect(() => {
+    if (params.autoStart === 'true' && !isRunning && !isPaused) {
+      handlePlayPause();
+    }
+  }, [params.autoStart]);
 
   const handleReset = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1231,11 +1255,13 @@ export default function FocusScreen(): React.JSX.Element {
                 setSound(key);
                 await ambient.play(key, soundVolume);
                 showActiveFocusNotification({
-                  title: isRunning ? 'Deep Focus in Progress ⚡' : 'Ambient Soundscape Playing 🎧',
+                  title: isRunning ? 'Deep Focus Active' : 'Ambient Soundscape Playing',
                   goal: sessionGoal,
                   subject: subjectTag,
                   activeSound: key,
-                  durationMinutes: Math.ceil(secondsLeft / 60),
+                  secondsLeft: secondsLeft,
+                  isPaused: isPaused,
+                  mode: currentMode,
                 }).catch(() => {});
               });
             },
@@ -1250,11 +1276,13 @@ export default function FocusScreen(): React.JSX.Element {
       lastActiveSoundRef.current = key;
       await ambient.play(key, soundVolume);
       showActiveFocusNotification({
-        title: isRunning ? 'Deep Focus in Progress ⚡' : 'Ambient Soundscape Playing 🎧',
+        title: isRunning ? 'Deep Focus Active' : 'Ambient Soundscape Playing',
         goal: sessionGoal,
         subject: subjectTag,
         activeSound: key,
-        durationMinutes: Math.ceil(secondsLeft / 60),
+        secondsLeft: secondsLeft,
+        isPaused: isPaused,
+        mode: currentMode,
       }).catch(() => {});
     } else {
       await ambient.stop();
@@ -1262,11 +1290,13 @@ export default function FocusScreen(): React.JSX.Element {
         dismissActiveFocusNotification().catch(() => {});
       } else {
         showActiveFocusNotification({
-          title: 'Deep Focus in Progress ⚡',
+          title: 'Deep Focus Active',
           goal: sessionGoal,
           subject: subjectTag,
           activeSound: null,
-          durationMinutes: Math.ceil(secondsLeft / 60),
+          secondsLeft: secondsLeft,
+          isPaused: isPaused,
+          mode: currentMode,
         }).catch(() => {});
       }
     }
@@ -1455,7 +1485,11 @@ export default function FocusScreen(): React.JSX.Element {
                   ) : (
                     <VolumeX size={14} color="rgba(255, 255, 255, 0.5)" />
                   )}
-                  <Text style={[styles.activeSoundText, activeSound ? styles.activeSoundTextPlaying : null]}>
+                  <Text
+                    style={[styles.activeSoundText, activeSound ? styles.activeSoundTextPlaying : null]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
                     {activeSound ? activeSound.replace('_', ' ').toUpperCase() : 'SOUND OFF'}
                   </Text>
                   <View style={styles.activeSoundChangeTag}>
@@ -1618,11 +1652,16 @@ export default function FocusScreen(): React.JSX.Element {
                   accessibilityLabel={isRunning ? 'Pause Focus' : 'Resume Focus'}
                 >
                   {isRunning ? (
-                    <Pause size={18} color="#FFFFFF" strokeWidth={2.8} />
+                    <Pause size={17} color="#FFFFFF" strokeWidth={2.8} />
                   ) : (
-                    <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
+                    <Play size={17} color="#FFFFFF" fill="#FFFFFF" />
                   )}
-                  <Text style={styles.runningActionText}>
+                  <Text
+                    style={styles.runningActionText}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
                     {isRunning ? 'Pause' : 'Resume'}
                   </Text>
                 </TouchableOpacity>
@@ -1634,8 +1673,15 @@ export default function FocusScreen(): React.JSX.Element {
                   activeOpacity={0.8}
                   accessibilityLabel="End Session"
                 >
-                  <Square size={16} color="#FF7070" fill="#FF7070" />
-                  <Text style={styles.runningEndText}>End Session</Text>
+                  <Square size={15} color="#FF7070" fill="#FF7070" />
+                  <Text
+                    style={styles.runningEndText}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
+                    End Session
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -2461,8 +2507,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.2,
     borderRadius: 9999,
     height: 50,
-    paddingHorizontal: 20,
-    width: '88%',
+    paddingHorizontal: 16,
+    width: '94%',
     maxWidth: 380,
     alignSelf: 'center',
     justifyContent: 'center',
@@ -2589,23 +2635,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 10,
     marginTop: 16,
     marginBottom: 12,
     width: '100%',
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
   },
   runningPauseBtn: {
     flex: 1,
-    height: 58,
-    borderRadius: 29,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: 'rgba(255, 255, 255, 0.22)',
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.40)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    paddingHorizontal: 12,
+    gap: 6,
     shadowColor: '#000',
     shadowOpacity: 0.35,
     shadowRadius: 14,
@@ -2618,22 +2665,24 @@ const styles = StyleSheet.create({
   },
   runningActionText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 16,
+    fontSize: 15,
     color: '#FFFFFF',
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+    flexShrink: 1,
   },
   runningEndBtn: {
     flex: 1,
-    height: 58,
-    borderRadius: 29,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: 'rgba(232, 88, 88, 0.18)',
     borderWidth: 1.5,
     borderColor: 'rgba(232, 88, 88, 0.45)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    paddingHorizontal: 12,
+    gap: 6,
     shadowColor: '#E85858',
     shadowOpacity: 0.25,
     shadowRadius: 12,
@@ -2642,10 +2691,11 @@ const styles = StyleSheet.create({
   },
   runningEndText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 16,
+    fontSize: 15,
     color: '#FF8A8A',
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+    flexShrink: 1,
   },
   activeSecondaryRow: {
     marginTop: 10,
@@ -3537,20 +3587,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
     marginVertical: 14,
     width: '100%',
+    paddingHorizontal: 0,
   },
   activeSoundPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.14)',
     borderRadius: 9999,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    flexShrink: 1,
   },
   activeSoundPillPlaying: {
     backgroundColor: 'rgba(91, 79, 232, 0.18)',
@@ -3558,35 +3610,37 @@ const styles = StyleSheet.create({
   },
   activeSoundText: {
     fontFamily: 'DMMono',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1.2,
+    letterSpacing: 0.6,
     color: 'rgba(255, 255, 255, 0.6)',
+    flexShrink: 1,
   },
   activeSoundTextPlaying: {
     color: '#A89EF8',
   },
   activeSoundChangeTag: {
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 5,
   },
   activeSoundChangeTagText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 9,
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
     color: 'rgba(255, 255, 255, 0.75)',
   },
   activeMuteToggleBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.14)',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   activeMuteToggleBtnPlaying: {
     borderColor: 'rgba(91, 79, 232, 0.5)',
@@ -3595,19 +3649,21 @@ const styles = StyleSheet.create({
   activeSubjectPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
     borderRadius: 9999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    maxWidth: 140,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    maxWidth: 120,
+    flexShrink: 1,
   },
   activeSubjectText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(255, 255, 255, 0.75)',
+    flexShrink: 1,
   },
   soundSheetContent: {
     paddingHorizontal: 22,

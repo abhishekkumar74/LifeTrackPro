@@ -3,6 +3,8 @@ import { AppState, AppStateStatus, Alert } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../supabase/client';
 import { useFocusStore, resyncFocusTimer } from '../store/focus.store';
+import { showActiveFocusNotification } from '../notifications';
+import { FocusLiveActivity } from '../native/live-activity';
 
 export function useAppLifecycle() {
   const queryClient = useQueryClient();
@@ -23,8 +25,22 @@ export function useAppLifecycle() {
         ) {
           backgroundTime.current = Date.now();
           
+          // Seamlessly show live timer notification when app is minimized
+          const focus = useFocusStore.getState();
+          if (focus.isRunning || focus.isPaused) {
+            showActiveFocusNotification({
+              goal: focus.sessionGoal,
+              subject: focus.subjectTag,
+              activeSound: focus.activeSound,
+              secondsLeft: focus.secondsLeft,
+              isPaused: focus.isPaused,
+              mode: focus.currentMode,
+            }).catch(() => {});
+            FocusLiveActivity.updateSession(focus.isPaused, focus.secondsLeft, focus.sessionGoal).catch(() => {});
+          }
+
           if (__DEV__) {
-            console.log('App → background');
+            console.log('App → background (Active focus notification refreshed)');
           }
         }
 

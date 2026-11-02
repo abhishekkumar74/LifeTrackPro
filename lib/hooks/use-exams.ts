@@ -5,6 +5,7 @@ import { SEED_EXAMS } from '@/lib/constants/exams-seed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { captureError } from '@/lib/sentry';
+import { getImportantTopicsForChapter } from '@/lib/constants/chapter-topics-engine';
 
 // AsyncStorage Persistence Keys
 const CACHE_EXAMS_KEY = 'curriculum_exams_v3';
@@ -372,6 +373,28 @@ export async function fetchExamSyllabusTopics(examIdentifier: string): Promise<{
     if (lower === 'jee-adv' || lower === 'jee adv' || lower.includes('advance')) return 'jee-advanced';
     if (lower === 'jee' || lower === 'jee main' || lower.includes('main')) return 'jee-main';
     if (lower === 'cgl' || lower.includes('cgl')) return 'ssc-cgl';
+    if (lower === 'chsl' || lower.includes('chsl')) return 'ssc-chsl';
+    if (lower.includes('mts') || lower.includes('havaldar')) return 'ssc-mts';
+    if (lower.includes('cpo') || lower.includes('delhi police')) return 'ssc-cpo';
+    if (lower === 'upsc' || lower.includes('upsc')) return 'upsc-cse';
+    if (lower === 'cat' || lower.includes('cat')) return 'cat';
+    if (lower === 'gate' || lower.includes('gate')) return 'gate';
+    if (lower.includes('sbi-po') || lower.includes('sbi po')) return 'sbi-po';
+    if (lower.includes('clerk') || lower.includes('ibps-clerk') || lower.includes('sbi-clerk')) return 'ibps-clerk';
+    if (lower === 'banking' || lower === 'ibps' || lower.includes('ibps')) return 'ibps-po';
+    if (lower.includes('rpf-si') || lower.includes('rpf si') || lower.includes('rpf sub')) return 'rpf-si';
+    if (lower.includes('rpf-constable') || lower.includes('rpf constable') || lower === 'rpf') return 'rpf-constable';
+    if (lower.includes('alp') || lower.includes('loco pilot')) return 'rrb-alp';
+    if (lower.includes('technician') || lower.includes('rrb-tech')) return 'rrb-technician';
+    if (lower.includes('rrb-je') || lower.includes('rrb je') || lower.includes('junior engineer')) return 'rrb-je';
+    if (lower.includes('group-d') || lower.includes('group d') || lower.includes('rrc')) return 'rrb-group-d';
+    if (lower.includes('section controller') || lower.includes('section-controller')) return 'rrb-section-controller';
+    if (lower.includes('paramedical')) return 'rrb-paramedical';
+    if (lower.includes('ministerial')) return 'rrb-ministerial';
+    if (lower === 'ntpc' || lower.includes('ntpc')) return 'rrb-ntpc';
+    if (lower.includes('afcat') || lower.includes('air force') || lower.includes('airforce')) return 'afcat';
+    if (lower.includes('class-12') || lower.includes('12th')) return 'class-12-boards';
+    if (lower.includes('class-10') || lower.includes('10th')) return 'class-10-boards';
     return raw;
   };
 
@@ -392,6 +415,7 @@ export async function fetchExamSyllabusTopics(examIdentifier: string): Promise<{
   }
 
   let examName = resolvedIdentifier;
+  let canonicalSlug = resolvedIdentifier;
 
   // 2. Fetch from Supabase with safety timeout
   try {
@@ -401,29 +425,59 @@ export async function fetchExamSyllabusTopics(examIdentifier: string): Promise<{
       );
       let examId = isUuid ? resolvedIdentifier : null;
 
-      if (!examId) {
-        // 2a. Match by exact slug or alias
+      if (isUuid) {
+        // Resolve canonical slug and display name for this UUID
+        const { data: byId } = await supabase
+          .from('exams')
+          .select('id, name, slug')
+          .eq('id', resolvedIdentifier)
+          .maybeSingle();
+
+        if (byId) {
+          examId = byId.id;
+          examName = byId.name;
+          canonicalSlug = byId.slug || resolvedIdentifier;
+        }
+      } else {
+        // 2a. Match by exact resolved slug
         const { data: bySlug } = await supabase
           .from('exams')
-          .select('id, name')
-          .or(`slug.eq.${resolvedIdentifier},slug.eq.${examIdentifier}`)
+          .select('id, name, slug')
+          .eq('slug', resolvedIdentifier)
           .maybeSingle();
 
         if (bySlug?.id) {
           examId = bySlug.id;
           examName = bySlug.name;
-        } else {
-          // 2b. Match by name
-          const cleanName = resolvedIdentifier.replace(/-/g, ' ');
+          canonicalSlug = bySlug.slug;
+        } else if (examIdentifier !== resolvedIdentifier) {
+          // 2b. Match by original identifier as slug
+          const { data: byOrigSlug } = await supabase
+            .from('exams')
+            .select('id, name, slug')
+            .eq('slug', examIdentifier)
+            .maybeSingle();
+
+          if (byOrigSlug?.id) {
+            examId = byOrigSlug.id;
+            examName = byOrigSlug.name;
+            canonicalSlug = byOrigSlug.slug;
+          }
+        }
+
+        if (!examId) {
+          // 2c. Match by sanitized name
+          const cleanName = resolvedIdentifier.replace(/[-_]/g, ' ').replace(/[()]/g, '').trim();
           const { data: byName } = await supabase
             .from('exams')
-            .select('id, name')
+            .select('id, name, slug')
             .ilike('name', `%${cleanName}%`)
             .maybeSingle();
 
           if (byName?.id) {
             examId = byName.id;
             examName = byName.name;
+            canonicalSlug = byName.slug;
           }
         }
       }
@@ -452,21 +506,25 @@ export async function fetchExamSyllabusTopics(examIdentifier: string): Promise<{
               const subjectName = j.display_name || j.subjects?.name || 'Subject';
               const subChapters = chapters.filter((c: any) => c.exam_subject_id === j.id);
               subChapters.forEach((ch: any) => {
-                topics.push({
-                  id: `master-ch-${ch.id}`,
-                  subject: subjectName,
-                  chapter: ch.name,
-                  topic: `Core concepts of ${ch.name}`,
-                  order_index: order++,
-                  exam_slug: resolvedIdentifier,
-                  chapter_id: ch.id,
+                const subTopics = getImportantTopicsForChapter(subjectName, ch.name, canonicalSlug);
+                subTopics.forEach((topicTitle: string, tIdx: number) => {
+                  topics.push({
+                    id: `master-ch-${ch.id}-${tIdx}`,
+                    subject: subjectName,
+                    chapter: ch.name,
+                    topic: topicTitle,
+                    order_index: order++,
+                    exam_slug: canonicalSlug,
+                    chapter_id: ch.id,
+                  });
                 });
               });
             });
 
             if (topics.length > 0) {
-              const result = { examName, examSlug: resolvedIdentifier, topics };
+              const result = { examName, examSlug: canonicalSlug, topics };
               AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+              AsyncStorage.setItem(`curriculum_syllabus_topics_${canonicalSlug}`, JSON.stringify(result)).catch(() => {});
               return result;
             }
           }
@@ -475,7 +533,7 @@ export async function fetchExamSyllabusTopics(examIdentifier: string): Promise<{
       return null;
     };
 
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500));
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000));
     const dynamicResult = await Promise.race([fetchSupabaseCurriculum(), timeoutPromise]);
     if (dynamicResult && dynamicResult.topics.length > 0) {
       return dynamicResult;
@@ -489,15 +547,27 @@ export async function fetchExamSyllabusTopics(examIdentifier: string): Promise<{
   let seed = null;
   for (const k of lookupKeys) {
     const lower = k.toLowerCase().trim();
-    seed = SEED_EXAMS.find(
-      (e) =>
+    const cleanKey = lower.replace(/[-_\s()]/g, '');
+    seed = SEED_EXAMS.find((e) => {
+      const eSlug = e.slug.toLowerCase();
+      const eName = e.name.toLowerCase();
+      const cleanSlug = eSlug.replace(/[-_\s()]/g, '');
+      const cleanName = eName.replace(/[-_\s()]/g, '');
+
+      return (
         e.id === k ||
-        e.slug.toLowerCase() === lower ||
-        e.name.toLowerCase() === lower ||
-        lower.includes(e.name.toLowerCase()) ||
-        lower.includes(e.slug.toLowerCase()) ||
-        e.name.toLowerCase().includes(lower)
-    );
+        eSlug === lower ||
+        eName === lower ||
+        cleanSlug === cleanKey ||
+        cleanName === cleanKey ||
+        lower.includes(eSlug) ||
+        eSlug.includes(lower) ||
+        lower.includes(eName) ||
+        eName.includes(lower) ||
+        cleanKey.includes(cleanSlug) ||
+        cleanSlug.includes(cleanKey)
+      );
+    });
     if (seed) break;
   }
 
@@ -507,14 +577,17 @@ export async function fetchExamSyllabusTopics(examIdentifier: string): Promise<{
     seed.subjects.forEach((sub) => {
       sub.chapters.forEach((ch) => {
         const seedChapterId = `seed-${seed.slug}-${sub.name}-${ch.order_index}`.toLowerCase().replace(/\s+/g, '-');
-        topics.push({
-          id: seedChapterId,
-          subject: sub.name,
-          chapter: ch.name,
-          topic: `Core concepts of ${ch.name}`,
-          order_index: order++,
-          exam_slug: seed.slug,
-          chapter_id: seedChapterId,
+        const subTopics = getImportantTopicsForChapter(sub.name, ch.name, seed.slug);
+        subTopics.forEach((topicTitle: string, tIdx: number) => {
+          topics.push({
+            id: `${seedChapterId}-${tIdx}`,
+            subject: sub.name,
+            chapter: ch.name,
+            topic: topicTitle,
+            order_index: order++,
+            exam_slug: seed.slug,
+            chapter_id: seedChapterId,
+          });
         });
       });
     });

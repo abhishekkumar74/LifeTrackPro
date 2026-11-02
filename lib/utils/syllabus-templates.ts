@@ -378,14 +378,31 @@ export function getTemplateForExam(examKey: string): SyllabusTemplate | null {
 
   // Look in SEED_EXAMS
   const lower = examKey.toLowerCase().trim();
-  const matched = SEED_EXAMS.find(
-    (e) =>
+  const cleanKey = lower.replace(/[-_\s()]/g, '');
+
+  const matched = SEED_EXAMS.find((e) => {
+    const eSlug = e.slug.toLowerCase();
+    const eName = e.name.toLowerCase();
+    const cleanSlug = eSlug.replace(/[-_\s()]/g, '');
+    const cleanName = eName.replace(/[-_\s()]/g, '');
+
+    return (
       e.id === examKey ||
-      e.slug.toLowerCase() === lower ||
-      e.name.toLowerCase() === lower ||
-      lower.includes(e.name.toLowerCase()) ||
-      lower.includes(e.slug.toLowerCase())
-  );
+      eSlug === lower ||
+      eName === lower ||
+      cleanSlug === cleanKey ||
+      cleanName === cleanKey ||
+      lower.includes(eSlug) ||
+      eSlug.includes(lower) ||
+      lower.includes(eName) ||
+      eName.includes(lower) ||
+      cleanName.includes(cleanKey) ||
+      cleanKey.includes(cleanSlug) ||
+      (cleanKey.includes('rpf') && cleanKey.includes('si') && cleanSlug.includes('rpf') && cleanSlug.includes('si')) ||
+      (cleanKey.includes('rpf') && cleanKey.includes('constable') && cleanSlug.includes('rpf') && cleanSlug.includes('constable')) ||
+      (cleanKey.includes('alp') && cleanSlug.includes('alp'))
+    );
+  });
 
   if (!matched) return null;
 
