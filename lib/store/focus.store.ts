@@ -156,7 +156,7 @@ export const resyncFocusTimer = async (state: FocusState) => {
           queryClient.invalidateQueries({ queryKey: ['routineHistoryLogs'] });
 
           Alert.alert(
-            'Focus Session Completed 🎉',
+            'Focus Session Completed',
             `Your focus session "${state.sessionGoal || 'Deep Focus'}" has been successfully logged${state.linkedRoutineBlockId ? ' and your routine block has been marked Done!' : '!'}`
           );
         }

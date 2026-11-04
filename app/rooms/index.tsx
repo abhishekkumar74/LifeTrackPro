@@ -13,19 +13,19 @@ import {
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar, Platform } from 'react-native';
-import { router, Href } from 'expo-router';
+import { router, Href, useLocalSearchParams } from 'expo-router';
 import { useActiveRooms, useMyRooms, useEndRoom, RoomWithHost } from '@/lib/hooks/use-study-rooms';
 import { LiveBadge } from '@/components/community/LiveBadge';
 import { RoomCard } from '@/components/community/RoomCard';
-import { CreateRoomSheet } from '@/components/community/CreateRoomSheet';
 import { useAuthStore } from '@/lib/store/auth.store';
-import { ArrowLeft, Plus } from 'lucide-react-native';
-import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
+import { ArrowLeft, Plus, Moon, Users } from 'lucide-react-native';
 import { Skeleton } from '@/components/shared/Skeleton';
+import { parseRoomSubject } from '@/lib/utils/room-visibility';
 
 export default function RoomsScreen(): React.JSX.Element {
   const { profile } = useAuthStore();
   const currentUserId = profile?.id || '';
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
 
   const {
     data: activeRooms,
@@ -42,20 +42,36 @@ export default function RoomsScreen(): React.JSX.Element {
   } = useMyRooms();
 
   const endRoomMutation = useEndRoom();
+  const { mutate: endRoom } = endRoomMutation;
 
-  const [activeTab, setActiveTab] = useState<'live' | 'my'>('live');
-  const [isSheetVisible, setIsSheetVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<'live' | 'my'>(tab === 'my' ? 'my' : 'live');
+
+  React.useEffect(() => {
+    if (tab === 'my' || tab === 'live') {
+      setActiveTab(tab);
+    }
+  }, [tab]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'silent' | 'music' | 'discussion'>('all');
 
-  useAndroidBackHandler(() => {
-    if (isSheetVisible) {
-      setIsSheetVisible(false);
-      return true;
+  const handleOpenCreateRoom = useCallback(() => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {}
+    router.push('/rooms/create' as Href);
+  }, []);
+
+  const handleBack = useCallback(() => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {}
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)' as Href);
     }
-    return false;
-  });
+  }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -72,19 +88,55 @@ export default function RoomsScreen(): React.JSX.Element {
   }, []);
 
   const handleEndRoom = useCallback((roomId: string) => {
-    endRoomMutation.mutate(roomId);
-  }, [endRoomMutation]);
+    endRoom(roomId);
+  }, [endRoom]);
 
-  const totalStudying = activeRooms?.reduce((sum, r) => sum + r.member_count, 0) || 0;
+  // Combine user's own active rooms with public active rooms
+  const allLiveRooms = React.useMemo(() => {
+    const roomMap = new Map<string, RoomWithHost>();
+    const now = Date.now();
+
+    // 1. Include user's own active rooms so host can easily manage them in Live Rooms
+    if (myRooms) {
+      for (const r of myRooms) {
+        if (!r.is_active) continue;
+        const createdAt = new Date(r.created_at).getTime();
+        const durationMs = (r.timer_minutes || 25) * 60 * 1000;
+        if (now < createdAt + durationMs) {
+          roomMap.set(r.id, r);
+        }
+      }
+    }
+
+    // 2. Include public active rooms
+    if (activeRooms) {
+      for (const r of activeRooms) {
+        if (!r.is_active || roomMap.has(r.id)) continue;
+        const createdAt = new Date(r.created_at).getTime();
+        const durationMs = (r.timer_minutes || 25) * 60 * 1000;
+        if (now < createdAt + durationMs) {
+          roomMap.set(r.id, r);
+        }
+      }
+    }
+
+    return Array.from(roomMap.values());
+  }, [activeRooms, myRooms]);
+
+  const totalStudying = React.useMemo(() => {
+    return allLiveRooms.reduce((sum, r) => sum + Math.max(r.member_count || 1, 1), 0);
+  }, [allLiveRooms]);
 
   const renderActiveEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Text style={{ fontSize: 40, marginBottom: 12 }}>🌙</Text>
+      <View style={styles.emptyIconCircle}>
+        <Moon size={28} color="#5B4FE8" strokeWidth={2} />
+      </View>
       <Text style={styles.emptyTitle}>No rooms live right now</Text>
       <Text style={styles.emptySubtitle}>Be the first to start a session!</Text>
       <TouchableOpacity
         style={styles.emptyButton}
-        onPress={() => setIsSheetVisible(true)}
+        onPress={handleOpenCreateRoom}
         activeOpacity={0.8}
       >
         <Text style={styles.emptyButtonText}>Create Room</Text>
@@ -94,15 +146,17 @@ export default function RoomsScreen(): React.JSX.Element {
 
   const renderMyEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Text style={{ fontSize: 40, marginBottom: 12 }}>🎓</Text>
+      <View style={styles.emptyIconCircle}>
+        <Users size={28} color="#5B4FE8" strokeWidth={2} />
+      </View>
       <Text style={styles.emptyTitle}>You haven't created any rooms yet</Text>
       <Text style={styles.emptySubtitle}>Start your first study group to invite others.</Text>
       <TouchableOpacity
         style={styles.emptyButton}
-        onPress={() => setIsSheetVisible(true)}
+        onPress={handleOpenCreateRoom}
         activeOpacity={0.8}
       >
-        <Text style={styles.emptyButtonText}>Create your first study room →</Text>
+        <Text style={styles.emptyButtonText}>Create your first study room</Text>
       </TouchableOpacity>
     </View>
   );
@@ -120,10 +174,10 @@ export default function RoomsScreen(): React.JSX.Element {
   const error = activeTab === 'live' ? activeError : myError;
 
   const filteredActiveRooms = React.useMemo(() => {
-    return activeRooms?.filter((room) => {
+    return allLiveRooms.filter((room) => {
       // Exclude rooms whose timers have expired
       const createdAt = new Date(room.created_at).getTime();
-      const durationMs = room.timer_minutes * 60 * 1000;
+      const durationMs = (room.timer_minutes || 60) * 60 * 1000;
       const expiresAt = createdAt + durationMs;
       if (Date.now() > expiresAt) {
         return false;
@@ -133,9 +187,12 @@ export default function RoomsScreen(): React.JSX.Element {
       const cleanId = room.id.replace(/-/g, '').toLowerCase();
       const shortCode = cleanId.slice(0, 6);
 
+      const parsed = parseRoomSubject(room.subject, room.is_public);
+      const subjectText = (parsed.displaySubject || '').toLowerCase();
+
       const matchesSearch =
         room.name.toLowerCase().includes(cleanSearch) ||
-        (room.subject && room.subject.toLowerCase().includes(cleanSearch)) ||
+        subjectText.includes(cleanSearch) ||
         room.id.toLowerCase().includes(cleanSearch) ||
         shortCode.includes(cleanSearch) ||
         cleanId.startsWith(cleanSearch);
@@ -144,8 +201,8 @@ export default function RoomsScreen(): React.JSX.Element {
         selectedCategory === 'all' || room.room_type === selectedCategory;
 
       return matchesSearch && matchesCategory;
-    }) || [];
-  }, [activeRooms, searchQuery, selectedCategory]);
+    });
+  }, [allLiveRooms, searchQuery, selectedCategory]);
 
   const sortedMyRooms = React.useMemo(() => {
     if (!myRooms) return [];
@@ -168,7 +225,7 @@ export default function RoomsScreen(): React.JSX.Element {
         <View style={styles.headerLeft}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={handleBack}
             activeOpacity={0.7}
           >
             <ArrowLeft size={22} color="#17172A" />
@@ -178,8 +235,9 @@ export default function RoomsScreen(): React.JSX.Element {
 
         <TouchableOpacity
           style={styles.createTriggerButton}
-          onPress={() => setIsSheetVisible(true)}
+          onPress={handleOpenCreateRoom}
           activeOpacity={0.8}
+          accessibilityLabel="Create study room"
         >
           <Plus size={20} color="#FFFFFF" />
         </TouchableOpacity>
@@ -232,10 +290,10 @@ export default function RoomsScreen(): React.JSX.Element {
             style={styles.filterContainer}
           >
             {[
-              { id: 'all', label: 'All 🌐' },
-              { id: 'silent', label: 'Silent 🔇' },
-              { id: 'music', label: 'Music 🎵' },
-              { id: 'discussion', label: 'Discussion 💬' },
+              { id: 'all', label: 'All' },
+              { id: 'silent', label: 'Silent' },
+              { id: 'music', label: 'Music' },
+              { id: 'discussion', label: 'Discussion' },
             ].map((cat) => {
               const isSelected = selectedCategory === cat.id;
               return (
@@ -305,16 +363,6 @@ export default function RoomsScreen(): React.JSX.Element {
           keyboardDismissMode="on-drag"
         />
       )}
-
-      {/* CREATE SHEET */}
-      <CreateRoomSheet
-        isVisible={isSheetVisible}
-        onClose={() => setIsSheetVisible(false)}
-        onCreated={(newRoomId) => {
-          setIsSheetVisible(false);
-          router.push(`/rooms/${newRoomId}` as Href);
-        }}
-      />
     </SafeAreaView>
   );
 }
@@ -433,6 +481,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 80,
+  },
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EAE8FD',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   emptyTitle: {
     fontFamily: 'DMSans-Medium',

@@ -24,7 +24,7 @@ export type GroupedSyllabus = {
 export function useSyllabus() {
   const { user, profile } = useAuthStore();
   const activeUserId = user?.id || profile?.id;
-  const cacheKey = `syllabus_grouped_v5_${activeUserId || 'guest'}`;
+  const cacheKey = `syllabus_grouped_v6_${activeUserId || 'guest'}`;
 
   return useQuery<GroupedSyllabus>({
     queryKey: ['syllabus', activeUserId],
@@ -273,17 +273,37 @@ export function useUpdateTopicStatus() {
         }
       }
 
-      const chapterId =
+      let chapterId =
         matchedTopic?.chapter_id ||
         (topicId.startsWith('master-ch-') ? topicId.replace('master-ch-', '').replace(/-[0-9]+$/, '') : null);
 
-      const isChapterUuid = Boolean(
+      let isChapterUuid = Boolean(
         chapterId &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chapterId)
       );
 
-      // 2. Storage-Optimized Progress update:
+      // If chapterId is missing or non-UUID, resolve active chapter UUID from exam_chapters
+      if (!isChapterUuid && matchedTopic?.chapter) {
+        try {
+          const { data: realChapter } = await supabase
+            .from('exam_chapters')
+            .select('id')
+            .ilike('name', matchedTopic.chapter.trim())
+            .limit(1)
+            .maybeSingle();
+
+          if (realChapter?.id) {
+            chapterId = realChapter.id;
+            isChapterUuid = true;
+          }
+        } catch {
+          // ignore lookup error
+        }
+      }
+
+      // 2. Storage-Optimized Progress update for master chapters:
       // If chapterId is a valid UUID, update user_chapter_progress table with topic-level notes
+      let progSaved = false;
       if (isChapterUuid && chapterId) {
         try {
           const { data: existingProg } = await supabase
@@ -304,6 +324,7 @@ export function useUpdateTopicStatus() {
 
           if (newStatus === 'not_started') {
             delete currentTopicMap[topicId];
+            delete currentTopicMap[`master-ch-${chapterId}`];
           } else {
             currentTopicMap[topicId] = newStatus;
           }
@@ -323,37 +344,73 @@ export function useUpdateTopicStatus() {
               },
               { onConflict: 'user_id,chapter_id' }
             );
-            if (progErr) console.warn('user_chapter_progress upsert warning:', progErr);
+            if (!progErr) {
+              progSaved = true;
+            } else {
+              console.warn('user_chapter_progress upsert warning:', progErr);
+            }
           } else {
-            // If no active topics remain, delete row to keep zero storage overhead on Supabase!
             await supabase
               .from('user_chapter_progress')
               .delete()
               .eq('user_id', currentUserId)
               .eq('chapter_id', chapterId);
+            progSaved = true;
           }
         } catch (e) {
           console.warn('user_chapter_progress update error:', e);
         }
       }
 
-      // 3. If it's a legacy or custom topic in syllabus_topics, update it as well
+      // 3. Robust Direct Persistence in syllabus_topics:
+      // Always persist topic status in syllabus_topics so it NEVER undos or reverts!
       const isTopicUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(topicId);
       if (isTopicUuid && !topicId.startsWith('master-ch-') && !topicId.startsWith('seed-')) {
         try {
-          let query = supabase
+          await supabase
             .from('syllabus_topics')
             .update({ status: newStatus })
-            .eq('id', topicId);
-
-          if (currentUserId) {
-            query = query.eq('user_id', currentUserId);
-          }
-
-          const { error: topErr } = await query;
-          if (topErr) console.warn('syllabus_topics update warning:', topErr);
+            .eq('id', topicId)
+            .eq('user_id', currentUserId);
         } catch (e) {
           console.warn('syllabus_topics update error:', e);
+        }
+      } else if (matchedTopic?.subject && matchedTopic?.chapter && matchedTopic?.topic) {
+        // Master / seed / template topic persistence fallback
+        try {
+          const { data: existingTopic } = await supabase
+            .from('syllabus_topics')
+            .select('id')
+            .eq('user_id', currentUserId)
+            .eq('subject', matchedTopic.subject)
+            .eq('chapter', matchedTopic.chapter)
+            .eq('topic', matchedTopic.topic)
+            .maybeSingle();
+
+          if (existingTopic?.id) {
+            if (newStatus === 'not_started') {
+              await supabase.from('syllabus_topics').delete().eq('id', existingTopic.id);
+            } else {
+              await supabase
+                .from('syllabus_topics')
+                .update({ status: newStatus })
+                .eq('id', existingTopic.id);
+            }
+          } else if (newStatus !== 'not_started') {
+            await supabase
+              .from('syllabus_topics')
+              .insert({
+                user_id: currentUserId,
+                subject: matchedTopic.subject,
+                chapter: matchedTopic.chapter,
+                topic: matchedTopic.topic,
+                status: newStatus,
+                order_index: matchedTopic.order_index ?? 0,
+                exam_slug: matchedTopic.exam_slug ?? null,
+              });
+          }
+        } catch (e) {
+          console.warn('syllabus_topics fallback persistence error:', e);
         }
       }
 
@@ -402,7 +459,7 @@ export function useUpdateTopicStatus() {
         if (updated) {
           queryClient.setQueryData<GroupedSyllabus>(targetKey, nextSyllabus);
           AsyncStorage.setItem(
-            `syllabus_grouped_v5_${userId || 'guest'}`,
+            `syllabus_grouped_v6_${userId || 'guest'}`,
             JSON.stringify(nextSyllabus)
           ).catch(() => {});
         }
@@ -436,19 +493,77 @@ export function useBulkUpdateTopics() {
       const currentUserId = session?.user?.id || userId || useAuthStore.getState().profile?.id;
       if (!currentUserId) throw new Error('Not authenticated');
 
+      const previousSyllabus =
+        queryClient.getQueryData<GroupedSyllabus>(['syllabus', currentUserId]) ||
+        queryClient.getQueryData<GroupedSyllabus>(['syllabus']);
+
+      const matchedTopicsMap = new Map<string, SyllabusTopic>();
+      if (previousSyllabus) {
+        for (const subKey of Object.keys(previousSyllabus)) {
+          const sub = previousSyllabus[subKey];
+          for (const chKey of Object.keys(sub.chapters)) {
+            sub.chapters[chKey].forEach((t) => {
+              if (topicIds.includes(t.id)) {
+                matchedTopicsMap.set(t.id, t);
+              }
+            });
+          }
+        }
+      }
+
       const masterChapterIds: string[] = [];
       const legacyTopicIds: string[] = [];
 
-      topicIds.forEach((id) => {
-        if (id.startsWith('master-ch-')) {
+      for (const id of topicIds) {
+        const matched = matchedTopicsMap.get(id);
+        const isTopicUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+        if (isTopicUuid && !id.startsWith('master-ch-') && !id.startsWith('seed-')) {
+          legacyTopicIds.push(id);
+        } else if (id.startsWith('master-ch-')) {
           const rawId = id.replace('master-ch-', '').replace(/-[0-9]+$/, '');
           if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId)) {
             masterChapterIds.push(rawId);
           }
-        } else if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-          legacyTopicIds.push(id);
         }
-      });
+
+        // Direct persistence fallback for all topics
+        if (matched?.subject && matched?.chapter && matched?.topic) {
+          try {
+            const { data: existingTopic } = await supabase
+              .from('syllabus_topics')
+              .select('id')
+              .eq('user_id', currentUserId)
+              .eq('subject', matched.subject)
+              .eq('chapter', matched.chapter)
+              .eq('topic', matched.topic)
+              .maybeSingle();
+
+            if (existingTopic?.id) {
+              if (newStatus === 'not_started') {
+                await supabase.from('syllabus_topics').delete().eq('id', existingTopic.id);
+              } else {
+                await supabase
+                  .from('syllabus_topics')
+                  .update({ status: newStatus })
+                  .eq('id', existingTopic.id);
+              }
+            } else if (newStatus !== 'not_started') {
+              await supabase.from('syllabus_topics').insert({
+                user_id: currentUserId,
+                subject: matched.subject,
+                chapter: matched.chapter,
+                topic: matched.topic,
+                status: newStatus,
+                order_index: matched.order_index ?? 0,
+                exam_slug: matched.exam_slug ?? null,
+              });
+            }
+          } catch (e) {
+            console.warn('bulk syllabus_topics fallback error:', e);
+          }
+        }
+      }
 
       if (masterChapterIds.length > 0) {
         try {
@@ -518,7 +633,7 @@ export function useBulkUpdateTopics() {
 
         queryClient.setQueryData(targetKey, nextData);
         AsyncStorage.setItem(
-          `syllabus_grouped_v5_${userId || 'guest'}`,
+          `syllabus_grouped_v6_${userId || 'guest'}`,
           JSON.stringify(nextData)
         ).catch(() => {});
       }
@@ -657,12 +772,15 @@ export function useSetupSyllabus() {
 
       // 2. Invalidate local AsyncStorage cache so fresh master curriculum renders instantly
       try {
-        await AsyncStorage.multiRemove([
-          `syllabus_grouped_${userId}`,
-          `syllabus_grouped_v3_${userId}`,
-          `syllabus_grouped_v4_${userId}`,
-          `syllabus_grouped_v5_${userId}`,
-        ]);
+        const allKeys = await AsyncStorage.getAllKeys();
+        const staleKeys = allKeys.filter(
+          (k) =>
+            k.startsWith(`syllabus_grouped_`) ||
+            k.startsWith(`curriculum_syllabus_topics_`)
+        );
+        if (staleKeys.length > 0) {
+          await AsyncStorage.multiRemove(staleKeys);
+        }
       } catch {
         // ignore
       }

@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
+import { CheckSquare, Flame, HeartCrack } from 'lucide-react-native';
 
 // Custom Count-Up Animation Hook for 60fps smooth page load animation
 function useCountUp(target: number, duration: number = 850) {
@@ -76,7 +77,9 @@ interface QuickStatsProps {
   tasksTotal: number;
   tasksDone: number;
   streakDays: number;
+  isStreakBroken?: boolean;
   isLoading: boolean;
+  onPressStreak?: () => void;
   weeklyActivity?: boolean[];
   sparklines?: {
     focus: number[];
@@ -92,7 +95,9 @@ export const QuickStats = React.memo<QuickStatsProps>(({
   tasksTotal,
   tasksDone,
   streakDays,
+  isStreakBroken = false,
   isLoading,
+  onPressStreak,
   sparklines,
 }) => {
   const router = useRouter();
@@ -119,7 +124,7 @@ export const QuickStats = React.memo<QuickStatsProps>(({
   const targetHours = focusMinutes > 0 ? Number((focusMinutes / 60).toFixed(1)) : 0;
   const targetTasksDone = tasksDone || 0;
   const targetTasksTotal = tasksTotal || 0;
-  const targetStreak = streakDays > 0 ? streakDays : 1;
+  const targetStreak = Math.max(0, streakDays);
 
   // Animated Count-Up values on page load
   const animatedHours = useCountUp(targetHours, 900);
@@ -186,7 +191,7 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         onPress={() => router.push('/(tabs)/goals')}
         activeOpacity={0.8}
       >
-        <Text style={styles.iconEmoji}>✅</Text>
+        <CheckSquare size={16} color="#10B981" />
         <Text style={styles.number}>
           {targetTasksTotal > 0
             ? `${Math.round(animatedTasksDone)}/${targetTasksTotal}`
@@ -200,18 +205,28 @@ export const QuickStats = React.memo<QuickStatsProps>(({
 
       {/* Tile 3 — Day streak */}
       <TouchableOpacity
-        style={[styles.card, styles.streakCardBorder]}
-        onPress={() => router.push('/habits')}
+        style={[
+          styles.card,
+          styles.streakCardBorder,
+          isStreakBroken && styles.brokenStreakCardBorder,
+        ]}
+        onPress={onPressStreak ? onPressStreak : () => router.push('/habits')}
         activeOpacity={0.8}
       >
-        <Text style={styles.iconEmoji}>🔥</Text>
-        <Text style={styles.number}>
+        {isStreakBroken ? (
+          <HeartCrack size={16} color="#EF4444" />
+        ) : (
+          <Flame size={16} color="#F59E0B" />
+        )}
+        <Text style={[styles.number, isStreakBroken && { color: '#EF4444' }]}>
           {Math.round(animatedStreak)}
         </Text>
-        <Text style={styles.label}>Day streak</Text>
+        <Text style={[styles.label, isStreakBroken && { color: '#EF4444' }]}>
+          {isStreakBroken ? 'Broken' : 'Day streak'}
+        </Text>
 
-        {/* 7-Day Sparkline Bar Chart (Amber/Gold) */}
-        <MiniSparkline bars={streakSparklines} color="#F59E0B" />
+        {/* 7-Day Sparkline Bar Chart (Amber/Gold or Red if broken) */}
+        <MiniSparkline bars={streakSparklines} color={isStreakBroken ? '#EF4444' : '#F59E0B'} />
       </TouchableOpacity>
     </View>
   );
@@ -250,6 +265,11 @@ const styles = StyleSheet.create({
   },
   streakCardBorder: {
     borderBottomColor: '#F59E0B',
+  },
+  brokenStreakCardBorder: {
+    borderColor: '#FCA5A5',
+    borderBottomColor: '#EF4444',
+    backgroundColor: '#FFF5F5',
   },
   iconEmoji: {
     fontSize: 15,

@@ -21,6 +21,7 @@ const BORDER_COLOR = '#E8E7E3';
 interface HomeHeaderProps {
   name: string;
   streakCount: number;
+  isStreakBroken?: boolean;
   isLoading: boolean;
   avatarUrl?: string | null;
   onPressStreak?: () => void;
@@ -30,6 +31,7 @@ interface HomeHeaderProps {
 export const HomeHeader: React.FC<HomeHeaderProps> = ({
   name,
   streakCount,
+  isStreakBroken = false,
   isLoading,
   avatarUrl,
   onPressStreak,
@@ -132,14 +134,25 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
 
       <View style={styles.rightSide}>
         <TouchableOpacity
-          style={[styles.streakPill, { flexDirection: 'row', alignItems: 'center' }]}
+          style={[
+            styles.streakPill,
+            isStreakBroken && styles.streakPillBroken,
+            { flexDirection: 'row', alignItems: 'center' },
+          ]}
           onPress={onPressStreak}
           activeOpacity={0.7}
           accessibilityLabel={`${streakCount} day streak`}
           accessibilityRole="button"
         >
-          <Flame size={13} color="#E8A020" fill="#E8A020" style={{ marginRight: 3 }} />
-          <Text style={styles.streakText}>{streakCount}</Text>
+          <Flame
+            size={13}
+            color={isStreakBroken ? '#EF4444' : '#E8A020'}
+            fill={isStreakBroken ? '#EF4444' : '#E8A020'}
+            style={{ marginRight: 3 }}
+          />
+          <Text style={[styles.streakText, isStreakBroken && styles.streakTextBroken]}>
+            {streakCount}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -240,11 +253,19 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     marginRight: 8,
   },
+  streakPillBroken: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
   streakText: {
     color: '#E8A020',
     fontFamily: 'DMSans-Medium',
     fontSize: 12,
     fontWeight: '600',
+  },
+  streakTextBroken: {
+    color: '#EF4444',
   },
   notificationButton: {
     width: 40,

@@ -399,25 +399,12 @@ export async function fetchExamSyllabusTopics(examIdentifier: string): Promise<{
   };
 
   const resolvedIdentifier = normalizeSlug(examIdentifier);
-  const cacheKey = `curriculum_syllabus_topics_${resolvedIdentifier}`;
-
-  // 1. Try local cache first (only accept if topics has items)
-  try {
-    const cached = await AsyncStorage.getItem(cacheKey);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (parsed && Array.isArray(parsed.topics) && parsed.topics.length > 0) {
-        return parsed;
-      }
-    }
-  } catch {
-    // Fall through
-  }
+  const cacheKey = `curriculum_syllabus_topics_v5_${resolvedIdentifier}`;
 
   let examName = resolvedIdentifier;
   let canonicalSlug = resolvedIdentifier;
 
-  // 2. Fetch from Supabase with safety timeout
+  // 1. Fetch from Supabase with 2.5s safety timeout to guarantee fresh, valid chapter IDs
   try {
     const fetchSupabaseCurriculum = async () => {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -524,7 +511,7 @@ export async function fetchExamSyllabusTopics(examIdentifier: string): Promise<{
             if (topics.length > 0) {
               const result = { examName, examSlug: canonicalSlug, topics };
               AsyncStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
-              AsyncStorage.setItem(`curriculum_syllabus_topics_${canonicalSlug}`, JSON.stringify(result)).catch(() => {});
+              AsyncStorage.setItem(`curriculum_syllabus_topics_v5_${canonicalSlug}`, JSON.stringify(result)).catch(() => {});
               return result;
             }
           }
@@ -533,13 +520,26 @@ export async function fetchExamSyllabusTopics(examIdentifier: string): Promise<{
       return null;
     };
 
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000));
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
     const dynamicResult = await Promise.race([fetchSupabaseCurriculum(), timeoutPromise]);
     if (dynamicResult && dynamicResult.topics.length > 0) {
       return dynamicResult;
     }
   } catch (err) {
     if (__DEV__) console.warn('Offline or error fetching exam syllabus topics:', err);
+  }
+
+  // 2. Try local cache if offline or slow network
+  try {
+    const cached = await AsyncStorage.getItem(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed && Array.isArray(parsed.topics) && parsed.topics.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {
+    // Fall through
   }
 
   // 3. Fallback to seeds
@@ -608,9 +608,14 @@ export function useRefreshCurriculum() {
 
   return async () => {
     try {
-      await AsyncStorage.multiRemove([
-        CACHE_EXAMS_KEY,
-      ]);
+      await AsyncStorage.multiRemove([CACHE_EXAMS_KEY]);
+      const allKeys = await AsyncStorage.getAllKeys();
+      const curriculumKeys = allKeys.filter(
+        (k) => k.startsWith('curriculum_syllabus_topics') || k.startsWith('syllabus_grouped')
+      );
+      if (curriculumKeys.length > 0) {
+        await AsyncStorage.multiRemove(curriculumKeys);
+      }
     } catch {
       // ignore
     }

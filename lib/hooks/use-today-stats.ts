@@ -23,6 +23,13 @@ export interface TodayStats {
   habitStreak: number;
   focusStreak: number;
   activeStreak: number;
+  bestStreak: number;
+  isStreakBroken: boolean;
+  canRestoreYesterday: boolean;
+  isTodayCompleted: boolean;
+  isYesterdayCompleted: boolean;
+  previousStreak: number;
+  streakShields: number;
   weeklyActivity: boolean[];
   sparklines: SparklineData;
   habits: (Habit & { completedToday: boolean })[];
@@ -52,6 +59,13 @@ export function useTodayStats(): TodayStats {
     habitStreak: number;
     focusStreak: number;
     activeStreak: number;
+    bestStreak: number;
+    isStreakBroken: boolean;
+    canRestoreYesterday: boolean;
+    isTodayCompleted: boolean;
+    isYesterdayCompleted: boolean;
+    previousStreak: number;
+    streakShields: number;
     weeklyActivity: boolean[];
     sparklines: SparklineData;
     habits: (Habit & { completedToday: boolean })[];
@@ -68,7 +82,14 @@ export function useTodayStats(): TodayStats {
     tasksDone: 0,
     habitStreak: 0,
     focusStreak: 0,
-    activeStreak: 1,
+    activeStreak: 0,
+    bestStreak: 1,
+    isStreakBroken: false,
+    canRestoreYesterday: false,
+    isTodayCompleted: false,
+    isYesterdayCompleted: false,
+    previousStreak: 0,
+    streakShields: 1,
     weeklyActivity: [false, false, false, false, false, false, false],
     sparklines: {
       focus: [3, 6, 8, 12, 16, 8, 18],
@@ -407,126 +428,103 @@ export function useTodayStats(): TodayStats {
         tasksDone7d,
       };
 
-      // 4b. Streak Calculations (Uncapped - counts every consecutive active day backwards)
-      let habitStreak = 0;
-      let habitShieldsRemaining = streakShields;
-
+      // 4b. Streak Calculations (Genuine, unified across Habits, Focus sessions, Tasks, Routines)
       const checkDate = new Date();
       const checkDateTodayStr = formatDateStr(checkDate);
       checkDate.setDate(checkDate.getDate() - 1);
       const checkDateYesterdayStr = formatDateStr(checkDate);
 
-      const calcHabitStreakFrom = (startOffset: number) => {
+      const isTodayCompleted = allActiveDates.has(checkDateTodayStr);
+      const isYesterdayCompleted = allActiveDates.has(checkDateYesterdayStr);
+
+      const calcConsecutiveDaysFrom = (startOffset: number) => {
         let count = 0;
-        let skippedWithShield = 0;
         const curr = new Date();
         curr.setDate(curr.getDate() - startOffset);
-
-        while (count < 3650) {
-          const dateStr = formatDateStr(curr);
-          if (doneDates.has(dateStr)) {
-            count++;
-          } else if (habitShieldsRemaining > 0 && count > 0 && skippedWithShield === 0) {
-            habitShieldsRemaining--;
-            skippedWithShield++;
-          } else {
-            break;
-          }
-          curr.setDate(curr.getDate() - 1);
-        }
-        return count;
-      };
-
-      if (doneDates.has(checkDateTodayStr)) {
-        habitStreak = calcHabitStreakFrom(0);
-      } else if (doneDates.has(checkDateYesterdayStr)) {
-        habitStreak = calcHabitStreakFrom(1);
-      } else if (habitShieldsRemaining > 0) {
-        const twoDaysAgo = new Date();
-        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-        if (doneDates.has(formatDateStr(twoDaysAgo))) {
-          habitShieldsRemaining--;
-          habitStreak = calcHabitStreakFrom(2);
-        }
-      }
-
-      // Focus streak calculation
-      let focusStreak = 0;
-      let shieldsRemaining = streakShields;
-
-      const calcStreakFrom = (startOffset: number) => {
-        let count = 0;
-        let skippedWithShield = 0;
-        const curr = new Date();
-        curr.setDate(curr.getDate() - startOffset);
-
-        while (count < 3650) {
-          const dateStr = formatDateStr(curr);
-          if (completedFocusDates.has(dateStr)) {
-            count++;
-          } else if (shieldsRemaining > 0 && count > 0 && skippedWithShield === 0) {
-            shieldsRemaining--;
-            skippedWithShield++;
-          } else {
-            break;
-          }
-          curr.setDate(curr.getDate() - 1);
-        }
-        return count;
-      };
-
-      if (completedFocusDates.has(checkDateTodayStr)) {
-        focusStreak = calcStreakFrom(0);
-      } else if (completedFocusDates.has(checkDateYesterdayStr)) {
-        focusStreak = calcStreakFrom(1);
-      } else if (shieldsRemaining > 0) {
-        const twoDaysAgo = new Date();
-        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-        if (completedFocusDates.has(formatDateStr(twoDaysAgo))) {
-          shieldsRemaining--;
-          focusStreak = calcStreakFrom(2);
-        }
-      }
-
-      // Unified active streak (Counting backwards across ALL activities without 7-day cap)
-      let activeStreak = 0;
-      let activeShieldsRemaining = streakShields;
-
-      const calcActiveStreakFrom = (startOffset: number) => {
-        let count = 0;
-        let skippedWithShield = 0;
-        const curr = new Date();
-        curr.setDate(curr.getDate() - startOffset);
-
         while (count < 3650) {
           const dateStr = formatDateStr(curr);
           if (allActiveDates.has(dateStr)) {
             count++;
-          } else if (activeShieldsRemaining > 0 && count > 0 && skippedWithShield === 0) {
-            activeShieldsRemaining--;
-            skippedWithShield++;
+            curr.setDate(curr.getDate() - 1);
           } else {
             break;
           }
-          curr.setDate(curr.getDate() - 1);
         }
         return count;
       };
 
-      if (allActiveDates.has(checkDateTodayStr)) {
-        activeStreak = calcActiveStreakFrom(0);
-      } else if (allActiveDates.has(checkDateYesterdayStr)) {
-        activeStreak = calcActiveStreakFrom(1);
-      } else if (activeShieldsRemaining > 0) {
-        const twoDaysAgo = new Date();
-        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-        if (allActiveDates.has(formatDateStr(twoDaysAgo))) {
-          activeShieldsRemaining--;
-          activeStreak = calcActiveStreakFrom(2);
+      let activeStreak = 0;
+      let isStreakBroken = false;
+      let canRestoreYesterday = false;
+      let previousStreak = 0;
+
+      const streakEndingYesterday = calcConsecutiveDaysFrom(1);
+      const streakEnding2DaysAgo = calcConsecutiveDaysFrom(2);
+
+      if (isTodayCompleted) {
+        // Today is completed -> Streak is active!
+        activeStreak = calcConsecutiveDaysFrom(0);
+        isStreakBroken = false;
+        // If yesterday was missed but 2 days ago had activity, user can restore yesterday to bridge and save their previous streak
+        if (!isYesterdayCompleted && streakEnding2DaysAgo > 0) {
+          canRestoreYesterday = true;
+          previousStreak = streakEnding2DaysAgo;
+        }
+      } else if (isYesterdayCompleted) {
+        // Today is still in progress, yesterday was completed -> Streak is alive!
+        activeStreak = streakEndingYesterday;
+        isStreakBroken = false;
+        canRestoreYesterday = false;
+        previousStreak = activeStreak;
+      } else {
+        // Neither today nor yesterday completed
+        if (streakEnding2DaysAgo > 0) {
+          // Missed yesterday! Streak broke
+          isStreakBroken = true;
+          canRestoreYesterday = true;
+          previousStreak = streakEnding2DaysAgo;
+          activeStreak = 0;
+        } else {
+          // No recent activity
+          isStreakBroken = false;
+          canRestoreYesterday = false;
+          previousStreak = 0;
+          activeStreak = 0;
         }
       }
 
-      const unifiedStreak = Math.max(activeStreak, habitStreak, focusStreak, 1);
+      // Calculate Genuine All-time Best Streak
+      const sortedDates = Array.from(allActiveDates).sort();
+      let bestStreak = 0;
+      let currentRun = 0;
+      let prevD: Date | null = null;
+
+      for (const dStr of sortedDates) {
+        const parts = dStr.split('-').map(Number);
+        if (parts.length === 3) {
+          const curD = new Date(parts[0], parts[1] - 1, parts[2]);
+          if (prevD) {
+            const diffTime = curD.getTime() - prevD.getTime();
+            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+            if (diffDays === 1) {
+              currentRun++;
+            } else if (diffDays > 1) {
+              currentRun = 1;
+            }
+          } else {
+            currentRun = 1;
+          }
+          if (currentRun > bestStreak) {
+            bestStreak = currentRun;
+          }
+          prevD = curD;
+        }
+      }
+      bestStreak = Math.max(bestStreak, activeStreak, previousStreak, activeStreak > 0 ? activeStreak : (allActiveDates.size > 0 ? 1 : 0));
+
+      const unifiedStreak = activeStreak;
+      const habitStreak = activeStreak;
+      const focusStreak = activeStreak;
 
       // 4c. Weekly activity calculation (Mon=0..Sun=6 for current week)
       const now = new Date();
@@ -617,6 +615,13 @@ export function useTodayStats(): TodayStats {
         habitStreak,
         focusStreak,
         activeStreak: unifiedStreak,
+        bestStreak,
+        isStreakBroken,
+        canRestoreYesterday,
+        isTodayCompleted,
+        isYesterdayCompleted,
+        previousStreak,
+        streakShields,
         weeklyActivity,
         sparklines,
         habits,
@@ -636,6 +641,13 @@ export function useTodayStats(): TodayStats {
         habitStreak,
         focusStreak,
         activeStreak: unifiedStreak,
+        bestStreak,
+        isStreakBroken,
+        canRestoreYesterday,
+        isTodayCompleted,
+        isYesterdayCompleted,
+        previousStreak,
+        streakShields,
         weeklyActivity,
         sparklines,
         habits,

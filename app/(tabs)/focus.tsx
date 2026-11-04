@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   AppState,
   Switch,
+  Keyboard,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,7 +27,7 @@ import BottomSheet, {
   BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
 import { useAuthStore } from '@/lib/store/auth.store';
-import { supabase } from '@/lib/supabase/client';
+import { supabase, FocusSessionRow } from '@/lib/supabase/client';
 import { useUiStore } from '@/lib/store/ui.store';
 import { useQueryClient } from '@tanstack/react-query';
 import { AdManager, AdRewarded } from '@/components/ads';
@@ -261,7 +262,7 @@ export default function FocusScreen(): React.JSX.Element {
   const completedSoundRef = useRef<string | null>(null);
   const completedRoutineIdRef = useRef<string | null>(null);
   const [tempGoal, setTempGoal] = useState('');
-  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const mainScrollViewRef = useRef<ScrollView>(null);
 
   const params = useLocalSearchParams<{
     suggestedSubject?: string;
@@ -281,7 +282,20 @@ export default function FocusScreen(): React.JSX.Element {
   const [cseIncompleteTopics, setCseIncompleteTopics] = useState<any[]>([]);
   const [topicSelectionActive, setTopicSelectionActive] = useState(false);
 
-  const dialSize = Math.min(340, Math.max(285, Math.floor(width * 0.84)));
+  // Responsive dial size: adapts to both screen width and vertical viewport space
+  const availableVertical = height - (params.routineBlockId ? 430 : 380);
+  const maxDialByHeight = Math.floor(availableVertical * 0.85);
+  const dialSize = Math.min(
+    330,
+    Math.max(250, Math.min(Math.floor(width * 0.82), maxDialByHeight > 250 ? maxDialByHeight : 285))
+  );
+
+  // Responsive top margin for Pause and End Session action buttons during active focus
+  // Leaves generous breathing room around the chronometer dial and sound HUD to minimize distraction
+  const runningActionMarginTop = Math.min(
+    52,
+    Math.max(22, Math.floor((height - 700) * 0.18 + 24))
+  );
 
   const todayMinutes = useMemo(() => {
     if (!history || history.length === 0) return 0;
@@ -368,6 +382,15 @@ export default function FocusScreen(): React.JSX.Element {
     toggleStrictMode,
     setStrictViolated,
   } = useFocusStore();
+
+  const isSessionActive = isRunning || isPaused;
+
+  // Auto-reset scroll to top when session starts so viewport is perfectly anchored
+  useEffect(() => {
+    if (isRunning) {
+      mainScrollViewRef.current?.scrollTo({ y: 0, animated: false });
+    }
+  }, [isRunning]);
 
   // Ambient sound hook
   const ambient = useAmbientSound();
@@ -461,7 +484,7 @@ export default function FocusScreen(): React.JSX.Element {
     const currentXp = profile?.xp_points || 0;
     if (currentXp < STREAK_SHIELD_XP_COST) {
       Alert.alert(
-        'Need More Focus XP ⚡',
+        'Need More Focus XP',
         `Forging a Streak Shield requires ${STREAK_SHIELD_XP_COST} XP.\nYou currently have ${currentXp} XP.\n\nComplete focus sessions to earn XP!`,
         [{ text: 'Got It' }]
       );
@@ -488,7 +511,7 @@ export default function FocusScreen(): React.JSX.Element {
             .then(() => {}, () => {});
         }
 
-        useUiStore.getState().showToast('🛡️ Streak Shield Forged! Streak is protected.', 'success');
+        useUiStore.getState().showToast('Streak Shield Forged! Streak is protected.', 'success');
       }
     } catch {
       useUiStore.getState().showToast('Failed to forge shield. Please try again.', 'error');
@@ -513,7 +536,75 @@ export default function FocusScreen(): React.JSX.Element {
     });
   };
 
-  // AppState listener for Strict focus mode accountability & background notification updates
+  // Synchronize any locally saved offline focus sessions to Supabase
+  const syncOfflineSessions = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem('offline_focus_sessions');
+      if (!stored) return;
+
+      const sessions = JSON.parse(stored);
+      if (!Array.isArray(sessions) || sessions.length === 0) return;
+
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      const currentUserId = authSession?.user?.id || useAuthStore.getState().user?.id || useAuthStore.getState().profile?.id;
+      if (!currentUserId) return;
+
+      if (__DEV__) {
+        console.log(`Syncing ${sessions.length} offline focus sessions...`);
+      }
+
+      const payload = sessions.map((s: any) => {
+        const { id, created_at, ...rest } = s;
+        return {
+          ...rest,
+          user_id: currentUserId,
+        };
+      });
+
+      // Try inserting all offline sessions at once
+      let { error } = await supabase.from('focus_sessions').insert(payload);
+
+      // Schema Fallback: If focus_accuracy column does not exist in target Supabase instance
+      if (error && (error.code === 'PGRST204' || error.message?.includes('focus_accuracy') || error.message?.includes('column'))) {
+        const sanitizedPayload = payload.map((item: any) => {
+          const { focus_accuracy, ...withoutAccuracy } = item;
+          return withoutAccuracy;
+        });
+        const retryResult = await supabase.from('focus_sessions').insert(sanitizedPayload);
+        error = retryResult.error;
+      }
+
+      if (!error) {
+        // Clear queue on successful upload
+        await AsyncStorage.removeItem('offline_focus_sessions');
+
+        // Ensure the latest total XP and Level are pushed to Supabase profiles
+        const curProf = useAuthStore.getState().profile;
+        if (curProf) {
+          await supabase
+            .from('profiles')
+            .update({
+              xp_points: curProf.xp_points,
+              level: curProf.level,
+            })
+            .eq('id', currentUserId);
+        }
+
+        useUiStore.getState().showToast('Offline focus sessions synced successfully!', 'success');
+        refetchHistory();
+        queryClient.invalidateQueries({ queryKey: ['focus_sessions'] });
+        queryClient.invalidateQueries({ queryKey: ['stats'] });
+        queryClient.invalidateQueries({ queryKey: ['todayStats'] });
+        queryClient.invalidateQueries({ queryKey: ['profile'] });
+      } else {
+        if (__DEV__) console.warn('Failed to sync offline sessions error:', error);
+      }
+    } catch (e) {
+      if (__DEV__) console.warn('Failed to sync offline sessions:', e);
+    }
+  }, [refetchHistory, queryClient]);
+
+  // AppState listener for Strict focus mode accountability, background notification updates & offline sync
   useEffect(() => {
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
@@ -530,6 +621,8 @@ export default function FocusScreen(): React.JSX.Element {
           FocusLiveActivity.updateSession(isPaused, secondsLeft, sessionGoal).catch(() => {});
         }
       } else if (nextAppState === 'active') {
+        // Automatically sync offline sessions whenever user returns to the app
+        syncOfflineSessions();
         if (backgroundStartTimestampRef.current) {
           const secondsOut = (Date.now() - backgroundStartTimestampRef.current) / 1000;
           if (secondsOut > 10 && isStrictModeActive && isRunning) {
@@ -545,7 +638,18 @@ export default function FocusScreen(): React.JSX.Element {
     return () => {
       subscription.remove();
     };
-  }, [isStrictModeActive, isRunning, isPaused, secondsLeft, sessionGoal, subjectTag, activeSound, currentMode, setStrictViolated]);
+  }, [
+    isStrictModeActive,
+    isRunning,
+    isPaused,
+    secondsLeft,
+    sessionGoal,
+    subjectTag,
+    activeSound,
+    currentMode,
+    setStrictViolated,
+    syncOfflineSessions,
+  ]);
 
   // Synchronize pomodoroCount in store based on actual database completions today
   useEffect(() => {
@@ -564,56 +668,6 @@ export default function FocusScreen(): React.JSX.Element {
       useFocusStore.setState({ pomodoroCount: completedToday.length });
     }
   }, [history, isLoadingHistory]);
-
-  // Synchronize any locally saved offline focus sessions to Supabase
-  const syncOfflineSessions = useCallback(async () => {
-    try {
-      const stored = await AsyncStorage.getItem('offline_focus_sessions');
-      if (!stored) return;
-
-      const sessions = JSON.parse(stored);
-      if (!Array.isArray(sessions) || sessions.length === 0) return;
-
-      const { data: { session: authSession } } = await supabase.auth.getSession();
-      if (!authSession) return;
-
-      if (__DEV__) {
-        console.log(`Syncing ${sessions.length} offline focus sessions...`);
-      }
-
-      // Try inserting all offline sessions at once
-      const { error } = await supabase.from('focus_sessions').insert(
-        sessions.map(s => ({
-          ...s,
-          user_id: authSession.user.id, // Enforce correct authenticated user id
-        }))
-      );
-
-      if (!error) {
-        // Clear queue on successful upload
-        await AsyncStorage.removeItem('offline_focus_sessions');
-
-        // Ensure the latest total XP and Level are pushed to Supabase profiles
-        const curProf = useAuthStore.getState().profile;
-        if (curProf) {
-          await supabase
-            .from('profiles')
-            .update({
-              xp_points: curProf.xp_points,
-              level: curProf.level,
-            })
-            .eq('id', authSession.user.id);
-        }
-
-        useUiStore.getState().showToast('Offline focus sessions synced successfully! 📶', 'success');
-        refetchHistory();
-        queryClient.invalidateQueries({ queryKey: ['stats'] });
-        queryClient.invalidateQueries({ queryKey: ['profile'] });
-      }
-    } catch (e) {
-      if (__DEV__) console.warn('Failed to sync offline sessions:', e);
-    }
-  }, [refetchHistory, queryClient]);
 
   // Run offline sync on mount
   useEffect(() => {
@@ -661,7 +715,7 @@ export default function FocusScreen(): React.JSX.Element {
       return;
     }
     setTheme(themeId);
-    useUiStore.getState().showToast('Theme equipped! ✨', 'success');
+    useUiStore.getState().showToast('Theme equipped!', 'success');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   };
 
@@ -732,7 +786,23 @@ export default function FocusScreen(): React.JSX.Element {
     []
   );
 
-  // Save focus session results directly to Supabase
+  // Helper to safely queue session to offline storage with zero data loss
+  const queueOfflineSession = useCallback(async (sessionData: Record<string, any>) => {
+    try {
+      const stored = await AsyncStorage.getItem('offline_focus_sessions');
+      const queue = stored ? JSON.parse(stored) : [];
+      const exists = queue.some((s: any) => s.started_at === sessionData.started_at && s.duration_min === sessionData.duration_min);
+      if (!exists) {
+        queue.push(sessionData);
+        await AsyncStorage.setItem('offline_focus_sessions', JSON.stringify(queue));
+        if (__DEV__) console.log('Focus session safely preserved in offline_focus_sessions queue.');
+      }
+    } catch (err) {
+      if (__DEV__) console.warn('Failed to queue offline session:', err);
+    }
+  }, []);
+
+  // Save focus session results directly to Supabase with instant UI responsiveness and 100% offline persistence guarantee
   const handleSaveSession = useCallback(async (
     mood: number,
     _note: string,
@@ -784,187 +854,109 @@ export default function FocusScreen(): React.JSX.Element {
       ? Math.max(1, Math.floor(effectiveSeconds / 60))
       : focusMinutes;
 
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+    const safeMood = typeof mood === 'number' && mood >= 1 && mood <= 5 ? mood : 4;
 
-      const safeMood = typeof mood === 'number' && mood >= 1 && mood <= 5 ? mood : 4;
+    // 1. Instant UI dismissal: zero waiting time for user
+    setShowSummary(false);
+    ambient.stop().catch(() => {});
+    FocusLiveActivity.endSession().catch(() => {});
+    dismissActiveFocusNotification().catch(() => {});
 
-      let { error } = await supabase.from('focus_sessions').insert({
-        user_id: session.user.id,
-        session_goal: effectiveGoal.trim() || 'Deep Focus Session',
-        duration_min: dbDuration,
-        subject: effectiveSubject,
-        sound_used: effectiveSound,
-        mood: status === 'interrupted' ? null : safeMood,
-        started_at: startedAt,
-        ended_at: endedAt,
-        status: status,
-        focus_accuracy: focusAccuracy || null,
-      });
-
-      // DB Schema Fallback: If focus_accuracy column does not exist in target Supabase instance
-      if (error && (error.code === 'PGRST204' || error.message?.includes('focus_accuracy') || error.message?.includes('column'))) {
-        if (__DEV__) {
-          console.warn('DB does not have focus_accuracy column. Retrying session insert without it...');
-        }
-        const retryResult = await supabase.from('focus_sessions').insert({
-          user_id: session.user.id,
-          session_goal: effectiveGoal.trim() || 'Deep Focus Session',
-          duration_min: dbDuration,
-          subject: effectiveSubject,
-          sound_used: effectiveSound,
-          mood: status === 'interrupted' ? null : safeMood,
-          started_at: startedAt,
-          ended_at: endedAt,
-          status: status,
-        });
-        error = retryResult.error;
-      }
-
-      if (error) throw error;
-
-      // Award Focus XP for completed focus session or saved session
-      if (status === 'completed' || (status === 'interrupted' && dbDuration >= 1)) {
-        const earned = seedsEarned && seedsEarned > 0
+    // 2. Award Focus XP and update local profile instantly
+    const earned = (status === 'completed' || (status === 'interrupted' && dbDuration >= 1))
+      ? (seedsEarned && seedsEarned > 0
           ? seedsEarned
           : calculateSessionXP({
               durationMinutes: dbDuration,
               isStrictMode: isStrictModeActive,
               hasViolation: isStrictViolated,
               accuracy: focusAccuracy || (mood && mood >= 4 ? 'fully_focused' : null),
-            });
+            }))
+      : 0;
 
-        // Read profile fresh from store to avoid stale closure XP values
-        const liveProfile = useAuthStore.getState().profile;
-        const currentXp = Number(liveProfile?.xp_points || 0);
-        const newXp = currentXp + earned;
-        const currentLevel = Number(liveProfile?.level || 1);
-        const newLevelInfo = calculateFocusLevel(newXp);
-        const newLevel = Math.max(currentLevel, newLevelInfo.level);
+    const liveProfile = useAuthStore.getState().profile;
+    const currentXp = Number(liveProfile?.xp_points || 0);
+    const newXp = currentXp + earned;
+    const currentLevel = Number(liveProfile?.level || 1);
+    const newLevelInfo = calculateFocusLevel(newXp);
+    const newLevel = Math.max(currentLevel, newLevelInfo.level);
 
-        // 1. Immediately update local state so rewards are saved to AsyncStorage instantly
-        const optimisticProfile = liveProfile ? { ...liveProfile, xp_points: newXp, level: newLevel } : null;
-        if (optimisticProfile) {
-          setProfile(optimisticProfile);
-        }
+    if (liveProfile && earned > 0) {
+      setProfile({ ...liveProfile, xp_points: newXp, level: newLevel });
+    }
 
-        const updatePayload: Record<string, any> = {
-          xp_points: newXp,
-          level: newLevel,
-        };
+    if (newLevel > currentLevel) {
+      useUiStore.getState().showToast(`Level Up! You reached Level ${newLevel}: ${newLevelInfo.title}!`, 'success');
+    } else if (earned > 0) {
+      useUiStore.getState().showToast(`+${earned} Focus XP Earned! Session saved!`, 'success');
+    } else {
+      useUiStore.getState().showToast('Session saved!', 'success');
+    }
 
-        // 2. Persist to Supabase — use upsert to handle RLS/missing row edge cases
-        const { data: updatedProfData, error: profError } = await supabase
-          .from('profiles')
-          .update(updatePayload)
-          .eq('id', session.user.id)
-          .select()
-          .maybeSingle();
+    // Trigger local push notification & rewarding haptics unblocked
+    playRewardingCompletionHaptics().catch(() => {});
+    if (earned > 0) {
+      trackEvent('focus_reward_earned', {
+        xp_earned: earned,
+        total_xp: newXp,
+        level: newLevel,
+        rank_title: newLevelInfo.title,
+        duration_min: dbDuration,
+      });
 
-        if (updatedProfData) {
-          setProfile(updatedProfData as any);
-        } else if (profError) {
-          if (__DEV__) console.warn('Profiles update error:', profError);
-          // Fallback: try upsert if update failed (e.g. row missing)
-          const { data: upsertData, error: upsertError } = await supabase
-            .from('profiles')
-            .upsert({ id: session.user.id, ...updatePayload }, { onConflict: 'id' })
-            .select()
-            .maybeSingle();
-          if (upsertData) {
-            setProfile(upsertData as any);
-          } else if (upsertError && __DEV__) {
-            console.warn('Profiles upsert fallback error:', upsertError);
-          }
-        }
-        queryClient.invalidateQueries({ queryKey: ['profile'] });
+      triggerLocalFocusCompleteNotification(dbDuration, earned).catch(() => {});
+      useNotificationStore.getState().addNotification({
+        type: 'milestone',
+        title: 'Focus Session Completed',
+        body: `You logged ${dbDuration}m of deep work${effectiveSubject ? ` on "${effectiveSubject}"` : ''} (+${earned} XP earned).`,
+        time: 'Just now',
+        targetScreen: '/(tabs)/focus',
+        actionText: 'View Focus Stats',
+      });
+    }
 
-        if (newLevel > currentLevel) {
-          useUiStore.getState().showToast(`🎉 Level Up! You reached Level ${newLevel}: ${newLevelInfo.title}!`, 'success');
-        } else {
-          useUiStore.getState().showToast(`+${earned} Focus XP Earned! ⚡`, 'success');
-        }
+    if (effectiveSubject) {
+      scheduleRevisionAlert(effectiveSubject, 1).catch(() => {});
+      scheduleRevisionAlert(effectiveSubject, 3).catch(() => {});
+    }
 
-        trackEvent('focus_reward_earned', {
-          xp_earned: earned,
-          total_xp: newXp,
-          level: newLevel,
-          rank_title: newLevelInfo.title,
-          duration_min: dbDuration,
-        });
+    // 3. Optimistically prepend new session to Focus History immediately
+    const currentUserId = useAuthStore.getState().user?.id || useAuthStore.getState().profile?.id;
+    const optimisticSession: FocusSessionRow = {
+      id: `temp_${Date.now()}`,
+      user_id: currentUserId || '',
+      session_goal: effectiveGoal.trim() || 'Deep Focus Session',
+      duration_min: dbDuration,
+      subject: effectiveSubject,
+      sound_used: effectiveSound,
+      mood: status === 'interrupted' ? null : safeMood,
+      started_at: startedAt,
+      ended_at: endedAt,
+      status: status,
+      focus_accuracy: focusAccuracy || null,
+    };
 
-        // Trigger local push notification & record in notification center
-        triggerLocalFocusCompleteNotification(dbDuration, earned).catch(() => {});
-        useNotificationStore.getState().addNotification({
-          type: 'milestone',
-          title: 'Focus Session Completed',
-          body: `You logged ${dbDuration}m of deep work${effectiveSubject ? ` on "${effectiveSubject}"` : ''} (+${earned} XP earned).`,
-          time: 'Just now',
-          targetScreen: '/(tabs)/focus',
-          actionText: 'View Focus Stats',
-        });
+    if (currentUserId) {
+      queryClient.setQueryData<FocusSessionRow[]>(['focus_sessions', currentUserId], (old) => {
+        const existing = old || [];
+        return [optimisticSession, ...existing];
+      });
 
-        if (effectiveSubject) {
-          scheduleRevisionAlert(effectiveSubject, 1).catch(() => {});
-          scheduleRevisionAlert(effectiveSubject, 3).catch(() => {});
-        }
-      }
+      const historyCacheKey = `focus_sessions_history_${currentUserId}`;
+      AsyncStorage.getItem(historyCacheKey).then((cached) => {
+        const list = cached ? JSON.parse(cached) : [];
+        AsyncStorage.setItem(historyCacheKey, JSON.stringify([optimisticSession, ...list])).catch(() => {});
+      }).catch(() => {});
+    }
 
-      // Refetch history list & invalidate queries across the app
-      refetchHistory();
-      queryClient.invalidateQueries({ queryKey: ['focus_sessions'] });
-      queryClient.invalidateQueries({ queryKey: ['stats'] });
-      queryClient.invalidateQueries({ queryKey: ['todayStats'] });
-      queryClient.invalidateQueries({ queryKey: ['profile'] });
-
-      // Trigger satisfying multi-stage completion haptics
-      await playRewardingCompletionHaptics();
-      FocusLiveActivity.endSession().catch(() => {});
-      dismissActiveFocusNotification().catch(() => {});
-
-      // Check if we should mark a linked routine block as done
-      const routineId = effectiveRoutineId || params.routineBlockId;
-      if (status === 'completed' && routineId) {
-        const todayStr = getTodayLocal();
-        const { error: logError } = await supabase
-          .from('schedule_logs')
-          .upsert(
-            {
-              user_id: session.user.id,
-              block_id: routineId,
-              date: todayStr,
-              status: 'completed',
-            },
-            { onConflict: 'user_id,block_id,date' }
-          );
-
-        if (logError) {
-          if (__DEV__) console.warn('Failed to log routine completion in database:', logError);
-        } else {
-          useUiStore.getState().showToast('Routine block marked Done! 🎯', 'success');
-        }
-
-        // Invalidate all related routine & dashboard query caches
-        queryClient.invalidateQueries({ queryKey: ['todayStats'] });
-        queryClient.invalidateQueries({ queryKey: ['schedule_blocks_with_logs'] });
-        queryClient.invalidateQueries({ queryKey: ['routineAnalyticsList'] });
-        queryClient.invalidateQueries({ queryKey: ['routineHistoryLogs'] });
-        queryClient.invalidateQueries({ queryKey: ['schedule_blocks'] });
-        queryClient.invalidateQueries({ queryKey: ['manageRoutinesList'] });
-      } else {
-        useUiStore.getState().showToast('Session saved! ⚡', 'success');
-      }
-
-      setShowSummary(false);
-      await ambient.stop();
-
-      // Check if we should prompt for CSE syllabus topics
-      if (status === 'completed' && isCse && effectiveSubject) {
+    // 4. Check for CSE syllabus topic prompt or reset session
+    let promptCseSheet = false;
+    if (status === 'completed' && isCse && effectiveSubject && currentUserId) {
+      try {
         const { data: topics, error: topicsErr } = await supabase
           .from('syllabus_topics')
           .select('*')
-          .eq('user_id', session.user.id)
+          .eq('user_id', currentUserId)
           .eq('subject', effectiveSubject)
           .not('status', 'eq', 'done')
           .order('order_index', { ascending: true })
@@ -973,105 +965,160 @@ export default function FocusScreen(): React.JSX.Element {
         if (!topicsErr && topics && topics.length > 0) {
           setCseIncompleteTopics(topics);
           setTopicSelectionActive(true);
-          // Expand the bottom sheet after state update
+          promptCseSheet = true;
           setTimeout(() => {
             topicSheetRef.current?.expand();
           }, 100);
-          return;
         }
+      } catch (cseErr) {
+        if (__DEV__) console.warn('CSE syllabus topic lookup error:', cseErr);
       }
+    }
 
+    if (!promptCseSheet) {
       resetSession();
       shouldPromptRating().then((prompt) => {
         if (prompt) {
           setTimeout(() => setShowRatingModal(true), 500);
         }
       });
-    } catch (err: any) {
-      const isNetworkError = 
-        err.message?.toLowerCase().includes('network') || 
-        err.message?.toLowerCase().includes('fetch') || 
-        err.message?.toLowerCase().includes('timeout') ||
-        err.status === 0;
-
-      if (isNetworkError) {
-        try {
-          // Award XP locally so user never loses their reward even when offline
-          if (status === 'completed' || (status === 'interrupted' && dbDuration >= 1)) {
-            const earned = seedsEarned && seedsEarned > 0
-              ? seedsEarned
-              : calculateSessionXP({
-                  durationMinutes: dbDuration,
-                  isStrictMode: isStrictModeActive,
-                  hasViolation: isStrictViolated,
-                  accuracy: focusAccuracy || (mood && mood >= 4 ? 'fully_focused' : null),
-                });
-            // Read fresh from store to avoid stale closure
-            const liveProfileOffline = useAuthStore.getState().profile;
-            const currentXp = Number(liveProfileOffline?.xp_points || 0);
-            const newXp = currentXp + earned;
-            const currentLevel = Number(liveProfileOffline?.level || 1);
-            const newLevelInfo = calculateFocusLevel(newXp);
-            const newLevel = Math.max(currentLevel, newLevelInfo.level);
-
-            const offlineProfile = liveProfileOffline
-              ? { ...liveProfileOffline, xp_points: newXp, level: newLevel }
-              : null;
-            if (offlineProfile) {
-              setProfile(offlineProfile);
-            }
-            useUiStore.getState().showToast(`+${earned} Focus XP Saved! ⚡`, 'success');
-          }
-
-          const localSession = {
-            session_goal: effectiveGoal.trim() || 'Deep Focus Session',
-            duration_min: dbDuration,
-            subject: effectiveSubject,
-            sound_used: effectiveSound,
-            mood: status === 'interrupted' ? null : mood,
-            started_at: startedAt,
-            ended_at: endedAt,
-            status: status,
-            focus_accuracy: focusAccuracy || null,
-          };
-
-          const stored = await AsyncStorage.getItem('offline_focus_sessions');
-          const queue = stored ? JSON.parse(stored) : [];
-          queue.push(localSession);
-          await AsyncStorage.setItem('offline_focus_sessions', JSON.stringify(queue));
-
-          setShowSummary(false);
-          await ambient.stop();
-          resetSession();
-          FocusLiveActivity.endSession().catch(() => {});
-          dismissActiveFocusNotification().catch(() => {});
-
-          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Alert.alert(
-            'Offline Mode 📶',
-            'Focus session and rewards saved locally! They will sync with the cloud automatically when connection is restored.',
-            [{ text: 'OK' }]
-          );
-          return;
-        } catch (localErr) {
-          if (__DEV__) console.warn('Failed to write offline cache:', localErr);
-        }
-      }
-
-      if (__DEV__) {
-        console.warn('Failed to save focus session:', err);
-      }
-      setShowSummary(false);
-      await ambient.stop().catch(() => {});
-      resetSession();
-      FocusLiveActivity.endSession().catch(() => {});
-      dismissActiveFocusNotification().catch(() => {});
-      Alert.alert(
-        'Session Ended',
-        'Could not sync session to cloud, but timer and audio have been reset.'
-      );
     }
-  }, [resetSession, ambient, refetchHistory, queryClient, isCse, isStrictModeActive, isStrictViolated, profile, setProfile]);
+
+    // 5. Parallelized background cloud sync with 100% offline fallback guarantee
+    const offlinePayload = {
+      user_id: currentUserId,
+      session_goal: effectiveGoal.trim() || 'Deep Focus Session',
+      duration_min: dbDuration,
+      subject: effectiveSubject,
+      sound_used: effectiveSound,
+      mood: status === 'interrupted' ? null : safeMood,
+      started_at: startedAt,
+      ended_at: endedAt,
+      status: status,
+      focus_accuracy: focusAccuracy || null,
+    };
+
+    (async () => {
+      let resolvedUserId = currentUserId;
+      if (!resolvedUserId) {
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        resolvedUserId = authSession?.user?.id;
+      }
+
+      if (!resolvedUserId) {
+        await queueOfflineSession(offlinePayload);
+        return;
+      }
+
+      const sessionDbPayload = {
+        ...offlinePayload,
+        user_id: resolvedUserId,
+      };
+
+      const saveFocusSessionTask = async () => {
+        let { error, data } = await supabase.from('focus_sessions').insert(sessionDbPayload).select('id').maybeSingle();
+        if (error && (error.code === 'PGRST204' || error.message?.includes('focus_accuracy') || error.message?.includes('column'))) {
+          const { focus_accuracy, ...withoutAccuracy } = sessionDbPayload;
+          const retryResult = await supabase.from('focus_sessions').insert(withoutAccuracy).select('id').maybeSingle();
+          error = retryResult.error;
+          data = retryResult.data;
+        }
+        if (error) throw error;
+        return data;
+      };
+
+      const updateProfileTask = async () => {
+        if (earned <= 0) return null;
+        const updatePayload = { xp_points: newXp, level: newLevel };
+        const { data, error } = await supabase
+          .from('profiles')
+          .update(updatePayload)
+          .eq('id', resolvedUserId)
+          .select()
+          .maybeSingle();
+
+        if (error) {
+          const { data: upsertData, error: upsertErr } = await supabase
+            .from('profiles')
+            .upsert({ id: resolvedUserId, ...updatePayload }, { onConflict: 'id' })
+            .select()
+            .maybeSingle();
+          if (upsertErr) throw upsertErr;
+          return upsertData;
+        }
+        return data;
+      };
+
+      const logRoutineTask = async () => {
+        const routineId = effectiveRoutineId || params.routineBlockId;
+        if (status === 'completed' && routineId) {
+          const todayStr = getTodayLocal();
+          const { error } = await supabase
+            .from('schedule_logs')
+            .upsert(
+              {
+                user_id: resolvedUserId,
+                block_id: routineId,
+                date: todayStr,
+                status: 'completed',
+              },
+              { onConflict: 'user_id,block_id,date' }
+            );
+          if (error) throw error;
+          return true;
+        }
+        return false;
+      };
+
+      const results = await Promise.allSettled([
+        saveFocusSessionTask(),
+        updateProfileTask(),
+        logRoutineTask(),
+      ]);
+
+      const sessionRes = results[0];
+      const profileRes = results[1];
+      const routineRes = results[2];
+
+      if (sessionRes.status === 'rejected') {
+        if (__DEV__) console.warn('Cloud focus session insert failed, safely queuing offline:', sessionRes.reason);
+        await queueOfflineSession(sessionDbPayload);
+      } else {
+        refetchHistory();
+        queryClient.invalidateQueries({ queryKey: ['focus_sessions'] });
+        queryClient.invalidateQueries({ queryKey: ['stats'] });
+        queryClient.invalidateQueries({ queryKey: ['todayStats'] });
+        queryClient.invalidateQueries({ queryKey: ['profile'] });
+      }
+
+      if (profileRes.status === 'fulfilled' && profileRes.value) {
+        setProfile(profileRes.value as any);
+      }
+
+      if (routineRes.status === 'fulfilled' && routineRes.value) {
+        useUiStore.getState().showToast('Routine block marked Done!', 'success');
+        queryClient.invalidateQueries({ queryKey: ['schedule_blocks_with_logs'] });
+        queryClient.invalidateQueries({ queryKey: ['routineAnalyticsList'] });
+        queryClient.invalidateQueries({ queryKey: ['routineHistoryLogs'] });
+        queryClient.invalidateQueries({ queryKey: ['schedule_blocks'] });
+        queryClient.invalidateQueries({ queryKey: ['manageRoutinesList'] });
+      }
+    })().catch(async (bgErr) => {
+      if (__DEV__) console.warn('Background sync error, queuing session offline:', bgErr);
+      await queueOfflineSession(offlinePayload);
+    });
+  }, [
+    resetSession,
+    ambient,
+    refetchHistory,
+    queryClient,
+    isCse,
+    isStrictModeActive,
+    isStrictViolated,
+    setProfile,
+    params.routineBlockId,
+    queueOfflineSession,
+  ]);
 
   const handleDiscardSession = useCallback(() => {
     setShowSummary(false);
@@ -1108,6 +1155,8 @@ export default function FocusScreen(): React.JSX.Element {
         mode: currentMode,
       }).catch(() => {});
     } else {
+      Keyboard.dismiss();
+      mainScrollViewRef.current?.scrollTo({ y: 0, animated: false });
       start();
       FocusLiveActivity.startSession({
         sessionName: sessionGoal.trim() || 'Deep Focus',
@@ -1240,16 +1289,16 @@ export default function FocusScreen(): React.JSX.Element {
     if (!unlocked && key) {
       const reqConfig = SOUND_REWARD_LEVELS.find((s) => s.key === key);
       Alert.alert(
-        `Unlock ${reqConfig?.label || 'Soundscape'} 🎧`,
+        `Unlock ${reqConfig?.label || 'Soundscape'}`,
         `Earn ${reqConfig?.requiredXp || 250} XP (Reach Level ${reqConfig?.requiredLevel || 3}) to unlock permanently for FREE, or watch a quick ad to use for this session!`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Upgrade to Gold 👑',
+            text: 'Upgrade to Gold',
             onPress: () => router.push('/paywall'),
           },
           {
-            text: 'Watch Ad & Unlock 🎬',
+            text: 'Watch Ad and Unlock',
             onPress: () => {
               AdRewarded.showRewardAd(async () => {
                 setSound(key);
@@ -1421,9 +1470,15 @@ export default function FocusScreen(): React.JSX.Element {
           </View>
 
           <ScrollView
-            scrollEnabled={scrollEnabled}
+            ref={mainScrollViewRef}
+            scrollEnabled={!isSessionActive}
+            bounces={!isSessionActive}
+            overScrollMode={isSessionActive ? 'never' : 'auto'}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContainer}
+            contentContainerStyle={[
+              styles.scrollContainer,
+              isSessionActive && styles.scrollContainerRunning,
+            ]}
             keyboardShouldPersistTaps="handled"
           >
             {/* Routine Link Banner if linked from schedule */}
@@ -1439,10 +1494,12 @@ export default function FocusScreen(): React.JSX.Element {
             )}
 
             {/* Header: What are you focusing on? */}
-            <Text style={styles.mainHeading}>What are you focusing on?</Text>
+            <Text style={[styles.mainHeading, isSessionActive && styles.mainHeadingRunning]}>
+              What are you focusing on?
+            </Text>
 
             {/* Frosted Liquid Glass Pill Capsule Input */}
-            <View style={styles.sessionPillCapsule}>
+            <View style={[styles.sessionPillCapsule, isSessionActive && styles.sessionPillCapsuleRunning]}>
               <TextInput
                 style={styles.sessionPillInput}
                 value={sessionGoal}
@@ -1456,7 +1513,7 @@ export default function FocusScreen(): React.JSX.Element {
             </View>
 
             {/* Retro Chronometer Dial */}
-            <View style={styles.dialContainer}>
+            <View style={[styles.dialContainer, isSessionActive && styles.dialContainerRunning]}>
               <TimerCircle
                 size={dialSize}
                 secondsLeft={secondsLeft}
@@ -1640,7 +1697,7 @@ export default function FocusScreen(): React.JSX.Element {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.runningActionWrapper}>
+              <View style={[styles.runningActionWrapper, { marginTop: runningActionMarginTop }]}>
                 {/* Pause / Resume Button */}
                 <TouchableOpacity
                   style={[
@@ -1652,15 +1709,16 @@ export default function FocusScreen(): React.JSX.Element {
                   accessibilityLabel={isRunning ? 'Pause Focus' : 'Resume Focus'}
                 >
                   {isRunning ? (
-                    <Pause size={17} color="#FFFFFF" strokeWidth={2.8} />
+                    <Pause size={14} color="rgba(255, 255, 255, 0.9)" strokeWidth={2.4} />
                   ) : (
-                    <Play size={17} color="#FFFFFF" fill="#FFFFFF" />
+                    <Play size={14} color="#FFFFFF" fill="#FFFFFF" />
                   )}
                   <Text
-                    style={styles.runningActionText}
+                    style={[
+                      styles.runningActionText,
+                      isPaused && styles.runningActionTextActive,
+                    ]}
                     numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.8}
                   >
                     {isRunning ? 'Pause' : 'Resume'}
                   </Text>
@@ -1668,17 +1726,25 @@ export default function FocusScreen(): React.JSX.Element {
 
                 {/* End Session Button */}
                 <TouchableOpacity
-                  style={styles.runningEndBtn}
+                  style={[
+                    styles.runningEndBtn,
+                    isPaused && styles.runningEndBtnPaused,
+                  ]}
                   onPress={handleReset}
                   activeOpacity={0.8}
                   accessibilityLabel="End Session"
                 >
-                  <Square size={15} color="#FF7070" fill="#FF7070" />
+                  <Square
+                    size={11}
+                    color={isPaused ? '#F87171' : 'rgba(255, 255, 255, 0.45)'}
+                    fill={isPaused ? '#F87171' : 'rgba(255, 255, 255, 0.45)'}
+                  />
                   <Text
-                    style={styles.runningEndText}
+                    style={[
+                      styles.runningEndText,
+                      isPaused && styles.runningEndTextPaused,
+                    ]}
                     numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.8}
                   >
                     End Session
                   </Text>
@@ -1906,7 +1972,7 @@ export default function FocusScreen(): React.JSX.Element {
                     disabled={isForgingShield}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.adShieldBtnText}>Free with Ad 🎬</Text>
+                    <Text style={styles.adShieldBtnText}>Free with Ad</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity
@@ -1923,7 +1989,7 @@ export default function FocusScreen(): React.JSX.Element {
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
                     <Text style={styles.forgeShieldBtnText}>
-                      {streakShields >= MAX_STREAK_SHIELDS ? 'Full' : 'Forge 🛡️'}
+                      {streakShields >= MAX_STREAK_SHIELDS ? 'Full' : 'Forge Shield'}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -2132,7 +2198,7 @@ export default function FocusScreen(): React.JSX.Element {
               <Sparkles size={16} color="#FACC15" />
             </View>
             <View style={styles.milestoneInfo}>
-              <Text style={[styles.milestoneTitle, { color: '#FEF08A' }]}>2x XP Video Boost 🎬</Text>
+              <Text style={[styles.milestoneTitle, { color: '#FEF08A' }]}>2x XP Video Boost</Text>
               <Text style={styles.milestoneDesc}>Watch a quick video ad after any session to DOUBLE your XP</Text>
             </View>
             <View style={[styles.milestoneTag, { backgroundColor: 'rgba(234, 179, 8, 0.2)', borderColor: 'rgba(234, 179, 8, 0.5)' }]}>
@@ -2209,7 +2275,7 @@ export default function FocusScreen(): React.JSX.Element {
                     }}
                     activeOpacity={0.7}
                   >
-                    {isLocked && <Text style={styles.themeDotLock}>🔒</Text>}
+                    {isLocked && <Lock size={10} color="#FFFFFF" />}
                   </TouchableOpacity>
                 );
               })}
@@ -2232,7 +2298,7 @@ export default function FocusScreen(): React.JSX.Element {
           handleIndicatorStyle={styles.bottomSheetIndicator}
         >
           <BottomSheetView style={styles.topicSheetContent}>
-            <Text style={styles.topicSheetTitle}>Which topic did you cover? 🎓</Text>
+            <Text style={styles.topicSheetTitle}>Which topic did you cover?</Text>
             <Text style={styles.topicSheetSubtitle}>
               Select a syllabus topic from <Text style={{fontWeight: 'bold', color: '#5B4FE8'}}>{subjectTag}</Text> to mark it as done:
             </Text>
@@ -2361,7 +2427,7 @@ export default function FocusScreen(): React.JSX.Element {
           }}
         >
           <BottomSheetView style={styles.soundSheetContent}>
-            <Text style={styles.soundSheetTitle}>Ambient Soundscapes 🎧</Text>
+            <Text style={styles.soundSheetTitle}>Ambient Soundscapes</Text>
             <Text style={styles.soundSheetSubtitle}>
               Choose soothing background soundscapes to deepen your focus and block distractions.
             </Text>
@@ -2409,6 +2475,11 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     paddingBottom: 170,
+    alignItems: 'center',
+  },
+  scrollContainerRunning: {
+    flexGrow: 1,
+    paddingBottom: 88,
     alignItems: 'center',
   },
   circle1: {
@@ -2501,6 +2572,11 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     letterSpacing: -0.4,
   },
+  mainHeadingRunning: {
+    marginTop: 6,
+    marginBottom: 8,
+    fontSize: 28,
+  },
   sessionPillCapsule: {
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
     borderColor: 'rgba(255, 255, 255, 0.22)',
@@ -2519,6 +2595,10 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
   },
+  sessionPillCapsuleRunning: {
+    height: 44,
+    marginBottom: 8,
+  },
   sessionPillInput: {
     fontFamily: 'InstrumentSerif',
     fontSize: 18,
@@ -2532,6 +2612,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginVertical: 6,
     backgroundColor: 'transparent',
+  },
+  dialContainerRunning: {
+    marginVertical: 4,
   },
   presetsSection: {
     alignItems: 'center',
@@ -2635,67 +2718,68 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    marginTop: 16,
-    marginBottom: 12,
+    gap: 12,
+    marginTop: 48,
+    marginBottom: 8,
     width: '100%',
-    paddingHorizontal: 0,
+    maxWidth: 310,
+    alignSelf: 'center',
   },
   runningPauseBtn: {
     flex: 1,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.40)',
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    gap: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    paddingHorizontal: 14,
+    gap: 7,
   },
   runningResumeBtnActive: {
-    backgroundColor: 'rgba(91, 79, 232, 0.35)',
-    borderColor: 'rgba(168, 158, 248, 0.6)',
+    backgroundColor: 'rgba(91, 79, 232, 0.28)',
+    borderColor: 'rgba(124, 110, 248, 0.6)',
   },
   runningActionText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 15,
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  runningActionTextActive: {
     color: '#FFFFFF',
     fontWeight: '700',
-    letterSpacing: 0.2,
-    flexShrink: 1,
   },
   runningEndBtn: {
     flex: 1,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(232, 88, 88, 0.18)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(232, 88, 88, 0.45)',
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    gap: 6,
-    shadowColor: '#E85858',
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 6,
+    paddingHorizontal: 14,
+    gap: 7,
+  },
+  runningEndBtnPaused: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderColor: 'rgba(239, 68, 68, 0.25)',
   },
   runningEndText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 15,
-    color: '#FF8A8A',
-    fontWeight: '700',
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.45)',
+    fontWeight: '600',
     letterSpacing: 0.2,
-    flexShrink: 1,
+  },
+  runningEndTextPaused: {
+    color: '#F87171',
+    fontWeight: '600',
   },
   activeSecondaryRow: {
     marginTop: 10,
@@ -3588,7 +3672,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginVertical: 14,
+    marginTop: 8,
+    marginBottom: 6,
     width: '100%',
     paddingHorizontal: 0,
   },

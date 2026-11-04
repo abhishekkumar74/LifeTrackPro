@@ -62,7 +62,30 @@ export function useActiveRooms(options?: { refetchInterval?: number }) {
 
       if (error) throw error;
 
-      return ((data as unknown as RoomDbRow[]) || []).map((r) => ({
+      const now = Date.now();
+      const expiredRoomIds: string[] = [];
+
+      const unexpired = ((data as unknown as RoomDbRow[]) || []).filter((r) => {
+        if (!r.created_at || !r.timer_minutes) return true;
+        const createdAt = new Date(r.created_at).getTime();
+        const expiresAt = createdAt + r.timer_minutes * 60 * 1000;
+        if (now >= expiresAt) {
+          expiredRoomIds.push(r.id);
+          return false;
+        }
+        return true;
+      });
+
+      if (expiredRoomIds.length > 0) {
+        Promise.resolve(
+          supabase
+            .from('study_rooms')
+            .update({ is_active: false })
+            .in('id', expiredRoomIds)
+        ).catch(() => {});
+      }
+
+      return unexpired.map((r) => ({
         id: r.id,
         name: r.name,
         subject: r.subject,
@@ -91,7 +114,13 @@ export function useRoomPresence(roomId: string) {
   useEffect(() => {
     if (!profile) return;
 
-    const channel = supabase.channel(`room_presence:${roomId}`, {
+    const topic = `room_presence:${roomId}`;
+    const existing = supabase.getChannels().find((c) => c.topic === `realtime:${topic}`);
+    if (existing) {
+      supabase.removeChannel(existing);
+    }
+
+    const channel = supabase.channel(topic, {
       config: {
         presence: {
           key: profile.id,
@@ -312,7 +341,30 @@ export function useMyRooms() {
 
       if (error) throw error;
 
-      return ((data as unknown as RoomDbRow[]) || []).map((r) => ({
+      const now = Date.now();
+      const expiredRoomIds: string[] = [];
+
+      const unexpired = ((data as unknown as RoomDbRow[]) || []).filter((r) => {
+        if (!r.created_at || !r.timer_minutes) return true;
+        const createdAt = new Date(r.created_at).getTime();
+        const expiresAt = createdAt + r.timer_minutes * 60 * 1000;
+        if (now >= expiresAt) {
+          expiredRoomIds.push(r.id);
+          return false;
+        }
+        return true;
+      });
+
+      if (expiredRoomIds.length > 0) {
+        Promise.resolve(
+          supabase
+            .from('study_rooms')
+            .update({ is_active: false })
+            .in('id', expiredRoomIds)
+        ).catch(() => {});
+      }
+
+      return unexpired.map((r) => ({
         id: r.id,
         name: r.name,
         subject: r.subject,
@@ -376,9 +428,10 @@ export function useRoomChat(roomId: string) {
 
     fetchHistory();
 
-    // 2. Realtime Postgres Changes Subscription for new room messages
+    // 2. Realtime Postgres Changes Subscription for new room messages (unique channel name per hook instance prevents callback-after-subscribe errors)
+    const chatTopic = `room_db_chat:${roomId}:${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const realtimeChannel = supabase
-      .channel(`room_db_chat:${roomId}`)
+      .channel(chatTopic)
       .on(
         'postgres_changes',
         {
@@ -434,43 +487,40 @@ export function useRoomChat(roomId: string) {
     };
   }, [roomId]);
 
-  const sendMessage = async (text: string) => {
-    if (!profile) return;
+  const sendMessage = useCallback(async (text: string) => {
+    if (!profile?.id) return;
 
-    // 1. Must be authenticated
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // 2. Trim and validate not empty
+    // 1. Trim and validate not empty
     const trimmed = text.trim();
     if (!trimmed || trimmed.length === 0) return;
 
-    // 3. Max length
+    // 2. Max length
     if (trimmed.length > 200) return;
 
-    // 4. Block URLs (prevent phishing)
+    // 3. Block URLs (prevent phishing)
     const urlPattern = /https?:\/\/|www\.|\.com|\.in|\.net|\.org/i;
     if (urlPattern.test(trimmed)) {
       return; // Silently reject
     }
 
-    // 5. Rate limiting (client-side)
+    // 4. Rate limiting (client-side)
     const now = Date.now();
-    if (now - lastMessageTime.current < 1500) {
-      return; // Max 1 message per 1.5 seconds
+    if (now - lastMessageTime.current < 800) {
+      return; // Max 1 message per 800ms
     }
     lastMessageTime.current = now;
 
-    // 6. Sanitize: remove any HTML-like chars
+    // 5. Sanitize: remove any HTML-like chars
     const sanitized = trimmed.replace(/[<>]/g, '').trim();
     if (!sanitized) return;
 
+    const currentUserId = profile.id;
     const userInitials = profile.name ? profile.name.charAt(0).toUpperCase() : 'U';
 
     const optimisticId = 'temp_' + Math.random().toString(36).substring(2, 9);
     const optimisticMsg: ChatMessage = {
       id: optimisticId,
-      userId: user.id,
+      userId: currentUserId,
       userName: profile.name || 'Anonymous User',
       userInitials,
       userAvatar: profile.avatar_url || null,
@@ -478,7 +528,7 @@ export function useRoomChat(roomId: string) {
       sentAt: new Date().toISOString(),
     };
 
-    // Optimistically add to UI for instantaneous response
+    // Optimistically add to UI immediately (0ms instant response)
     setMessages((prev) => [...prev, optimisticMsg]);
 
     try {
@@ -487,7 +537,7 @@ export function useRoomChat(roomId: string) {
         .from('room_messages')
         .insert({
           room_id: roomId,
-          user_id: user.id,
+          user_id: currentUserId,
           user_name: profile.name || 'Anonymous User',
           user_initials: userInitials,
           user_avatar: profile.avatar_url || null,
@@ -512,7 +562,7 @@ export function useRoomChat(roomId: string) {
     } catch (e) {
       if (__DEV__) console.warn('Failed to send room message:', e);
     }
-  };
+  }, [roomId, profile]);
 
   return {
     messages,

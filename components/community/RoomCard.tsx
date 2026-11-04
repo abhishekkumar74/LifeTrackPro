@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { RoomWithHost, RoomMember } from '@/lib/hooks/use-study-rooms';
 import { AvatarStack } from './AvatarStack';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
+import { Lock, Globe, Users } from 'lucide-react-native';
+import { parseRoomSubject } from '@/lib/utils/room-visibility';
 
 interface RoomCardProps {
   room: RoomWithHost;
@@ -11,13 +13,36 @@ interface RoomCardProps {
   onEnd?: (roomId: string) => void;
 }
 
-export const RoomCard = ({
+const getTimerString = (createdAtStr: string, timerMinutes?: number, isActive?: boolean): string => {
+  if (!isActive) return '';
+  const createdAt = new Date(createdAtStr).getTime();
+  const durationMs = (timerMinutes || 25) * 60 * 1000;
+  const expiresAt = createdAt + durationMs;
+  const now = Date.now();
+  const remainingSecs = Math.max(0, Math.floor((expiresAt - now) / 1000));
+
+  if (remainingSecs <= 0) return 'Ended';
+
+  const hrs = Math.floor(remainingSecs / 3600);
+  const mins = Math.floor((remainingSecs % 3600) / 60);
+  const secs = remainingSecs % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  if (hrs > 0) {
+    return `${hrs}:${pad(mins)}:${pad(secs)}`;
+  }
+  return `${pad(mins)}:${pad(secs)}`;
+};
+
+export const RoomCard = React.memo(({
   room,
   currentUserId,
   onJoin,
   onEnd,
 }: RoomCardProps) => {
-  const [timerText, setTimerText] = useState('');
+  const [timerText, setTimerText] = useState(() =>
+    getTimerString(room.created_at, room.timer_minutes, room.is_active)
+  );
 
   useEffect(() => {
     if (!room.is_active) {
@@ -26,28 +51,52 @@ export const RoomCard = ({
     }
 
     const updateTimer = () => {
-      const diffMs = Date.now() - new Date(room.created_at).getTime();
-      const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
-      const hrs = Math.floor(diffSecs / 3600);
-      const mins = Math.floor((diffSecs % 3600) / 60);
-      const secs = diffSecs % 60;
-      const pad = (n: number) => String(n).padStart(2, '0');
-
-      if (hrs > 0) {
-        setTimerText(`${hrs}:${pad(mins)}:${pad(secs)}`);
-      } else {
-        setTimerText(`${pad(mins)}:${pad(secs)}`);
-      }
+      setTimerText(getTimerString(room.created_at, room.timer_minutes, room.is_active));
     };
 
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
 
     return () => clearInterval(interval);
-  }, [room.created_at, room.is_active]);
+  }, [room.created_at, room.timer_minutes, room.is_active]);
 
   const isHost = room.host_id === currentUserId;
-  const subjectColor = room.subject ? getSubjectColor(room.subject) : '#9B9BAF';
+
+  const { displaySubject, visibility } = useMemo(() => {
+    return parseRoomSubject(room.subject, room.is_public);
+  }, [room.subject, room.is_public]);
+
+  const subjectColor = displaySubject ? getSubjectColor(displaySubject) : '#9B9BAF';
+
+  const visibilityConfig = useMemo(() => {
+    switch (visibility) {
+      case 'private':
+        return {
+          label: 'Private',
+          color: '#B45309',
+          bg: 'rgba(217, 119, 6, 0.08)',
+          border: 'rgba(217, 119, 6, 0.22)',
+          Icon: Lock,
+        };
+      case 'friends':
+        return {
+          label: 'Friends',
+          color: '#0284C7',
+          bg: 'rgba(2, 132, 199, 0.08)',
+          border: 'rgba(2, 132, 199, 0.22)',
+          Icon: Users,
+        };
+      case 'public':
+      default:
+        return {
+          label: 'Public',
+          color: '#5B4FE8',
+          bg: 'rgba(91, 79, 232, 0.08)',
+          border: 'rgba(91, 79, 232, 0.22)',
+          Icon: Globe,
+        };
+    }
+  }, [visibility]);
 
   // Construct a list of members for AvatarStack
   const membersForStack: RoomMember[] = [];
@@ -57,7 +106,7 @@ export const RoomCard = ({
       name: room.host_name,
       initials: room.host_name[0] ? room.host_name[0].toUpperCase() : 'H',
       joinedAt: room.created_at,
-      currentSubject: room.subject,
+      currentSubject: displaySubject,
     });
   }
   const mockInitials = ['JS', 'MD', 'RK', 'AL', 'SM'];
@@ -93,17 +142,36 @@ export const RoomCard = ({
           <Text style={styles.roomName} numberOfLines={1}>
             {room.name}
           </Text>
-          {room.subject && (
-            <View style={[styles.subjectChip, { backgroundColor: `${subjectColor}15` }]}>
-              <Text style={[styles.subjectText, { color: subjectColor }]}>
-                {room.subject}
-              </Text>
+          <View style={styles.badgesRow}>
+            {displaySubject && (
+              <View style={[styles.subjectChip, { backgroundColor: `${subjectColor}15`, borderColor: `${subjectColor}35` }]}>
+                <Text style={[styles.subjectText, { color: subjectColor }]}>
+                  {displaySubject}
+                </Text>
+              </View>
+            )}
+
+            <View
+              style={[
+                styles.visibilityChip,
+                {
+                  backgroundColor: visibilityConfig.bg,
+                  borderColor: visibilityConfig.border,
+                },
+              ]}
+              accessibilityLabel={visibilityConfig.label}
+            >
+              <visibilityConfig.Icon
+                size={11}
+                color={visibilityConfig.color}
+                strokeWidth={2.3}
+              />
             </View>
-          )}
+          </View>
         </View>
 
         <View style={styles.rightColumn}>
-          {!room.is_active ? (
+          {!room.is_active || timerText === 'Ended' ? (
             <View style={styles.endedBadge}>
               <Text style={styles.endedBadgeText}>Ended</Text>
             </View>
@@ -155,7 +223,7 @@ export const RoomCard = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -186,12 +254,18 @@ const styles = StyleSheet.create({
     color: '#17172A',
     fontWeight: 'bold',
   },
+  badgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+  },
   subjectChip: {
     alignSelf: 'flex-start',
-    marginTop: 6,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
     borderWidth: 1,
     borderColor: 'rgba(91, 79, 232, 0.2)',
     backgroundColor: 'rgba(91, 79, 232, 0.08)',
@@ -201,6 +275,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
     color: '#5B4FE8',
+  },
+  visibilityChip: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
   },
   rightColumn: {
     justifyContent: 'center',

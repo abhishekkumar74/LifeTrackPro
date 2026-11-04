@@ -281,7 +281,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
         activeOpacity={0.8}
       >
         <View style={[styles.checkbox, isCompleted && styles.checkboxChecked]}>
-          {isCompleted && <Text style={styles.checkboxCheck}>✓</Text>}
+          {isCompleted && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
         </View>
         <View style={styles.taskTextContent}>
           <Text
@@ -472,7 +472,8 @@ export default function HomeDashboardScreen(): React.JSX.Element {
       {/* Sticky Home Header */}
       <HomeHeader
         name={userName}
-        streakCount={stats.activeStreak || stats.habitStreak || 1}
+        streakCount={stats.activeStreak}
+        isStreakBroken={stats.isStreakBroken}
         isLoading={stats.isLoading}
         avatarUrl={profile?.avatar_url}
         onPressStreak={() => setStreakModalVisible(true)}
@@ -515,8 +516,10 @@ export default function HomeDashboardScreen(): React.JSX.Element {
             focusMinutes={stats.focusMinutesToday}
             tasksTotal={stats.tasksTotal}
             tasksDone={stats.tasksDone}
-            streakDays={stats.activeStreak || stats.habitStreak || 1}
+            streakDays={stats.activeStreak}
+            isStreakBroken={stats.isStreakBroken}
             isLoading={stats.isLoading}
+            onPressStreak={() => setStreakModalVisible(true)}
             sparklines={stats.sparklines}
           />
         </View>
@@ -573,7 +576,7 @@ export default function HomeDashboardScreen(): React.JSX.Element {
                   <Check size={14} color="#FFFFFF" strokeWidth={3} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.allDoneTitle}>All caught up! 🎉</Text>
+                  <Text style={styles.allDoneTitle}>All caught up!</Text>
                   <Text style={styles.allDoneSubtitle}>
                     {completedTodayTasks.length === 1
                       ? 'Completed 1 task today'
@@ -672,9 +675,14 @@ export default function HomeDashboardScreen(): React.JSX.Element {
       {/* Interactive Streak Modal */}
       <StreakModal
         isVisible={streakModalVisible}
-        streakCount={stats.activeStreak || stats.habitStreak || 1}
-        weeklyActivity={stats.weeklyActivity}
+        streakCount={stats.activeStreak}
+        bestStreak={stats.bestStreak}
+        isStreakBroken={stats.isStreakBroken}
+        canRestoreYesterday={stats.canRestoreYesterday}
+        previousStreak={stats.previousStreak}
+        isTodayCompleted={stats.isTodayCompleted}
         onClose={() => setStreakModalVisible(false)}
+        onRestored={handleRefreshStats}
       />
 
       {/* Interactive Notification Sheet */}

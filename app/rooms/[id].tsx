@@ -8,45 +8,46 @@ import { StudyRoom } from '@/types/app.types';
 import { CONFIG } from '@/constants/config';
 import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-
-let AudioModule: any = null;
-let isAudioAvailable: boolean | null = null;
-
-function getAudioModule() {
-  if (isAudioAvailable === false) return null;
-  if (AudioModule) return AudioModule;
-
-  try {
-    const { NativeModules } = require('react-native');
-    const { NativeModulesProxy } = require('expo-modules-core') || {};
-
-    const hasExpoAudioNative = !!(
-      NativeModules?.ExpoAudio ||
-      (NativeModulesProxy && NativeModulesProxy.ExpoAudio)
-    );
-
-    if (!hasExpoAudioNative) {
-      isAudioAvailable = false;
-      return null;
-    }
-
-    AudioModule = require('expo-audio');
-    isAudioAvailable = !!AudioModule;
-  } catch (e) {
-    isAudioAvailable = false;
-    AudioModule = null;
-  }
-  return AudioModule;
-}
 import { Href, router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Music, Pause, Play, Send, Share2, Smile, Volume2, VolumeX, CheckCircle, Award, Sparkles, Target, MessageSquare, LayoutGrid, Plus, Minus, X, Clock } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  ArrowLeft,
+  Music,
+  Pause,
+  Play,
+  Send,
+  Share2,
+  Smile,
+  Volume2,
+  VolumeX,
+  Target,
+  MessageSquare,
+  LayoutGrid,
+  Plus,
+  X,
+  Lock,
+  Globe,
+  Users,
+  Headphones,
+  BookOpen,
+  CloudRain,
+  Coffee,
+  Waves,
+  Ellipsis,
+  Check,
+  LogOut,
+  ChevronDown,
+  Copy,
+  UserPlus,
+} from 'lucide-react-native';
+import { parseRoomSubject } from '@/lib/utils/room-visibility';
+import { RoomVolumeSlider } from '@/components/community/RoomVolumeSlider';
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   Alert,
   Dimensions,
   FlatList,
   Image,
+  ImageBackground,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -58,18 +59,19 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  useWindowDimensions,
+  View,
 } from 'react-native';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
-  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+
+const cozyHeader = require('../../assets/images/study-room-cozy-header.png');
 
 interface MusicStation {
   id: string;
@@ -80,15 +82,22 @@ interface MusicStation {
 }
 
 const STATIONS: MusicStation[] = [
-  { id: 'lofi', name: 'Lofi Beats', asset: require('../../assets/sounds/lofi.mp3'), genre: 'Chill Beats', icon: '🎧' },
-  { id: 'rain', name: 'Rainy Cafe', asset: require('../../assets/sounds/rain.mp3'), genre: 'Study Rain', icon: '🌧️' },
-  { id: 'cafe', name: 'Quiet Cafe', asset: require('../../assets/sounds/cafe.mp3'), genre: 'Cafe Ambience', icon: '☕' },
-  { id: 'ocean', name: 'Ocean Waves', asset: require('../../assets/sounds/ocean.mp3'), genre: 'Relaxing Waves', icon: '🌊' },
-  { id: 'brown_noise', name: 'Brown Noise', asset: require('../../assets/sounds/brown_noise.mp3'), genre: 'Focus Noise', icon: '🔊' },
+  { id: 'lofi', name: 'Lo-fi Beats', asset: require('../../assets/sounds/lofi.mp3'), genre: 'Chill Beats', icon: 'music' },
+  { id: 'ocean', name: 'Ocean Waves', asset: require('../../assets/sounds/ocean.mp3'), genre: 'Relaxing Waves', icon: 'ocean' },
+  { id: 'rain', name: 'Rainy Cafe', asset: require('../../assets/sounds/rain.mp3'), genre: 'Study Rain', icon: 'rain' },
+  { id: 'cafe', name: 'Quiet Cafe', asset: require('../../assets/sounds/cafe.mp3'), genre: 'Cafe Ambience', icon: 'cafe' },
+  { id: 'brown_noise', name: 'Brown Noise', asset: require('../../assets/sounds/brown_noise.mp3'), genre: 'Deep Noise', icon: 'noise' },
 ];
 
-// Deterministic colors for member avatars
-const MEMBER_COLORS = ['#5B4FE8', '#00B894', '#E8A020', '#E85858', '#8B6FE8', '#0EA5E9'];
+const SOUND_ICONS: Record<string, any> = {
+  lofi: Music,
+  ocean: Waves,
+  rain: CloudRain,
+  cafe: Coffee,
+  brown_noise: Ellipsis,
+};
+
+const MEMBER_COLORS = ['#7C5CFC', '#00B894', '#E8A020', '#E85858', '#8B6FE8', '#0EA5E9'];
 
 function getColorForUser(userId: string): string {
   let hash = 0;
@@ -100,7 +109,6 @@ function getColorForUser(userId: string): string {
 }
 
 const { width } = Dimensions.get('window');
-const COLUMN_WIDTH = (width - 40 - 24) / 4; // 4 columns grid with gaps
 
 interface FloatingEmojiData {
   id: string;
@@ -149,6 +157,7 @@ const FloatingEmoji = React.memo<{ emoji: string; randomX: number; onComplete: (
 export default function ActiveRoomScreen(): React.JSX.Element {
   useAndroidBackHandler();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const shortCode = typeof id === 'string' ? id.replace(/-/g, '').slice(0, 6).toUpperCase() : '';
   const { profile } = useAuthStore();
@@ -169,7 +178,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     enabled: !!id,
   });
 
-  // Fetch Host Profile separately
+  // Fetch Host Profile
   const { data: hostProfile } = useQuery({
     queryKey: ['hostProfile', room?.host_id],
     queryFn: async () => {
@@ -190,27 +199,25 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   const endRoomMutation = useEndRoom();
   const hasExpiredRef = useRef(false);
 
-  // Room Goal & Progress Check-in State
+  // Room State
+  const [activeTab, setActiveTab] = useState<'lounge' | 'chat'>('lounge');
+  const [timerText, setTimerText] = useState('00:00');
+  const [timerProgress, setTimerProgress] = useState(1);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
   const [checkinNoteInput, setCheckinNoteInput] = useState('');
-  const [roomWeeklyGoalTargetMins, setRoomWeeklyGoalTargetMins] = useState(3000); // 50 Hours
-  const [showGoalModal, setShowGoalModal] = useState(false);
-  const [goalHoursInput, setGoalHoursInput] = useState('50');
+  const [selectedCheckin, setSelectedCheckin] = useState<string>('');
+  const [showMoreModal, setShowMoreModal] = useState(false);
+  const [showSoundModal, setShowSoundModal] = useState(false);
 
-  // Load custom room target goal from local storage
-  useEffect(() => {
-    if (!id) return;
-    AsyncStorage.getItem(`@room_target_${id}`)
-      .then((stored) => {
-        if (stored) {
-          const h = parseFloat(stored);
-          if (!isNaN(h) && h > 0) {
-            setRoomWeeklyGoalTargetMins(Math.round(h * 60));
-          }
-        }
-      })
-      .catch(() => {});
-  }, [id]);
+  // Memoized reversed message history to prevent re-reversing on every render
+  const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
+
+  const renderMessageItem = useCallback(
+    ({ item }: { item: ChatMessage }) => (
+      <MessageRow message={item} isMe={item.userId === currentUserId} />
+    ),
+    [currentUserId]
+  );
 
   // Session tracking in room
   const userJoinedTimeRef = useRef<number>(Date.now());
@@ -253,15 +260,18 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   const soundInstanceRef = useRef<any>(null);
   const loadingSoundIdRef = useRef<string | null>(null);
   const [musicVolume, setMusicVolume] = useState(0.5);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [isChatExpanded, setIsChatExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<'lounge' | 'chat'>('lounge');
+  const [activeReactions, setActiveReactions] = useState<FloatingEmojiData[]>([]);
+  const reactionChannelRef = useRef<any>(null);
 
   const safeGoBack = useCallback(() => {
     recordRoomStudySession();
-    if (router.canGoBack()) {
-      router.back();
-    } else {
+    try {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/rooms' as Href);
+      }
+    } catch {
       router.replace('/rooms' as Href);
     }
   }, [recordRoomStudySession]);
@@ -271,7 +281,6 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     loadingSoundIdRef.current = loadId;
 
     try {
-      // 1. Release any existing player
       if (soundInstanceRef.current) {
         try {
           soundInstanceRef.current.pause?.();
@@ -282,7 +291,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         soundInstanceRef.current = null;
       }
 
-      // 2. Web / HTML5 Audio fallback
+      // Web / HTML5 Audio fallback
       if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio) {
         try {
           const resolved = Image.resolveAssetSource(station.asset);
@@ -305,7 +314,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         }
       }
 
-      // 3. Native Expo 57 Audio (expo-audio)
+      // Native Expo Audio
       try {
         const { createAudioPlayer, setAudioModeAsync } = require('expo-audio');
         if (typeof setAudioModeAsync === 'function') {
@@ -425,13 +434,6 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     };
   }, []);
 
-  // Local State
-  const [timerText, setTimerText] = useState('00:00');
-  const [messageInput, setMessageInput] = useState('');
-  const [activeReactions, setActiveReactions] = useState<FloatingEmojiData[]>([]);
-  const reactionChannelRef = useRef<any>(null);
-
-  // Enforce free capacity limits
   const hostIsPremium = hostProfile?.is_premium || false;
   const isHost = room?.host_id === currentUserId;
 
@@ -456,7 +458,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
     try {
       await endRoomMutation.mutateAsync(id || '');
-    } catch (e) { }
+    } catch (e) {}
 
     if (reactionChannelRef.current) {
       try {
@@ -465,31 +467,47 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           event: 'room_ended',
           payload: {},
         });
-      } catch (e) { }
+      } catch (e) {}
     }
 
-    Alert.alert(
-      'Session Finished',
-      'This study room group session time limit has been reached. Great job studying together!',
-      [{ text: 'OK', onPress: () => safeGoBack() }],
-      { cancelable: false }
-    );
+    useUiStore.getState().showToast('Study session ended! Great job studying together.', 'success');
+    safeGoBack();
   }, [id, endRoomMutation, stopMusic, safeGoBack]);
 
-  // Monitor room status for all participants
+  // Monitor room status & automatically dismiss if expired upon opening
   useEffect(() => {
-    if (room && room.is_active === false) {
+    if (!room) return;
+    if (room.is_active === false) {
+      handleRoomExpired();
+      return;
+    }
+    const createdAt = new Date(room.created_at).getTime();
+    const durationMs = (room.timer_minutes || 25) * 60 * 1000;
+    if (Date.now() >= createdAt + durationMs) {
       handleRoomExpired();
     }
   }, [room, handleRoomExpired]);
 
+  const musicVolumeRef = useRef(musicVolume);
+  musicVolumeRef.current = musicVolume;
+  const playStationRef = useRef(playStation);
+  playStationRef.current = playStation;
+  const stopMusicRef = useRef(stopMusic);
+  stopMusicRef.current = stopMusic;
+  const handleRoomExpiredRef = useRef(handleRoomExpired);
+  handleRoomExpiredRef.current = handleRoomExpired;
+
   useEffect(() => {
     if (!id) return;
 
-    const channel = supabase.channel(`room_reactions:${id}`, {
-      config: {
-        broadcast: { self: true },
-      },
+    const topic = `room_reactions:${id}`;
+    const existing = supabase.getChannels().find((c) => c.topic === `realtime:${topic}` || c.topic === topic);
+    if (existing) {
+      supabase.removeChannel(existing);
+    }
+
+    const channel = supabase.channel(topic, {
+      config: { broadcast: { self: true } },
     });
 
     channel
@@ -497,32 +515,24 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         const randomX = Math.random() * (width - 100) + 30;
         setActiveReactions((prev) => [
           ...prev,
-          {
-            id: Math.random().toString(),
-            emoji: payload.emoji,
-            randomX,
-          },
+          { id: Math.random().toString(), emoji: payload.emoji, randomX },
         ]);
       })
       .on('broadcast', { event: 'cheer' }, ({ payload }) => {
         if (payload.targetUserId === currentUserId) {
           try {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          } catch (e) { }
+          } catch (e) {}
 
           useUiStore.getState().showToast(
-            `✨ ${payload.senderName} sent you a ${payload.type === 'cheer' ? 'Cheer' : 'Nudge'}!`,
+            `${payload.senderName} sent you a ${payload.type === 'cheer' ? 'Cheer' : 'Nudge'}!`,
             'success'
           );
 
           const randomX = Math.random() * (width - 100) + 30;
           setActiveReactions((prev) => [
             ...prev,
-            {
-              id: Math.random().toString(),
-              emoji: payload.type === 'cheer' ? '✨' : '👋',
-              randomX,
-            },
+            { id: Math.random().toString(), emoji: payload.type === 'cheer' ? 'Cheer' : 'Focus', randomX },
           ]);
         }
       })
@@ -530,48 +540,29 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         const station = STATIONS.find((s) => s.id === payload.stationId) || STATIONS[0];
         setCurrentStation(station);
         if (payload.isPlaying) {
-          playStation(station, musicVolume);
+          playStationRef.current(station, musicVolumeRef.current);
         } else {
-          stopMusic();
+          stopMusicRef.current();
         }
       })
       .on('broadcast', { event: 'room_ended' }, () => {
-        handleRoomExpired();
+        handleRoomExpiredRef.current();
       })
-      .on('broadcast', { event: 'goal_updated' }, ({ payload }) => {
-        if (payload?.targetHours && typeof payload.targetHours === 'number') {
-          setRoomWeeklyGoalTargetMins(Math.round(payload.targetHours * 60));
-        }
-      })
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'study_rooms',
-          filter: `id=eq.${id}`,
-        },
-        (payload) => {
-          const updatedRoom = payload.new as any;
-          if (updatedRoom && updatedRoom.is_active === false) {
-            handleRoomExpired();
-          }
-        }
-      )
       .subscribe();
 
     reactionChannelRef.current = channel;
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channel).catch(() => {});
+      reactionChannelRef.current = null;
     };
-  }, [id, currentUserId, playStation, stopMusic, musicVolume, handleRoomExpired]);
+  }, [id, currentUserId]);
 
   const sendCheerOrNudge = (targetUserId: string, type: 'cheer' | 'nudge') => {
     if (reactionChannelRef.current) {
       try {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      } catch (e) { }
+      } catch (e) {}
 
       reactionChannelRef.current.send({
         type: 'broadcast',
@@ -583,10 +574,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         },
       });
 
-      useUiStore.getState().showToast(
-        `Sent ${type === 'cheer' ? 'Cheer' : 'Nudge'}! ✨`,
-        'success'
-      );
+      useUiStore.getState().showToast(`Sent ${type === 'cheer' ? 'Cheer' : 'Nudge'}!`, 'success');
     }
   };
 
@@ -594,7 +582,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     if (reactionChannelRef.current) {
       try {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      } catch (e) { }
+      } catch (e) {}
       reactionChannelRef.current.send({
         type: 'broadcast',
         event: 'reaction',
@@ -606,11 +594,9 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   const handleShare = async () => {
     if (!room) return;
     try {
-      try {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      } catch (e) { }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       const playStoreUrl = Platform.OS === 'ios' ? CONFIG.storeUrls.ios : CONFIG.storeUrls.android;
-      const shareMessage = `🔥 Aaja bhai, sath me padhte hain!\n\nMaine LifeTrack Pro par live study session start kiya hai: "${room.name}"\n⏱️ Duration: ${room.timer_minutes} mins\n\n🔑 Room Code: ${shortCode}\n\n📲 Free App Download karo:\n${playStoreUrl}\n\n(App open karke Study Rooms me Room Code enter karo!)`;
+      const shareMessage = `Join my live study room on LifeTrack Pro: "${room.name}"\nDuration: ${room.timer_minutes} mins\nRoom Code: #${shortCode}\n\nDownload LifeTrack Pro:\n${playStoreUrl}\n\n(Open the app and enter the Room Code under Study Rooms!)`;
       await Share.share({
         message: shareMessage,
         title: `Study with me on LifeTrack Pro: ${room.name}`,
@@ -620,8 +606,6 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     }
   };
 
-
-
   // Shared Group Countdown Timer
   useEffect(() => {
     if (!room || !room.created_at) return;
@@ -629,10 +613,13 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     const createdAt = new Date(room.created_at).getTime();
     const durationMs = room.timer_minutes * 60 * 1000;
     const expiresAt = createdAt + durationMs;
+    const totalSecs = Math.max(1, room.timer_minutes * 60);
 
     const updateTimer = () => {
       const now = Date.now();
       const remainingSecs = Math.max(0, Math.floor((expiresAt - now) / 1000));
+      const prog = Math.min(1, Math.max(0, remainingSecs / totalSecs));
+      setTimerProgress(prog);
 
       const hrs = Math.floor(remainingSecs / 3600);
       const mins = Math.floor((remainingSecs % 3600) / 60);
@@ -657,12 +644,9 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
   // Sync active study presence
   useEffect(() => {
-    updatePresenceStatus({
-      isFocusing: true,
-    });
+    updatePresenceStatus({ isFocusing: true });
   }, [updatePresenceStatus]);
 
-  // Record session on screen unmount
   useEffect(() => {
     return () => {
       recordRoomStudySession();
@@ -674,105 +658,57 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     setShowCheckinModal(false);
   }, []);
 
-  // Handle Progress Check-in Submit
   const handleProgressCheckinSubmit = async () => {
     if (!checkinNoteInput.trim()) return;
     const note = checkinNoteInput.trim();
 
     Keyboard.dismiss();
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
-    // Update presence
     updatePresenceStatus({
       lastCheckinNote: note,
       checkinTime: new Date().toISOString(),
     });
 
-    // Broadcast check-in message to room chat
-    sendMessage(`🎯 [PROGRESS CHECK-IN] ${profile?.name || 'Member'}: ${note}`);
+    sendMessage(`[CHECK-IN] ${profile?.name || 'Member'}: ${note}`);
+    setSelectedCheckin(note);
 
-    // Trigger visual celebration reaction
     if (reactionChannelRef.current) {
       reactionChannelRef.current.send({
         type: 'broadcast',
         event: 'reaction',
-        payload: { emoji: '✨' },
+        payload: { emoji: 'Check' },
       });
     }
 
     setCheckinNoteInput('');
     setShowCheckinModal(false);
+    useUiStore.getState().showToast(`Check-in updated: ${note}`, 'success');
   };
 
-  const totalRoomFocusMinutes = useMemo(() => {
-    const baseMins = members.length * 45;
-    return Math.max(120, baseMins);
-  }, [members.length]);
+  const handleSelectCheckinChip = (preset: string) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setSelectedCheckin(preset);
 
-  // Synchronize DB member count to record the peak / highest participant count ever reached
-  useEffect(() => {
-    if (!room?.id) return;
-    const currentOnline = Math.max(1, members.length);
-    const existingPeak = Number(room.member_count || 1);
+    updatePresenceStatus({
+      lastCheckinNote: preset,
+      checkinTime: new Date().toISOString(),
+    });
 
-    // Only update if current count exceeds the highest number recorded so far
-    if (currentOnline > existingPeak) {
-      const updateDbCount = async () => {
-        try {
-          await supabase
-            .from('study_rooms')
-            .update({ member_count: currentOnline })
-            .eq('id', room.id);
-        } catch (e) {
-          if (__DEV__) {
-            console.warn('Failed to update DB peak member count:', e);
-          }
-        }
-      };
+    sendMessage(`[CHECK-IN] ${profile?.name || 'Member'}: ${preset}`);
 
-      updateDbCount();
+    if (reactionChannelRef.current) {
+      reactionChannelRef.current.send({
+        type: 'broadcast',
+        event: 'reaction',
+        payload: { emoji: 'Check' },
+      });
     }
-  }, [members.length, room?.id, room?.member_count]);
 
-  // Listen for real-time room inactivation or deletion
-  useEffect(() => {
-    if (!id) return;
-
-    const roomSubscription = supabase
-      .channel(`room_status_${id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'study_rooms',
-          filter: `id=eq.${id}`,
-        },
-        (payload) => {
-          const updatedRoom = payload.new as StudyRoom | null;
-          if (payload.eventType === 'DELETE' || (updatedRoom && !updatedRoom.is_active)) {
-            Alert.alert(
-              'Room Ended',
-              'This study room has been ended by the host.',
-              [{ text: 'OK', onPress: () => safeGoBack() }],
-              { cancelable: false }
-            );
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(roomSubscription);
-    };
-  }, [id, safeGoBack]);
+    useUiStore.getState().showToast(`Working on: ${preset}`, 'success');
+  };
 
   const handleLeave = () => {
-    if (isChatExpanded) {
-      Keyboard.dismiss();
-      setIsChatExpanded(false);
-      return;
-    }
     if (isHost) {
       Alert.alert(
         'Leave Study Room',
@@ -792,14 +728,9 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           },
           {
             text: 'Keep Room Running',
-            onPress: () => {
-              safeGoBack();
-            },
+            onPress: () => safeGoBack(),
           },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
+          { text: 'Cancel', style: 'cancel' },
         ]
       );
     } else {
@@ -807,46 +738,44 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     }
   };
 
-  const handleSend = () => {
-    if (!messageInput.trim()) return;
-    sendMessage(messageInput);
-    setMessageInput('');
+  const handleMemberPress = (member: RoomMember) => {
+    if (member.userId === currentUserId) return;
+    Alert.alert(
+      `Support ${member.name}`,
+      'Send a quick cheer to boost their focus session:',
+      [
+        { text: 'Send Cheer', onPress: () => sendCheerOrNudge(member.userId, 'cheer') },
+        { text: 'Nudge to Focus', onPress: () => sendCheerOrNudge(member.userId, 'nudge') },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const formatTimeAgo = (joinedAtStr: string) => {
+    const diffMs = Date.now() - new Date(joinedAtStr).getTime();
+    const diffMins = Math.max(0, Math.floor(diffMs / 60000));
+    if (diffMins === 0) return 'Just joined';
+    return `${diffMins}m in room`;
   };
 
   if (isRoomLoading) {
     return (
       <SafeAreaView style={[styles.container, { paddingHorizontal: 16 }]} edges={['top', 'bottom']}>
-        <StatusBar barStyle="light-content" backgroundColor="#17172A" translucent={false} />
-        {/* Top bar skeleton */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1E1E38', marginBottom: 20 }}>
+        <StatusBar barStyle="light-content" backgroundColor="#0D0C1D" translucent={false} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }}>
           <Skeleton width={70} height={30} borderRadius={8} />
           <Skeleton width={120} height={20} borderRadius={8} />
           <Skeleton width={80} height={24} borderRadius={12} />
         </View>
-
-        {/* Timer skeleton */}
-        <View style={{ alignItems: 'center', marginVertical: 24 }}>
-          <Skeleton width={160} height={50} borderRadius={12} style={{ marginBottom: 8 }} />
-          <Skeleton width={100} height={14} borderRadius={6} />
+        <View style={{ alignItems: 'center', marginVertical: 32 }}>
+          <Skeleton width={220} height={220} borderRadius={110} />
         </View>
-
-        {/* Members skeleton */}
         <View style={{ marginVertical: 16 }}>
-          <Skeleton width={90} height={14} borderRadius={6} style={{ marginBottom: 12 }} />
-          <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginVertical: 8 }}>
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} width={50} height={50} borderRadius={25} />
+          <Skeleton width={100} height={16} borderRadius={6} style={{ marginBottom: 12 }} />
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} width={70} height={70} borderRadius={16} />
             ))}
-          </View>
-        </View>
-
-        {/* Chat skeleton */}
-        <View style={{ flex: 1, justifyContent: 'flex-end', marginBottom: 20 }}>
-          <Skeleton width={100} height={14} borderRadius={6} style={{ marginBottom: 12 }} />
-          <View style={{ gap: 12 }}>
-            <Skeleton width="60%" height={36} borderRadius={8} />
-            <Skeleton width="75%" height={36} borderRadius={8} style={{ alignSelf: 'flex-end' }} />
-            <Skeleton width="45%" height={36} borderRadius={8} />
           </View>
         </View>
       </SafeAreaView>
@@ -856,7 +785,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   if (roomError || !room || !room.is_active) {
     return (
       <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#17172A" translucent={false} />
+        <StatusBar barStyle="light-content" backgroundColor="#0D0C1D" translucent={false} />
         <Text style={styles.errorText}>
           {!room || room.is_active ? 'Room not found' : 'This study room has ended'}
         </Text>
@@ -867,450 +796,478 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     );
   }
 
-  // Format dynamic joined text
-  const formatTimeAgo = (joinedAtStr: string) => {
-    const diffMs = Date.now() - new Date(joinedAtStr).getTime();
-    const diffMins = Math.max(0, Math.floor(diffMs / 60000));
-    if (diffMins === 0) return 'joined now';
-    return `joined ${diffMins}m ago`;
-  };
+  const parsedSubject = parseRoomSubject(room.subject, room.is_public);
+  const displaySubject = parsedSubject.displaySubject || 'General Skills';
 
-  const showChat = true;
+  // Dynamic quick checkin chip list
+  const quickCheckinPresets = [
+    room.name.length > 16 ? room.name.slice(0, 16) + '...' : room.name,
+    'Revision',
+    'Practice',
+  ];
 
-  const getChatHeaderLabel = () => {
-    switch (room?.room_type) {
-      case 'silent':
-        return 'QUIET CHEER BOARD 🤫';
-      case 'music':
-        return 'MUSIC ROOM CHAT 🎵';
-      default:
-        return 'DISCUSSION CHAT 💬';
-    }
-  };
-
-  const getChatPlaceholder = () => {
-    return 'Type a message...';
-  };
-
-  const handleMemberPress = (member: RoomMember) => {
-    if (member.userId === currentUserId) return;
-
-    Alert.alert(
-      `Support ${member.name} 👋`,
-      'Send a quick silent reaction to boost their focus:',
-      [
-        {
-          text: 'Send Cheer ✨',
-          onPress: () => sendCheerOrNudge(member.userId, 'cheer'),
-        },
-        {
-          text: 'Nudge to Focus 👋',
-          onPress: () => sendCheerOrNudge(member.userId, 'nudge'),
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
-  };
+  // Responsive circular timer geometry
+  const circleSize = Math.min(216, Math.max(196, Math.round(windowWidth * 0.55)));
+  const TIMER_VIEWBOX = 216;
+  const TIMER_CENTER = TIMER_VIEWBOX / 2; // 108
+  const RADIUS = 90;
+  const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+  const strokeDashoffset = CIRCUMFERENCE * (1 - timerProgress);
+  const angle = (timerProgress * 360 - 90) * (Math.PI / 180);
+  const dotX = TIMER_CENTER + RADIUS * Math.cos(angle);
+  const dotY = TIMER_CENTER + RADIUS * Math.sin(angle);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar barStyle="light-content" backgroundColor="#14142B" translucent={false} />
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle="light-content" backgroundColor="#0D0C1D" translucent={false} />
+
+      {/* TOP HEADER BAR */}
+      <View style={styles.topBar}>
+        <TouchableOpacity style={styles.iconCircleBtn} onPress={handleLeave} activeOpacity={0.7}>
+          <ArrowLeft size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+
+        {/* Room Title & Badges */}
+        <View style={styles.headerTitleGroup}>
+          <View style={styles.roomIconBox}>
+            {room.room_type === 'music' ? (
+              <Headphones size={18} color="#FFFFFF" />
+            ) : room.room_type === 'silent' ? (
+              <VolumeX size={18} color="#FFFFFF" />
+            ) : (
+              <BookOpen size={18} color="#FFFFFF" />
+            )}
+          </View>
+
+          <View style={styles.titleInfoCol}>
+            <Text style={styles.roomHeaderTitle} numberOfLines={1}>
+              {room.name}
+            </Text>
+            <View style={styles.headerSubPillsRow}>
+              <View style={styles.categoryPill}>
+                <Text style={styles.categoryPillText} numberOfLines={1}>
+                  {displaySubject}
+                </Text>
+              </View>
+              <View style={styles.memberPill}>
+                <Users size={11} color="#A78BFA" />
+                <Text style={styles.memberPillText}>{members.length}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Right Actions: Share & Live Badge */}
+        <View style={styles.headerRightRow}>
+          <TouchableOpacity style={styles.iconCircleBtn} onPress={handleShare} activeOpacity={0.7}>
+            <Share2 size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <View style={styles.liveIndicatorBadge}>
+            <View style={styles.liveIndicatorDot} />
+            <Text style={styles.liveIndicatorText}>LIVE</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* SEGMENTED TAB SWITCHER */}
+      <View style={styles.tabSwitchContainer}>
+        <TouchableOpacity
+          style={[styles.tabSwitchBtn, activeTab === 'lounge' && styles.tabSwitchBtnActive]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            setActiveTab('lounge');
+          }}
+          activeOpacity={0.8}
+        >
+          <LayoutGrid size={15} color={activeTab === 'lounge' ? '#FFFFFF' : '#9D9AA8'} />
+          <Text style={[styles.tabSwitchText, activeTab === 'lounge' && styles.tabSwitchTextActive]}>
+            Room
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabSwitchBtn, activeTab === 'chat' && styles.tabSwitchBtnActive]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            setActiveTab('chat');
+          }}
+          activeOpacity={0.8}
+        >
+          <MessageSquare size={15} color={activeTab === 'chat' ? '#FFFFFF' : '#9D9AA8'} />
+          <Text style={[styles.tabSwitchText, activeTab === 'chat' && styles.tabSwitchTextActive]}>
+            Chat & Feed
+          </Text>
+          {messages.length > 0 && <View style={styles.chatUnreadDot} />}
+        </TouchableOpacity>
+      </View>
+
+      {/* MAIN CONTENT AREA */}
       <View style={{ flex: 1 }}>
-        {/* TOP BAR */}
-        <View style={styles.topBar}>
-          <TouchableOpacity style={styles.backIconButton} onPress={handleLeave} activeOpacity={0.7}>
-            <ArrowLeft size={18} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          <View style={styles.headerGroupInfo}>
-            <View style={styles.headerGroupAvatar}>
-              <Text style={styles.headerGroupEmoji}>
-                {room.room_type === 'music' ? '🎧' : room.room_type === 'silent' ? '🤫' : '💬'}
-              </Text>
-            </View>
-
-            <View style={styles.headerTextCol}>
-              <Text style={styles.roomTitle} numberOfLines={1}>
-                {room.name}
-              </Text>
-              <View style={styles.headerSubRow}>
-                <View style={styles.subjectInlineBadge}>
-                  <Text style={styles.subjectInlineBadgeText} numberOfLines={1}>
-                    {room.subject || 'General'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={async () => {
-                    try {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                      const clipboard = require('expo-clipboard');
-                      if (clipboard?.setStringAsync) {
-                        await clipboard.setStringAsync(shortCode);
-                      }
-                      Alert.alert('Room Code Copied!', `Code: #${shortCode}\nShare this with friends to let them join.`);
-                    } catch (e) {}
-                  }}
-                  activeOpacity={0.7}
-                  style={styles.codeBadge}
-                >
-                  <Text style={styles.codeBadgeText}>#{shortCode}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.headerRightActions}>
-            <TouchableOpacity style={styles.shareTopButton} onPress={handleShare} activeOpacity={0.7}>
-              <Share2 size={15} color="#FFFFFF" />
-            </TouchableOpacity>
-
-            <View style={styles.memberBadge}>
-              <View style={styles.liveDot} />
-              <Text style={styles.memberBadgeText}>{memberCount} live</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* SEGMENTED TAB SWITCHER */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'lounge' && styles.tabButtonActive]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              setActiveTab('lounge');
-            }}
-            activeOpacity={0.8}
-          >
-            <LayoutGrid size={15} color={activeTab === 'lounge' ? '#FFFFFF' : '#9B9BAF'} />
-            <Text style={[styles.tabButtonText, activeTab === 'lounge' && styles.tabButtonTextActive]}>
-              Room Lounge
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'chat' && styles.tabButtonActive]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              setActiveTab('chat');
-            }}
-            activeOpacity={0.8}
-          >
-            <MessageSquare size={15} color={activeTab === 'chat' ? '#FFFFFF' : '#9B9BAF'} />
-            <Text style={[styles.tabButtonText, activeTab === 'chat' && styles.tabButtonTextActive]}>
-              Chat & Feed
-            </Text>
-            {messages.length > 0 && (
-              <View style={styles.chatBadge}>
-                <Text style={styles.chatBadgeText}>{messages.length}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
         {activeTab === 'lounge' ? (
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingVertical: 12 }}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* SHARED LIVE ROOM TIMER CARD */}
-            <View style={styles.timerCard}>
-              <View style={styles.timerTopHeader}>
-                <View style={styles.timerTopBadge}>
-                  <Sparkles size={11} color="#A78BFA" />
-                  <Text style={styles.timerTopBadgeText}>LIVE STUDY ROOM</Text>
-                </View>
-
-                <View style={styles.timerStatusBadge}>
-                  <View style={[styles.pulseActiveIndicator, styles.pulseActiveIndicatorFocus]} />
-                  <Text style={styles.timerStatusText}>
-                    {memberCount} Studying Live
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.timerDisplay}>
-                {timerText}
-              </Text>
-
-              <Text style={styles.timerSubText}>
-                Scheduled group study session remaining
-              </Text>
-            </View>
-
-            {/* MUSIC PLAYER BAR (only for Music Rooms) */}
-            {room.room_type === 'music' && (
-              <View style={styles.musicBar}>
-                <View style={styles.musicRowHeader}>
-                  <View style={styles.musicInfo}>
-                    <View style={styles.musicIconWrapper}>
-                      <Music size={18} color="#5B4FE8" />
-                    </View>
-                    <View>
-                      <Text style={styles.musicStationName}>{currentStation.name}</Text>
-                      <Text style={styles.musicStationGenre}>{currentStation.genre}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.musicControls}>
-                    {/* Play/Pause */}
-                    <TouchableOpacity
-                      style={[styles.musicPlayButton, isPlayingMusic && styles.musicPlayButtonActive]}
-                      onPress={isHost ? handleHostTogglePlay : handleMemberTogglePlay}
-                      activeOpacity={0.8}
-                    >
-                      {isPlayingMusic ? (
-                        <Pause size={14} color="#FFFFFF" fill="#FFFFFF" />
-                      ) : (
-                        <Play size={14} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 2 }} />
-                      )}
-                    </TouchableOpacity>
-
-                    {/* Mute/Volume (Cycles 0 -> 0.5 -> 1.0) */}
-                    <TouchableOpacity
-                      style={styles.musicMuteButton}
-                      onPress={() => {
-                        const nextVol = musicVolume === 0 ? 0.5 : musicVolume === 0.5 ? 1.0 : 0;
-                        changeVolume(nextVol);
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      {musicVolume === 0 ? (
-                        <VolumeX size={14} color="#E85858" />
-                      ) : (
-                        <Volume2 size={14} color={musicVolume === 1.0 ? '#00B894' : '#9B9BAF'} />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Station selector (only for Host) */}
-                {isHost ? (
-                  <View style={styles.stationSelectorContainer}>
-                    <Text style={styles.hostControlTag}>HOST STATION CONTROL</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.stationSelectorContent}
-                      style={styles.stationSelector}
-                    >
-                      {STATIONS.map((station) => {
-                        const active = currentStation.id === station.id;
-                        return (
-                          <TouchableOpacity
-                            key={station.id}
-                            style={[styles.stationChip, active && styles.stationChipActive]}
-                            onPress={() => handleHostSelectStation(station)}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={styles.stationEmoji}>{station.icon}</Text>
-                            <Text style={[styles.stationChipText, active && styles.stationChipTextActive]}>
-                              {station.name}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                  </View>
-                ) : (
-                  <View style={styles.memberMusicTag}>
-                    <Text style={styles.memberMusicTagText}>
-                      🔊 Synced with host's audio stream. You can pause or adjust volume locally.
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* ROOM WEEKLY GOAL CARD */}
-            <View style={styles.roomGoalCard}>
-              <View style={styles.roomGoalHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Award size={14} color="#FFD700" />
-                  <Text style={styles.roomGoalTitle}>Room Target: Weekly Focus</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.roomGoalEditBtn}
-                  onPress={() => {
-                    setGoalHoursInput(String(Math.round(roomWeeklyGoalTargetMins / 60)));
-                    setShowGoalModal(true);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Text style={styles.roomGoalEditBtnText}>Set Goal</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.roomGoalProgressRow}>
-                <View style={styles.roomGoalTrack}>
-                  <View
-                    style={[
-                      styles.roomGoalFill,
-                      {
-                        width: `${Math.min(100, Math.round((totalRoomFocusMinutes / roomWeeklyGoalTargetMins) * 100))}%`,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.roomGoalProgressText}>
-                  {(totalRoomFocusMinutes / 60).toFixed(1)}h / {(roomWeeklyGoalTargetMins / 60).toFixed(0)}h
-                </Text>
-              </View>
-            </View>
-
-            {/* STUDENTS STUDYING GRID */}
-            <View style={styles.membersSection}>
-              <View style={styles.membersHeaderRow}>
-                <Text style={styles.sectionLabel}>STUDENTS STUDYING</Text>
-              </View>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-start' }}>
-                {members.map((member) => (
-                  <MemberBubble
-                    key={member.userId}
-                    member={member}
-                    formatTimeAgo={formatTimeAgo}
-                    onPress={handleMemberPress}
-                  />
-                ))}
-              </View>
-            </View>
-
-            {/* CHAT PREVIEW CARD */}
-            <View style={styles.chatPreviewCard}>
-              <View style={styles.chatPreviewHeader}>
-                <Text style={styles.chatPreviewTitle}>{getChatHeaderLabel()}</Text>
-                <TouchableOpacity
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    setActiveTab('chat');
-                  }}
-                >
-                  <Text style={styles.chatPreviewOpenText}>Open Live Chat ({messages.length}) →</Text>
-                </TouchableOpacity>
-              </View>
-              {messages.length > 0 ? (
-                <Text style={styles.chatPreviewMsgText} numberOfLines={2}>
-                  💬 <Text style={{ fontWeight: 'bold' }}>{messages[messages.length - 1].userName}:</Text>{' '}
-                  {messages[messages.length - 1].text}
-                </Text>
-              ) : (
-                <Text style={[styles.chatPreviewMsgText, { color: '#9B9BAF' }]}>
-                  No messages yet. Be the first to say hi! 👋
-                </Text>
-              )}
-              <TouchableOpacity
-                style={styles.checkinButton}
-                onPress={() => setShowCheckinModal(true)}
-                activeOpacity={0.8}
+          <View style={styles.fixedLoungeContainer}>
+            {/* HERO ARTWORK (Full width edge-to-edge) + CIRCULAR COUNTDOWN TIMER */}
+            <View style={styles.heroArtworkContainer}>
+              <ImageBackground
+                source={cozyHeader}
+                style={styles.heroImageBg}
+                resizeMode="cover"
               >
-                <CheckCircle size={15} color="#00B894" />
-                <Text style={styles.checkinButtonText}>Post Progress Check-in ✨</Text>
-              </TouchableOpacity>
+                {/* Vignette overlays for smooth edge fading into #0D0C1D */}
+                <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                  <Svg width="100%" height="100%">
+                    <Defs>
+                      <LinearGradient id="heroLeftFade" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <Stop offset="0%" stopColor="#0D0C1D" stopOpacity="0.9" />
+                        <Stop offset="100%" stopColor="#0D0C1D" stopOpacity="0" />
+                      </LinearGradient>
+                      <LinearGradient id="heroRightFade" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <Stop offset="0%" stopColor="#0D0C1D" stopOpacity="0" />
+                        <Stop offset="100%" stopColor="#0D0C1D" stopOpacity="0.9" />
+                      </LinearGradient>
+                      <LinearGradient id="heroBottomFade" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <Stop offset="0%" stopColor="#0D0C1D" stopOpacity="0" />
+                        <Stop offset="100%" stopColor="#0D0C1D" stopOpacity="0.95" />
+                      </LinearGradient>
+                    </Defs>
+                    {/* Left edge fade */}
+                    <Rect x="0" y="0" width="55" height="100%" fill="url(#heroLeftFade)" />
+                    {/* Right edge fade */}
+                    <Rect x="85%" y="0" width="15%" height="100%" fill="url(#heroRightFade)" />
+                    {/* Bottom edge fade */}
+                    <Rect x="0" y="65%" width="100%" height="35%" fill="url(#heroBottomFade)" />
+                  </Svg>
+                </View>
+
+                {/* Dark scrim overlay for legibility */}
+                <View style={styles.heroDarkOverlay}>
+                  {/* Circular Timer SVG */}
+                  <View style={[styles.circularTimerWrapper, { width: circleSize, height: circleSize }]}>
+                    <Svg width={circleSize} height={circleSize} viewBox="0 0 216 216">
+                      <Defs>
+                        <LinearGradient id="timerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <Stop offset="0%" stopColor="#C4B5FD" />
+                          <Stop offset="100%" stopColor="#7C5CFC" />
+                        </LinearGradient>
+                      </Defs>
+                      {/* Background track circle */}
+                      <Circle
+                        cx={TIMER_CENTER}
+                        cy={TIMER_CENTER}
+                        r={RADIUS}
+                        stroke="rgba(255, 255, 255, 0.14)"
+                        strokeWidth={6}
+                        fill="rgba(13, 12, 29, 0.78)"
+                      />
+                      {/* Animated Progress circle */}
+                      <Circle
+                        cx={TIMER_CENTER}
+                        cy={TIMER_CENTER}
+                        r={RADIUS}
+                        stroke="url(#timerGrad)"
+                        strokeWidth={6}
+                        strokeLinecap="round"
+                        strokeDasharray={CIRCUMFERENCE}
+                        strokeDashoffset={strokeDashoffset}
+                        transform={`rotate(-90 ${TIMER_CENTER} ${TIMER_CENTER})`}
+                      />
+                      {/* Head glowing indicator dot */}
+                      {timerProgress > 0 && (
+                        <Circle
+                          cx={dotX}
+                          cy={dotY}
+                          r={4.5}
+                          fill="#FFFFFF"
+                          stroke="#7C5CFC"
+                          strokeWidth={2}
+                        />
+                      )}
+                    </Svg>
+
+                    {/* Inside Timer Center Details */}
+                    <View style={[styles.timerCenterContent, { maxWidth: Math.round(circleSize * 0.76) }]}>
+                      <Text
+                        style={[
+                          styles.timerDigitsText,
+                          timerText.length >= 8
+                            ? styles.timerDigitsLong
+                            : timerText.length >= 6
+                            ? styles.timerDigitsMedium
+                            : styles.timerDigitsStandard,
+                        ]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit={true}
+                        minimumFontScale={0.7}
+                      >
+                        {timerText}
+                      </Text>
+                      <Text style={styles.timerMinutesSub} numberOfLines={1}>
+                        {room.timer_minutes} min • Studying
+                      </Text>
+
+                      {/* Play / Pause circular button */}
+                      <TouchableOpacity
+                        style={styles.timerPlayPauseBtn}
+                        onPress={isHost ? handleHostTogglePlay : handleMemberTogglePlay}
+                        activeOpacity={0.8}
+                      >
+                        {isPlayingMusic ? (
+                          <Pause size={15} color="#FFFFFF" fill="#FFFFFF" />
+                        ) : (
+                          <Play size={15} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 2 }} />
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </ImageBackground>
             </View>
-          </ScrollView>
+
+            {/* Padded Content Section Below Full-Bleed Artwork */}
+            <View style={styles.contentPadding}>
+              {/* AMBIENT SOUNDSCAPE STRIP */}
+              <View style={styles.soundscapeBar}>
+                <View style={styles.soundscapeIconsRow}>
+                  {STATIONS.map((station) => {
+                    const isCurrent = currentStation.id === station.id;
+                    const IconComp = SOUND_ICONS[station.id] || Music;
+                    return (
+                      <TouchableOpacity
+                        key={station.id}
+                        style={[styles.soundChipBtn, isCurrent && styles.soundChipBtnActive]}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                          if (isCurrent) {
+                            if (isPlayingMusic) {
+                              stopMusic();
+                            } else {
+                              playStation(currentStation, musicVolume);
+                            }
+                          } else {
+                            handleHostSelectStation(station);
+                          }
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <IconComp
+                          size={14}
+                          color={isCurrent ? '#FFFFFF' : '#9D9AA8'}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Soundstation dropdown selector */}
+                <TouchableOpacity
+                  style={styles.soundDropdownBtn}
+                  onPress={() => setShowSoundModal(true)}
+                  activeOpacity={0.8}
+                >
+                  {isPlayingMusic ? (
+                    <Volume2 size={12} color="#A78BFA" />
+                  ) : (
+                    <VolumeX size={12} color="#9D9AA8" />
+                  )}
+                  <Text style={styles.soundDropdownText} numberOfLines={1}>
+                    {isPlayingMusic ? currentStation.name : 'Lo-fi Study'}
+                  </Text>
+                  <ChevronDown size={11} color="#9D9AA8" />
+                </TouchableOpacity>
+              </View>
+
+              {/* IN-ROOM AMBIENT VOLUME SLIDER */}
+              <View style={styles.inlineVolumeSliderRow}>
+                <RoomVolumeSlider
+                  volume={musicVolume}
+                  onVolumeChange={changeVolume}
+                  accentColor="#7C5CFC"
+                  trackHeight={28}
+                />
+              </View>
+
+              {/* STUDYING NOW SECTION (Only Profile Avatars / Pics) */}
+              <View style={styles.studyingNowSection}>
+                <View style={styles.studyingNowHeader}>
+                  <Users size={14} color="#A78BFA" />
+                  <Text style={styles.studyingNowTitle}>Studying Now ({members.length})</Text>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.studyingNowList}
+                >
+                  {members.map((member) => (
+                    <TouchableOpacity
+                      key={member.userId}
+                      style={styles.memberAvatarTouch}
+                      onPress={() => handleMemberPress(member)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.memberAvatarWrapper}>
+                        {member.avatarUrl ? (
+                          <Image source={{ uri: member.avatarUrl }} style={styles.memberAvatarImage} />
+                        ) : (
+                          <View style={[styles.memberAvatarFallback, { backgroundColor: getColorForUser(member.userId) }]}>
+                            <Text style={styles.memberInitialsText}>{member.initials}</Text>
+                          </View>
+                        )}
+                        {/* Active green status indicator dot */}
+                        <View style={styles.memberActiveDot} />
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+
+                  {/* + Invite Dashed Circle Button */}
+                  <TouchableOpacity
+                    style={styles.inviteDashedCard}
+                    onPress={handleShare}
+                    activeOpacity={0.75}
+                  >
+                    <View style={styles.inviteDashedCircle}>
+                      <Plus size={16} color="#A78BFA" />
+                    </View>
+                    <Text style={styles.inviteDashedLabel}>Invite</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
+
+              {/* QUICK CHECK-IN CARD */}
+              <View style={styles.checkinCard}>
+                <View style={styles.checkinHeaderRow}>
+                  <Target size={13} color="#A78BFA" />
+                  <Text style={styles.checkinHeaderTag}>Quick Check-in</Text>
+                </View>
+                <Text style={styles.checkinQuestion}>What are you working on today?</Text>
+
+                <View style={styles.checkinChipsContainer}>
+                  {quickCheckinPresets.map((preset) => {
+                    const isSelected = selectedCheckin === preset;
+                    return (
+                      <TouchableOpacity
+                        key={preset}
+                        style={[styles.checkinChip, isSelected && styles.checkinChipActive]}
+                        onPress={() => handleSelectCheckinChip(preset)}
+                        activeOpacity={0.8}
+                      >
+                        {isSelected && <Check size={12} color="#FFFFFF" strokeWidth={2.5} />}
+                        <Text style={[styles.checkinChipText, isSelected && styles.checkinChipTextActive]} numberOfLines={1}>
+                          {preset}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                  {/* + Custom Chip */}
+                  <TouchableOpacity
+                    style={[
+                      styles.checkinChip,
+                      selectedCheckin && !quickCheckinPresets.includes(selectedCheckin) && styles.checkinChipActive,
+                    ]}
+                    onPress={() => setShowCheckinModal(true)}
+                    activeOpacity={0.8}
+                  >
+                    {selectedCheckin && !quickCheckinPresets.includes(selectedCheckin) ? (
+                      <>
+                        <Check size={12} color="#FFFFFF" strokeWidth={2.5} />
+                        <Text style={styles.checkinChipTextActive} numberOfLines={1}>
+                          {selectedCheckin.length > 10 ? selectedCheckin.slice(0, 10) + '...' : selectedCheckin}
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={12} color="#A5A1B8" />
+                        <Text style={styles.checkinChipText}>Custom</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
         ) : (
-          /* CHAT TAB VIEW */
+          /* CHAT & FEED TAB */
           <KeyboardAvoidingView
-            style={{ flex: 1, backgroundColor: '#0C0C1A' }}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 95 : 0}
+            style={{ flex: 1, backgroundColor: '#0D0C1D' }}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 112 : 0}
           >
-            {/* STICKY MINI HEADER */}
+            {/* Sticky Mini Bar */}
             <View style={styles.stickyMiniBar}>
               <View style={styles.stickyMiniItem}>
-                <Sparkles size={14} color="#A29BFE" />
-                <Text style={styles.stickyMiniTimerText}>
-                  {timerText}
-                </Text>
+                <Text style={styles.stickyMiniTimerText}>{timerText}</Text>
               </View>
-
-              {room.room_type === 'music' && (
-                <TouchableOpacity
-                  style={styles.stickyMiniItem}
-                  onPress={isHost ? handleHostTogglePlay : handleMemberTogglePlay}
-                  activeOpacity={0.7}
-                >
-                  <Music size={13} color="#00B894" />
-                  <Text style={styles.stickyMiniMusicText} numberOfLines={1}>
-                    {isPlayingMusic ? `Playing: ${currentStation.name}` : `Paused: ${currentStation.name}`}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
               <TouchableOpacity
-                style={styles.checkinButtonMini}
+                style={styles.stickyMiniItem}
+                onPress={isHost ? handleHostTogglePlay : handleMemberTogglePlay}
+                activeOpacity={0.7}
+              >
+                <Music size={13} color="#A78BFA" />
+                <Text style={styles.stickyMiniMusicText} numberOfLines={1}>
+                  {isPlayingMusic ? currentStation.name : 'Audio Paused'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.checkinMiniBtn}
                 onPress={() => setShowCheckinModal(true)}
                 activeOpacity={0.8}
               >
-                <CheckCircle size={13} color="#00B894" />
-                <Text style={styles.checkinButtonMiniText}>Check-in ✨</Text>
+                <Target size={12} color="#00B894" />
+                <Text style={styles.checkinMiniBtnText}>Check-in</Text>
               </TouchableOpacity>
             </View>
 
-            {/* CHAT MESSAGES FLATLIST */}
+            {/* Chat Messages List */}
             <FlatList
-              data={[...messages].reverse()}
-              keyExtractor={(item, index) => `${item.id}_${index}`}
+              data={reversedMessages}
+              keyExtractor={(item) => item.id}
               inverted
               removeClippedSubviews={Platform.OS === 'android'}
-              renderItem={({ item }) => <MessageRow message={item} />}
+              renderItem={renderMessageItem}
               contentContainerStyle={styles.chatListContent}
               style={{ flex: 1 }}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
             />
 
-            {/* EMOJI PICKER POPUP */}
-            {showEmojiPicker && (
-              <View style={styles.emojiPickerPopup}>
-                {['👍', '🔥', '👏', '🎯', '🚀', '💡'].map((emoji) => (
-                  <TouchableOpacity
-                    key={emoji}
-                    style={styles.emojiPickerButton}
-                    onPress={() => {
-                      sendReaction(emoji);
-                      setShowEmojiPicker(false);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.emojiPickerText}>{emoji}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* CHAT INPUT ROW */}
-            <View style={styles.inputRow}>
-              <TouchableOpacity
-                style={styles.emojiTriggerButton}
-                onPress={() => setShowEmojiPicker((prev) => !prev)}
-                activeOpacity={0.8}
-              >
-                <Smile size={20} color={showEmojiPicker ? '#5B4FE8' : '#9B9BAF'} />
-              </TouchableOpacity>
-
-              <TextInput
-                style={styles.chatInput}
-                placeholder={getChatPlaceholder()}
-                placeholderTextColor="rgba(255,255,255,0.3)"
-                value={messageInput}
-                onChangeText={setMessageInput}
-                maxLength={200}
-                returnKeyType="send"
-                onSubmitEditing={handleSend}
-                blurOnSubmit={false}
-              />
-              <TouchableOpacity style={styles.sendButton} onPress={handleSend} activeOpacity={0.8}>
-                <Send size={16} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+            {/* Optimized Lag-Free Chat Input Bar */}
+            <ChatInputBar onSendMessage={sendMessage} insetsBottom={insets.bottom} />
           </KeyboardAvoidingView>
         )}
       </View>
+
+      {/* BOTTOM FIXED ACTION BAR */}
+      {activeTab === 'lounge' && (
+        <View style={[styles.bottomActionBar, { paddingBottom: Math.max(12, insets.bottom + 4) }]}>
+          <TouchableOpacity
+            style={styles.bottomBarSecondaryBtn}
+            onPress={handleShare}
+            activeOpacity={0.8}
+          >
+            <UserPlus size={16} color="#FFFFFF" />
+            <Text style={styles.bottomBarSecondaryText}>Invite</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.bottomBarLeaveBtn}
+            onPress={handleLeave}
+            activeOpacity={0.8}
+          >
+            <LogOut size={16} color="#FFFFFF" />
+            <Text style={styles.bottomBarLeaveText}>Leave Room</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.bottomBarSecondaryBtn}
+            onPress={() => setShowMoreModal(true)}
+            activeOpacity={0.8}
+          >
+            <Ellipsis size={18} color="#FFFFFF" />
+            <Text style={styles.bottomBarSecondaryText}>More</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* FLOATING REACTIONS CANVAS */}
       {activeReactions.map((reaction) => (
@@ -1324,7 +1281,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         />
       ))}
 
-      {/* PROGRESS CHECK-IN MODAL */}
+      {/* CUSTOM CHECK-IN MODAL */}
       <Modal
         visible={showCheckinModal}
         transparent
@@ -1347,30 +1304,30 @@ export default function ActiveRoomScreen(): React.JSX.Element {
             >
               <View style={styles.modalHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <CheckCircle size={18} color="#00B894" />
-                  <Text style={styles.modalTitle}>Progress Check-in</Text>
+                  <Target size={18} color="#7C5CFC" />
+                  <Text style={styles.modalTitle}>Set Custom Study Focus</Text>
                 </View>
                 <TouchableOpacity
                   onPress={handleCloseCheckinModal}
                   style={styles.modalCloseBtn}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Text style={{ color: '#9B9BAF', fontWeight: 'bold' }}>✕</Text>
+                  <X size={18} color="#9D9AA8" />
                 </TouchableOpacity>
               </View>
 
               <Text style={styles.modalSubtitle}>
-                Share a quick progress update with your study room members:
+                Tell your study room what topic, chapter, or goal you are working on:
               </Text>
 
               <TextInput
                 style={styles.checkinInput}
-                placeholder="e.g., Finished 2 chapters, solved 10 practice questions..."
-                placeholderTextColor="#9B9BAF"
+                placeholder="e.g. Chapter 4 Thermodynamics, Solving Mock 2..."
+                placeholderTextColor="#64748B"
                 value={checkinNoteInput}
                 onChangeText={setCheckinNoteInput}
                 multiline
-                maxLength={150}
+                maxLength={120}
                 textAlignVertical="top"
               />
 
@@ -1390,7 +1347,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                   onPress={handleProgressCheckinSubmit}
                   disabled={!checkinNoteInput.trim()}
                 >
-                  <Text style={styles.modalSubmitText}>Post Check-in ✨</Text>
+                  <Text style={styles.modalSubmitText}>Save Check-in</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
@@ -1398,265 +1355,189 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ROOM WEEKLY GOAL MODAL */}
+      {/* SOUND CONTROL & STATION PICKER MODAL */}
       <Modal
-        visible={showGoalModal}
+        visible={showSoundModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowGoalModal(false)}
+        onRequestClose={() => setShowSoundModal(false)}
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSoundModal(false)}
         >
           <TouchableOpacity
-            style={styles.goalModalOverlay}
+            style={styles.soundModalContent}
             activeOpacity={1}
-            onPress={() => setShowGoalModal(false)}
+            onPress={(e) => e.stopPropagation()}
           >
-            <TouchableOpacity
-              style={styles.goalModalContainer}
-              activeOpacity={1}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <View style={styles.goalModalHeader}>
-                <View style={styles.goalModalHeaderLeft}>
-                  <Award size={20} color="#FFD700" />
-                  <Text style={styles.goalModalTitle}>Set Weekly Room Target</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setShowGoalModal(false)}
-                  style={styles.goalModalCloseBtn}
-                  activeOpacity={0.7}
-                >
-                  <X size={18} color="#9B9BAF" />
-                </TouchableOpacity>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Volume2 size={18} color="#7C5CFC" />
+                <Text style={styles.modalTitle}>Soundscape Stations</Text>
               </View>
-
-              <Text style={styles.goalModalDesc}>
-                Set the collective focus goal in hours for everyone in this study room.
-              </Text>
-
-              {/* Quick Preset Chips */}
-              <View style={styles.goalPresetRow}>
-                {[20, 35, 50, 75, 100].map((hours) => {
-                  const isSelected = parseFloat(goalHoursInput) === hours;
-                  return (
-                    <TouchableOpacity
-                      key={hours}
-                      style={[styles.goalPresetChip, isSelected && styles.goalPresetChipActive]}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
-                        setGoalHoursInput(String(hours));
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.goalPresetChipText, isSelected && styles.goalPresetChipTextActive]}>
-                        {hours}h
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Stepper Input Row */}
-              <View style={styles.goalInputRow}>
-                <TouchableOpacity
-                  style={styles.goalStepperBtn}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    const curr = parseFloat(goalHoursInput) || 50;
-                    const next = Math.max(5, curr - 5);
-                    setGoalHoursInput(String(next));
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Minus size={18} color="#FFFFFF" />
-                </TouchableOpacity>
-
-                <View style={styles.goalValueBox}>
-                  <TextInput
-                    style={styles.goalTextInput}
-                    value={goalHoursInput}
-                    onChangeText={setGoalHoursInput}
-                    keyboardType="number-pad"
-                    maxLength={4}
-                    selectTextOnFocus
-                  />
-                  <Text style={styles.goalUnitText}>hours / week</Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.goalStepperBtn}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    const curr = parseFloat(goalHoursInput) || 50;
-                    const next = Math.min(500, curr + 5);
-                    setGoalHoursInput(String(next));
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Plus size={18} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.goalProgressSummary}>
-                <Text style={styles.goalProgressSummaryText}>
-                  Current Progress: <Text style={{ color: '#00B894', fontWeight: 'bold' }}>{(totalRoomFocusMinutes / 60).toFixed(1)}h</Text> logged
-                </Text>
-              </View>
-
-              {/* Save Target Button */}
-              <TouchableOpacity
-                style={styles.goalSaveBtn}
-                onPress={() => {
-                  const hours = parseFloat(goalHoursInput);
-                  if (!isNaN(hours) && hours > 0) {
-                    const mins = Math.round(hours * 60);
-                    setRoomWeeklyGoalTargetMins(mins);
-                    if (id) {
-                      AsyncStorage.setItem(`@room_target_${id}`, String(hours)).catch(() => {});
-                    }
-                    if (reactionChannelRef.current) {
-                      try {
-                        reactionChannelRef.current.send({
-                          type: 'broadcast',
-                          event: 'goal_updated',
-                          payload: { targetHours: hours },
-                        });
-                      } catch (e) {}
-                    }
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                    setShowGoalModal(false);
-                  } else {
-                    Alert.alert('Invalid Target', 'Please enter a valid target in hours.');
-                  }
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.goalSaveBtnText}>Save Target</Text>
+              <TouchableOpacity onPress={() => setShowSoundModal(false)}>
+                <X size={18} color="#9D9AA8" />
               </TouchableOpacity>
-            </TouchableOpacity>
+            </View>
+
+            <View style={styles.soundStationsList}>
+              {STATIONS.map((station) => {
+                const isSelected = currentStation.id === station.id;
+                return (
+                  <TouchableOpacity
+                    key={station.id}
+                    style={[styles.soundStationCard, isSelected && styles.soundStationCardActive]}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      handleHostSelectStation(station);
+                      setShowSoundModal(false);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.stationInfoLeft}>
+                      <Text style={styles.stationNameText}>{station.name}</Text>
+                      <Text style={styles.stationGenreText}>{station.genre}</Text>
+                    </View>
+                    {isSelected && (
+                      <View style={styles.stationActivePill}>
+                        <Text style={styles.stationActivePillText}>Playing</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Volume Control Slider */}
+            <View style={styles.modalVolumeSection}>
+              <View style={styles.modalVolumeHeader}>
+                <Text style={styles.volumeLabel}>Volume</Text>
+              </View>
+              <RoomVolumeSlider
+                volume={musicVolume}
+                onVolumeChange={changeVolume}
+                accentColor="#7C5CFC"
+                trackHeight={34}
+              />
+            </View>
           </TouchableOpacity>
-        </KeyboardAvoidingView>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* MORE OPTIONS SHEET */}
+      <Modal
+        visible={showMoreModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMoreModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMoreModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.moreModalContent}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Room Options</Text>
+              <TouchableOpacity onPress={() => setShowMoreModal(false)}>
+                <X size={18} color="#9D9AA8" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Room Code Quick Copy */}
+            <TouchableOpacity
+              style={styles.moreActionRow}
+              onPress={async () => {
+                try {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  const clipboard = require('expo-clipboard');
+                  if (clipboard?.setStringAsync) {
+                    await clipboard.setStringAsync(shortCode);
+                  }
+                  Alert.alert('Room Code Copied!', `Code #${shortCode} copied to clipboard.`);
+                  setShowMoreModal(false);
+                } catch (e) {}
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.moreActionIcon}>
+                <Copy size={16} color="#7C5CFC" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.moreActionText}>Copy Room Code (#{shortCode})</Text>
+                <Text style={styles.moreActionSub}>Share with friends to let them join</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Invite Friends */}
+            <TouchableOpacity
+              style={styles.moreActionRow}
+              onPress={() => {
+                setShowMoreModal(false);
+                handleShare();
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.moreActionIcon}>
+                <Share2 size={16} color="#00B894" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.moreActionText}>Share Invite Link</Text>
+                <Text style={styles.moreActionSub}>Invite via WhatsApp, Telegram, or message</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* If Host: End Room */}
+            {isHost && (
+              <TouchableOpacity
+                style={[styles.moreActionRow, { borderBottomWidth: 0 }]}
+                onPress={() => {
+                  setShowMoreModal(false);
+                  handleLeave();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.moreActionIcon, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
+                  <LogOut size={16} color="#EF4444" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.moreActionText, { color: '#EF4444' }]}>End Room for Everyone</Text>
+                  <Text style={styles.moreActionSub}>Finish the study session as host</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
 }
 
-// Helper components for local renders to avoid unnecessary re-renders
-const MemberBubble = React.memo<{
-  member: RoomMember;
-  formatTimeAgo: (t: string) => string;
-  onPress: (member: RoomMember) => void;
-}>(({
-  member,
-  formatTimeAgo,
-  onPress,
-}) => {
-  const borderOpacity = useSharedValue(1);
+// Chat message bubble subcomponent
+const MessageRow = React.memo<{ message: ChatMessage; isMe: boolean }>(({ message, isMe }) => {
+  const avatarColor = useMemo(() => getColorForUser(message.userId), [message.userId]);
 
-  useEffect(() => {
-    borderOpacity.value = withRepeat(
-      withSequence(
-        withTiming(0.4, { duration: 750 }),
-        withTiming(1, { duration: 750 })
-      ),
-      -1,
-      true
-    );
-  }, []);
-
-  const pulseStyle = useAnimatedStyle(() => ({
-    borderColor: member.isFocusing ? '#E85858' : '#00B894',
-    borderWidth: 2,
-    opacity: borderOpacity.value,
-  }));
-
-  const GRADIENT_PAIRS = [
-    { start: '#6C5CE7', end: '#A29BFE' },
-    { start: '#FF7675', end: '#FD79A8' },
-    { start: '#00B894', end: '#55EFC4' },
-    { start: '#E17055', end: '#FDCB6E' },
-    { start: '#0984E3', end: '#74B9FF' },
-    { start: '#6C5CE7', end: '#E84393' },
-  ];
-  const charCodeSum = (member.userId || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const gradPair = GRADIENT_PAIRS[charCodeSum % GRADIENT_PAIRS.length];
-
-  return (
-    <View style={styles.memberBubbleContainer}>
-      <TouchableOpacity
-        onPress={() => onPress(member)}
-        activeOpacity={0.8}
-      >
-        <Animated.View style={[styles.avatarCircle, pulseStyle]}>
-          {member.avatarUrl ? (
-            <Image source={{ uri: member.avatarUrl }} style={styles.avatarImage} />
-          ) : (
-            <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
-              <Defs>
-                <LinearGradient id={`grad-${member.userId}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                  <Stop offset="0%" stopColor={gradPair.start} />
-                  <Stop offset="100%" stopColor={gradPair.end} />
-                </LinearGradient>
-              </Defs>
-              <Rect width="100%" height="100%" fill={`url(#grad-${member.userId})`} rx={26} ry={26} />
-            </Svg>
-          )}
-          {!member.avatarUrl && <Text style={styles.avatarInitials}>{member.initials}</Text>}
-
-          {member.isFocusing && (
-            <View style={styles.liveFocusBadge}>
-              <Text style={styles.liveFocusBadgeText}>
-                {member.focusTimeLeft && member.focusTimeLeft > 0
-                  ? `${Math.ceil(member.focusTimeLeft / 60)}m`
-                  : '🔥'}
-              </Text>
-            </View>
-          )}
-        </Animated.View>
-      </TouchableOpacity>
-
-      <Text style={styles.memberName} numberOfLines={1}>
-        {member.name}
-      </Text>
-      {member.lastCheckinNote ? (
-        <Text style={styles.memberCheckinNote} numberOfLines={1}>
-          🎯 {member.lastCheckinNote}
-        </Text>
-      ) : (
-        <Text style={styles.memberJoinedTime}>
-          {formatTimeAgo(member.joinedAt)}
-        </Text>
-      )}
-    </View>
-  );
-});
-
-const MessageRow = React.memo<{ message: ChatMessage }>(({ message }) => {
-  const { profile } = useAuthStore();
-  const isMe = profile?.id === message.userId;
-  const avatarColor = getColorForUser(message.userId);
-
-  const formatMessageTime = (isoString: string) => {
+  const formattedTime = useMemo(() => {
     try {
-      const date = new Date(isoString);
+      const date = new Date(message.sentAt);
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
     } catch (e) {
       return '';
     }
-  };
+  }, [message.sentAt]);
 
   return (
     <View style={[styles.messageRow, isMe && styles.messageRowOwn]}>
       {!isMe && (
         <View style={[styles.msgAvatar, { backgroundColor: avatarColor }]}>
           {message.userAvatar ? (
-            <Image
-              source={{ uri: message.userAvatar }}
-              style={styles.msgAvatarImage}
-            />
+            <Image source={{ uri: message.userAvatar }} style={styles.msgAvatarImage} />
           ) : (
             <Text style={styles.msgAvatarText}>{message.userInitials}</Text>
           )}
@@ -1668,9 +1549,108 @@ const MessageRow = React.memo<{ message: ChatMessage }>(({ message }) => {
         <View style={[styles.messageBubble, isMe ? styles.messageBubbleOwn : styles.messageBubbleOther]}>
           <Text style={styles.messageText}>{message.text}</Text>
           <Text style={[styles.messageTimeText, isMe ? styles.messageTimeTextOwn : styles.messageTimeTextOther]}>
-            {formatMessageTime(message.sentAt)}
+            {formattedTime}
           </Text>
         </View>
+      </View>
+    </View>
+  );
+});
+
+// Optimized Isolated Chat Input Bar (Prevents Parent Screen Re-renders on Keystrokes)
+interface ChatInputBarProps {
+  onSendMessage: (text: string) => void;
+  insetsBottom: number;
+}
+
+const ChatInputBar = React.memo<ChatInputBarProps>(({ onSendMessage, insetsBottom }) => {
+  const [inputText, setInputText] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const handleSend = useCallback(() => {
+    const trimmed = inputText.trim();
+    if (!trimmed) return;
+    onSendMessage(trimmed);
+    setInputText('');
+  }, [inputText, onSendMessage]);
+
+  const sendQuickReaction = useCallback(
+    (reaction: string) => {
+      onSendMessage(reaction);
+      setShowEmojiPicker(false);
+    },
+    [onSendMessage]
+  );
+
+  return (
+    <View style={{ backgroundColor: '#16142E' }}>
+      {/* Quick Reaction Popup */}
+      {showEmojiPicker && (
+        <View style={styles.emojiPickerPopup}>
+          {['Focus', 'Done', 'Sprint', 'Break', 'Ready', 'Goal'].map((reactionText) => (
+            <TouchableOpacity
+              key={reactionText}
+              style={styles.emojiPickerButton}
+              onPress={() => sendQuickReaction(reactionText)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.emojiPickerText}>{reactionText}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Chat Input Row */}
+      <View
+        style={[
+          styles.chatInputRow,
+          { paddingBottom: keyboardVisible ? 8 : Math.max(8, insetsBottom + 2) },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.emojiTriggerButton}
+          onPress={() => setShowEmojiPicker((prev) => !prev)}
+          activeOpacity={0.8}
+        >
+          <Smile size={20} color={showEmojiPicker ? '#7C5CFC' : '#9D9AA8'} />
+        </TouchableOpacity>
+
+        <TextInput
+          style={styles.chatTextInput}
+          placeholder="Type a message or cheering thought..."
+          placeholderTextColor="rgba(255, 255, 255, 0.35)"
+          value={inputText}
+          onChangeText={setInputText}
+          maxLength={200}
+          returnKeyType="send"
+          onSubmitEditing={handleSend}
+          blurOnSubmit={false}
+        />
+
+        <TouchableOpacity
+          style={[styles.chatSendButton, !inputText.trim() && styles.chatSendButtonDisabled]}
+          onPress={handleSend}
+          activeOpacity={0.8}
+          disabled={!inputText.trim()}
+        >
+          <Send size={15} color={inputText.trim() ? '#FFFFFF' : 'rgba(255, 255, 255, 0.4)'} />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -1679,1077 +1659,708 @@ const MessageRow = React.memo<{ message: ChatMessage }>(({ message }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0C0C1A',
+    backgroundColor: '#0D0C1D',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#0C0C1A',
+    backgroundColor: '#0D0C1D',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 24,
   },
   errorText: {
-    color: '#FF6B6B',
+    color: '#EF4444',
     fontFamily: 'DMSans-Medium',
-    fontSize: 15,
+    fontSize: 16,
     marginBottom: 20,
+    textAlign: 'center',
   },
   leaveButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 24,
   },
   leaveButtonText: {
     color: '#FFFFFF',
-    fontFamily: 'DMSans-Medium',
+    fontFamily: 'DMSans-Bold',
     fontSize: 14,
   },
+
+  // TOP BAR
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.06)',
-    backgroundColor: '#14142B',
+    backgroundColor: '#0D0C1D',
   },
-  backIconButton: {
+  iconCircleBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#1E1B38',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  headerGroupInfo: {
+  headerTitleGroup: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 8,
-    gap: 8,
-    overflow: 'hidden',
+    marginHorizontal: 10,
+    gap: 10,
   },
-  headerGroupAvatar: {
+  roomIconBox: {
     width: 38,
     height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(108, 92, 231, 0.25)',
-    borderWidth: 1.5,
-    borderColor: '#7D6BFB',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#6C5CE7',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 4,
-    flexShrink: 0,
-  },
-  headerGroupEmoji: {
-    fontSize: 18,
-  },
-  headerTextCol: {
-    flex: 1,
-    overflow: 'hidden',
-    justifyContent: 'center',
-  },
-  roomTitle: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: -0.2,
-  },
-  headerSubRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-    overflow: 'hidden',
-  },
-  headerSubText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.6)',
-  },
-  headerSubDot: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.35)',
-  },
-  subjectInlineBadge: {
-    backgroundColor: 'rgba(108, 92, 231, 0.2)',
-    borderRadius: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(125, 107, 251, 0.4)',
-    maxWidth: 95,
-  },
-  subjectInlineBadgeText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 9.5,
-    color: '#B8ADFF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    fontWeight: 'bold',
-  },
-  codeBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  codeBadgeText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 9.5,
-    color: '#FFFFFF',
-    letterSpacing: 0.8,
-    fontWeight: 'bold',
-  },
-  headerRightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-  },
-  shareTopButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  memberBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(46, 213, 115, 0.16)',
-    borderWidth: 1,
-    borderColor: 'rgba(46, 213, 115, 0.35)',
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    gap: 6,
-  },
-  liveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#2ED573',
-    shadowColor: '#2ED573',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  memberBadgeText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#2ED573',
-  },
-  timerCard: {
-    backgroundColor: '#16142A',
-    borderRadius: 22,
-    marginHorizontal: 16,
-    marginVertical: 12,
-    padding: 18,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(124, 58, 237, 0.28)',
-    shadowColor: '#5B4FE8',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 14,
-    elevation: 4,
-  },
-  timerTopHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: 10,
-  },
-  timerTopBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(108, 92, 231, 0.16)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(108, 92, 231, 0.3)',
-  },
-  timerTopBadgeText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#C4B5FD',
-    letterSpacing: 0.6,
-  },
-  timerStatusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  timerStatusText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    color: '#D1D5DB',
-    fontWeight: '600',
-  },
-  timerDisplay: {
-    fontFamily: 'DMMono',
-    fontSize: 52,
-    color: '#FFFFFF',
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginVertical: 2,
-  },
-  timerSubText: {
-    fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#9E9EB8',
-    marginTop: 2,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  presetPillsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-    width: '100%',
-    justifyContent: 'center',
-  },
-  presetPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  presetPillActive: {
-    backgroundColor: 'rgba(91, 79, 232, 0.28)',
-    borderColor: '#7C3AED',
-  },
-  presetPillText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    color: '#9B9BAF',
-    fontWeight: '600',
-  },
-  presetPillTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  focusBtnContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  pulseActiveIndicatorFocus: {
-    backgroundColor: '#00B894',
-  },
-  timerLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    marginTop: 4,
-    backgroundColor: 'rgba(108, 92, 231, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(108, 92, 231, 0.25)',
-  },
-  pulseActiveIndicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#A29BFE',
-  },
-  timerSub: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 10.5,
-    color: '#D6CEFF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  membersSection: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  membersHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    paddingHorizontal: 4,
-  },
-  sectionLabel: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: 'rgba(255, 255, 255, 0.5)',
-    letterSpacing: 1,
-  },
-  interactionSubtitle: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    color: '#FFD166',
-    backgroundColor: 'rgba(255, 209, 102, 0.12)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  membersGridContent: {
-    paddingBottom: 4,
-  },
-  membersGridRow: {
-    gap: 8,
-    justifyContent: 'flex-start',
-    marginBottom: 10,
-  },
-  memberBubbleContainer: {
-    width: COLUMN_WIDTH,
-    alignItems: 'center',
-  },
-  avatarCircle: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    backgroundColor: '#6D44DC',
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
+    shadowColor: '#6D44DC',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
     shadowRadius: 5,
     elevation: 3,
   },
-  avatarImage: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-  },
-  avatarInitials: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 19,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    zIndex: 1,
-  },
-  memberName: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    color: '#F5F5FA',
-    marginTop: 6,
-    textAlign: 'center',
-    width: '100%',
-  },
-  memberJoinedTime: {
-    fontFamily: 'DMSans',
-    fontSize: 9.5,
-    color: 'rgba(255, 255, 255, 0.45)',
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  chatSection: {
+  titleInfoCol: {
     flex: 1,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingTop: 10,
   },
-  chatSectionExpanded: {
-    flex: 1,
-    paddingTop: 4,
-    backgroundColor: '#0C0C1A',
-  },
-  chatHeader: {
-    paddingHorizontal: 16,
-    marginBottom: 6,
-  },
-  chatHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  expandChatButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(108,92,231,0.18)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(108,92,231,0.35)',
-  },
-  expandChatButtonText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 11,
-    color: '#A29BFE',
-    fontWeight: '700',
-  },
-  expandedChatHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#14142B',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  expandedTitleCol: {
-    flex: 1,
-    paddingRight: 10,
-  },
-  expandedRoomTitle: {
+  roomHeaderTitle: {
     fontFamily: 'DMSans-Bold',
     fontSize: 15,
-    fontWeight: 'bold',
     color: '#FFFFFF',
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
-  expandedRoomSub: {
-    fontFamily: 'DMSans',
-    fontSize: 11,
-    color: '#A0A0B8',
-    marginTop: 2,
-  },
-  minimizeChatButton: {
+  headerSubPillsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#6C5CE7',
-    paddingHorizontal: 12,
+    marginTop: 3,
+  },
+  categoryPill: {
+    backgroundColor: '#231F44',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    maxWidth: 105,
+  },
+  categoryPillText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#C4B5FD',
+  },
+  memberPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#231F44',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 3,
+  },
+  memberPillText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    color: '#A78BFA',
+  },
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  liveIndicatorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.35)',
+    borderRadius: 14,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    gap: 5,
+  },
+  liveIndicatorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  liveIndicatorText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10.5,
+    color: '#10B981',
+    letterSpacing: 0.5,
+  },
+
+  // SEGMENTED SWITCHER
+  tabSwitchContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#191732',
+    borderRadius: 16,
+    padding: 4,
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  tabSwitchBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 6,
+  },
+  tabSwitchBtnActive: {
+    backgroundColor: '#7C5CFC',
+    shadowColor: '#7C5CFC',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  tabSwitchText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12.5,
+    color: '#9D9AA8',
+  },
+  tabSwitchTextActive: {
+    color: '#FFFFFF',
+    fontFamily: 'DMSans-Bold',
+    fontWeight: '700',
+  },
+  chatUnreadDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+
+  // FIXED LOUNGE CONTAINER
+  fixedLoungeContainer: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  contentPadding: {
+    flex: 1,
+    paddingHorizontal: 16,
+    justifyContent: 'space-evenly',
+    paddingBottom: 4,
+  },
+
+  // HERO ARTWORK & CIRCULAR TIMER
+  heroArtworkContainer: {
+    width: '100%',
+    height: 250,
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: '#0D0C1D',
+  },
+  heroImageBg: {
+    width: '100%',
+    height: '100%',
+  },
+  heroDarkOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(13, 12, 29, 0.22)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  circularTimerWrapper: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  timerCenterContent: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    paddingHorizontal: 4,
+  },
+  timerDigitsText: {
+    fontFamily: 'DMMono',
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+  timerDigitsLong: {
+    // 8+ characters: e.g. "03:19:41"
+    fontSize: Platform.OS === 'android' ? 24 : 25,
+    letterSpacing: Platform.OS === 'android' ? 0.1 : 0.3,
+  },
+  timerDigitsMedium: {
+    // 6-7 characters: e.g. "1:23:45"
+    fontSize: Platform.OS === 'android' ? 27 : 28,
+    letterSpacing: Platform.OS === 'android' ? 0.2 : 0.4,
+  },
+  timerDigitsStandard: {
+    // 5 characters or less: e.g. "25:00", "09:41", "Ended"
+    fontSize: Platform.OS === 'android' ? 33 : 34,
+    letterSpacing: Platform.OS === 'android' ? 0.3 : 0.5,
+  },
+  timerMinutesSub: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.75)',
+    marginTop: 2,
+    marginBottom: 6,
+    textAlign: 'center',
+    maxWidth: 140,
+    includeFontPadding: false,
+  },
+  timerPlayPauseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#7C5CFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#7C5CFC',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+
+  // AMBIENT SOUNDSCAPE STRIP
+  soundscapeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#191732',
+    borderRadius: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  soundscapeIconsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  soundChipBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#232042',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  soundChipBtnActive: {
+    backgroundColor: '#7C5CFC',
+  },
+  soundDropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#232042',
+    paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 10,
+    gap: 5,
+    maxWidth: 120,
   },
-  minimizeChatButtonText: {
+  soundDropdownText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#FFFFFF',
+    flexShrink: 1,
+  },
+
+  // STUDYING NOW SECTION
+  studyingNowSection: {},
+  studyingNowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 6,
+  },
+  studyingNowTitle: {
     fontFamily: 'DMSans-Bold',
     fontSize: 12,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    color: '#A5A1B8',
+    letterSpacing: 0.3,
   },
-  chatDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  studyingNowList: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  memberAvatarTouch: {
+    position: 'relative',
+  },
+  memberAvatarWrapper: {
+    position: 'relative',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  memberAvatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  memberAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  memberInitialsText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  memberActiveDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: '#0D0C1D',
+  },
+  inviteDashedCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    marginLeft: 2,
+  },
+  inviteDashedCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#7C5CFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(124, 92, 252, 0.08)',
+  },
+  inviteDashedLabel: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 9.5,
+    color: '#A5A1B8',
+  },
+
+  // QUICK CHECK-IN CARD
+  checkinCard: {
+    backgroundColor: '#1A1736',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(124, 92, 252, 0.22)',
+  },
+  checkinHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 3,
+  },
+  checkinHeaderTag: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10.5,
+    color: '#C4B5FD',
+  },
+  checkinQuestion: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13.5,
+    color: '#FFFFFF',
     marginBottom: 8,
   },
+  checkinChipsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  checkinChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#252147',
+    paddingVertical: 7,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  checkinChipActive: {
+    backgroundColor: '#7C5CFC',
+    borderColor: '#7C5CFC',
+  },
+  checkinChipText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#C4B5FD',
+    textAlign: 'center',
+  },
+  checkinChipTextActive: {
+    color: '#FFFFFF',
+    fontFamily: 'DMSans-Bold',
+  },
+
+  // BOTTOM ACTION BAR
+  bottomActionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#111024',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 10,
+  },
+  bottomBarSecondaryBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1F1B3C',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  bottomBarSecondaryText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12.5,
+    color: '#FFFFFF',
+  },
+  bottomBarLeaveBtn: {
+    flex: 1.35,
+    height: 44,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F43F5E',
+    gap: 6,
+    shadowColor: '#F43F5E',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  bottomBarLeaveText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+
+  // STICKY MINI BAR IN CHAT
+  stickyMiniBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#16142E',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  stickyMiniItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  stickyMiniTimerText: {
+    fontFamily: 'DMMono',
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  stickyMiniMusicText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#C4B5FD',
+    maxWidth: 120,
+  },
+  checkinMiniBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 184, 148, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  checkinMiniBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#00B894',
+  },
+
+  // CHAT LIST & MESSAGES
   chatListContent: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 12,
+    paddingVertical: 12,
   },
   messageRow: {
     flexDirection: 'row',
+    marginVertical: 4,
     alignItems: 'flex-end',
     gap: 8,
-    alignSelf: 'flex-start',
-    maxWidth: '84%',
   },
   messageRowOwn: {
-    alignSelf: 'flex-end',
     justifyContent: 'flex-end',
   },
   msgAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
   },
   msgAvatarImage: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   msgAvatarText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 11,
-    fontWeight: 'bold',
+    fontSize: 10,
     color: '#FFFFFF',
   },
   messageBubbleColumn: {
-    gap: 4,
+    maxWidth: '78%',
   },
   messageBubbleColumnOwn: {
     alignItems: 'flex-end',
   },
   messageSenderName: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.55)',
+    fontSize: 10.5,
+    color: '#9D9AA8',
+    marginBottom: 2,
     marginLeft: 4,
   },
   messageBubble: {
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    minWidth: 70,
-  },
-  messageBubbleOwn: {
-    backgroundColor: '#6C5CE7',
-    borderBottomRightRadius: 4,
-    shadowColor: '#6C5CE7',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 3,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   messageBubbleOther: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#1E1B38',
     borderBottomLeftRadius: 4,
+  },
+  messageBubbleOwn: {
+    backgroundColor: '#7C5CFC',
+    borderBottomRightRadius: 4,
   },
   messageText: {
     fontFamily: 'DMSans',
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
     color: '#FFFFFF',
+    lineHeight: 18,
   },
   messageTimeText: {
+    fontFamily: 'DMSans',
     fontSize: 9.5,
-    fontFamily: 'DMMono',
-    marginTop: 4,
+    marginTop: 3,
     alignSelf: 'flex-end',
   },
-  messageTimeTextOwn: {
-    color: 'rgba(255, 255, 255, 0.75)',
-  },
   messageTimeTextOther: {
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: '#9D9AA8',
   },
-  inputRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    paddingBottom: Platform.OS === 'ios' ? 14 : 10,
-    backgroundColor: '#14142B',
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    gap: 10,
-    alignItems: 'center',
+  messageTimeTextOwn: {
+    color: 'rgba(255, 255, 255, 0.7)',
   },
-  chatInput: {
-    flex: 1,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.14)',
-    paddingHorizontal: 16,
-    paddingTop: 0,
-    paddingBottom: 0,
-    color: '#FFFFFF',
-    fontFamily: 'DMSans',
-    fontSize: 14,
-    textAlignVertical: 'center',
-  },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#6C5CE7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#6C5CE7',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  bottomContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#0C0C1A',
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  bottomContainerNoChat: {
-    marginTop: 'auto',
-  },
-  focusButton: {
-    width: '100%',
-    height: 50,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#5B4FE8',
-    shadowColor: '#5B4FE8',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  stopFocusButton: {
-    backgroundColor: '#E85858',
-    shadowColor: '#E85858',
-  },
-  focusButtonText: {
-    color: '#FFFFFF',
-    fontFamily: 'DMSans-Bold',
-    fontSize: 15,
-    fontWeight: 'bold',
-    letterSpacing: 0.3,
-  },
-  goalModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  goalModalContainer: {
-    width: '100%',
-    maxWidth: 380,
-    backgroundColor: '#1E1A29',
-    borderRadius: 22,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.45,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  goalModalHeader: {
+
+  // CHAT INPUT ROW
+  chatInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  goalModalHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  goalModalTitle: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  goalModalCloseBtn: {
-    padding: 4,
-  },
-  goalModalDesc: {
-    fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#9E9EB8',
-    marginBottom: 16,
-    lineHeight: 17,
-  },
-  goalPresetRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  goalPresetChip: {
-    paddingVertical: 7,
+    backgroundColor: '#16142E',
     paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  goalPresetChipActive: {
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    borderColor: '#FFD700',
-  },
-  goalPresetChipText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 12,
-    color: '#9B9BAF',
-    fontWeight: '600',
-  },
-  goalPresetChipTextActive: {
-    color: '#FFD700',
-    fontWeight: '700',
-  },
-  goalInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#141221',
-    borderRadius: 14,
-    padding: 8,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  goalStepperBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  goalValueBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  goalTextInput: {
-    fontFamily: 'DMMono',
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    padding: 0,
-    minWidth: 70,
-  },
-  goalUnitText: {
-    fontFamily: 'DMSans',
-    fontSize: 11,
-    color: '#9E9EB8',
-    marginTop: 2,
-  },
-  goalProgressSummary: {
-    backgroundColor: 'rgba(0, 184, 148, 0.12)',
-    borderRadius: 10,
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 184, 148, 0.25)',
-  },
-  goalProgressSummaryText: {
-    fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#D1D5DB',
-  },
-  goalSaveBtn: {
-    backgroundColor: '#FFD700',
-    borderRadius: 14,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  goalSaveBtnText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#16142A',
-  },
-  reactionsContainer: {
-    display: 'none',
-  },
-  emojiPickerPopup: {
-    position: 'absolute',
-    bottom: 60,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#1B1B36',
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 6,
-    zIndex: 10,
-  },
-  emojiPickerButton: {
-    padding: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emojiPickerText: {
-    fontSize: 24,
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
   },
   emojiTriggerButton: {
-    width: 40,
-    height: 40,
+    padding: 6,
+  },
+  chatTextInput: {
+    flex: 1,
+    backgroundColor: '#201D3D',
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  musicBar: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderRadius: 20,
-    marginHorizontal: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    marginBottom: 10,
-  },
-  musicRowHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  musicInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  musicIconWrapper: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: 'rgba(108, 92, 231, 0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(108, 92, 231, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  musicStationName: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  musicStationGenre: {
     fontFamily: 'DMSans',
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.45)',
-    marginTop: 1,
-  },
-  musicControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  musicPlayButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#6C5CE7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#6C5CE7',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  musicPlayButtonActive: {
-    backgroundColor: '#4834D4',
-  },
-  musicMuteButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stationSelectorContainer: {
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    paddingTop: 8,
-  },
-  hostControlTag: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 9,
-    fontWeight: 'bold',
-    color: '#FFD166',
-    letterSpacing: 0.6,
-    marginBottom: 6,
-  },
-  stationSelector: {
-    flexGrow: 0,
-  },
-  stationSelectorContent: {
-    gap: 8,
-    paddingRight: 10,
-  },
-  stationChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  stationChipActive: {
-    backgroundColor: 'rgba(108, 92, 231, 0.22)',
-    borderColor: '#6C5CE7',
-  },
-  stationEmoji: {
     fontSize: 13,
   },
-  stationChipText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11.5,
-    color: 'rgba(255, 255, 255, 0.6)',
-  },
-  stationChipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  memberMusicTag: {
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-    paddingTop: 8,
-  },
-  memberMusicTagText: {
-    fontFamily: 'DMSans',
-    fontSize: 10.5,
-    color: 'rgba(255, 255, 255, 0.4)',
-    lineHeight: 15,
-  },
-  roomGoalCard: {
-    backgroundColor: '#1E1E38',
-    borderRadius: 14,
-    padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#2A2A4A',
-  },
-  roomGoalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  roomGoalTitle: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  roomGoalEditBtn: {
-    backgroundColor: 'rgba(255, 215, 0, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  roomGoalEditBtnText: {
-    fontFamily: 'DMMono',
-    fontSize: 10,
-    color: '#FFD700',
-    fontWeight: '700',
-  },
-  roomGoalProgressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  roomGoalTrack: {
-    flex: 1,
-    height: 6,
-    backgroundColor: '#14142B',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  roomGoalFill: {
-    height: '100%',
-    backgroundColor: '#00B894',
-    borderRadius: 3,
-  },
-  roomGoalProgressText: {
-    fontFamily: 'DMMono',
-    fontSize: 11,
-    color: '#00B894',
-    fontWeight: '700',
-  },
-  bottomActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    width: '100%',
-  },
-  checkinButton: {
-    backgroundColor: '#1E1E38',
-    height: 48,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
+  chatSendButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#7C5CFC',
     justifyContent: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: '#00B894',
+    alignItems: 'center',
   },
-  checkinButtonText: {
+  chatSendButtonDisabled: {
+    opacity: 0.45,
+    backgroundColor: 'rgba(124, 92, 252, 0.4)',
+  },
+  emojiPickerPopup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    backgroundColor: '#201D3D',
+    padding: 8,
+    gap: 6,
+    marginHorizontal: 16,
+    marginBottom: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  emojiPickerButton: {
+    backgroundColor: '#2B274F',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  emojiPickerText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 12,
-    color: '#00B894',
-    fontWeight: '600',
-  },
-  liveFocusBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#E85858',
-    borderRadius: 10,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderWidth: 1.5,
-    borderColor: '#0C0C1A',
-  },
-  liveFocusBadgeText: {
-    fontFamily: 'DMMono',
-    fontSize: 9,
     color: '#FFFFFF',
-    fontWeight: 'bold',
   },
-  memberCheckinNote: {
-    fontFamily: 'DMSans',
-    fontSize: 9,
-    color: '#00B894',
-    textAlign: 'center',
-    marginTop: 2,
-  },
+
+  // MODAL OVERLAYS & SHEETS
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(12, 12, 26, 0.8)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(10, 9, 22, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   modalContent: {
-    backgroundColor: '#1E1E38',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#191736',
+    borderRadius: 24,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#2A2A4A',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -2761,190 +2372,165 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans-Bold',
     fontSize: 16,
     color: '#FFFFFF',
-    fontWeight: '700',
   },
   modalCloseBtn: {
-    padding: 6,
-    backgroundColor: '#14142B',
-    borderRadius: 12,
+    padding: 4,
   },
   modalSubtitle: {
     fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#9B9BAF',
+    fontSize: 13,
+    color: '#9D9AA8',
     marginBottom: 14,
+    lineHeight: 18,
   },
   checkinInput: {
-    backgroundColor: '#14142B',
-    borderRadius: 12,
+    backgroundColor: '#231F44',
+    borderRadius: 14,
     padding: 12,
+    color: '#FFFFFF',
     fontFamily: 'DMSans',
     fontSize: 13,
-    color: '#FFFFFF',
-    minHeight: 80,
-    textAlignVertical: 'top',
+    height: 80,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#2A2A4A',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   modalActionsRow: {
     flexDirection: 'row',
+    justifyContent: 'flex-end',
     gap: 10,
   },
   modalCancelBtn: {
-    flex: 1,
-    height: 44,
-    backgroundColor: '#14142B',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
   modalCancelText: {
-    fontFamily: 'DMSans',
-    fontSize: 13,
-    color: '#9B9BAF',
-  },
-  modalSubmitBtn: {
-    flex: 2,
-    height: 44,
-    backgroundColor: '#00B894',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalSubmitBtnDisabled: {
-    backgroundColor: '#2A2A4A',
-  },
-  modalSubmitText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 13,
+    color: '#9D9AA8',
+  },
+  modalSubmitBtn: {
+    backgroundColor: '#7C5CFC',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+  },
+  modalSubmitBtnDisabled: {
+    opacity: 0.5,
+  },
+  modalSubmitText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
     color: '#FFFFFF',
-    fontWeight: '600',
   },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#14142B',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+
+  // SOUND MODAL
+  soundModalContent: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#191736',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  soundStationsList: {
     gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    marginVertical: 12,
   },
-  tabButton: {
-    flex: 1,
+  soundStationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    justifyContent: 'space-between',
+    backgroundColor: '#231F44',
+    padding: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.06)',
   },
-  tabButtonActive: {
-    backgroundColor: 'rgba(108, 92, 231, 0.25)',
-    borderColor: '#6C5CE7',
+  soundStationCardActive: {
+    borderColor: '#7C5CFC',
+    backgroundColor: '#2B2456',
   },
-  tabButtonText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontWeight: '600',
+  stationInfoLeft: {
+    flex: 1,
   },
-  tabButtonTextActive: {
-    color: '#FFFFFF',
+  stationNameText: {
     fontFamily: 'DMSans-Bold',
-  },
-  chatBadge: {
-    backgroundColor: '#6C5CE7',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginLeft: 2,
-  },
-  chatBadgeText: {
-    fontFamily: 'DMMono',
-    fontSize: 9.5,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  stickyMiniBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#14142B',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  stickyMiniItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  stickyMiniTimerText: {
-    fontFamily: 'DMMono',
     fontSize: 13,
-    fontWeight: 'bold',
-    color: '#F0E6FF',
+    color: '#FFFFFF',
   },
-  stickyMiniMusicText: {
-    fontFamily: 'DMSans-Medium',
+  stationGenreText: {
+    fontFamily: 'DMSans',
     fontSize: 11,
-    color: '#00B894',
-    maxWidth: 130,
+    color: '#9D9AA8',
+    marginTop: 2,
   },
-  checkinButtonMini: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0, 184, 148, 0.15)',
+  stationActivePill: {
+    backgroundColor: '#7C5CFC',
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 184, 148, 0.3)',
   },
-  checkinButtonMiniText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    color: '#00B894',
-    fontWeight: '600',
+  stationActivePillText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    color: '#FFFFFF',
   },
-  chatPreviewCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderRadius: 16,
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 4,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+  inlineVolumeSliderRow: {
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  modalVolumeSection: {
+    marginTop: 14,
     gap: 8,
   },
-  chatPreviewHeader: {
+  modalVolumeHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  volumeLabel: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#9D9AA8',
+  },
+
+  // MORE MODAL
+  moreModalContent: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#191736',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  moreActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    gap: 12,
+  },
+  moreActionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#231F44',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  chatPreviewTitle: {
+  moreActionText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.5)',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    fontSize: 13,
+    color: '#FFFFFF',
   },
-  chatPreviewOpenText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 11,
-    color: '#A29BFE',
-  },
-  chatPreviewMsgText: {
+  moreActionSub: {
     fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#E0E0F0',
+    fontSize: 11,
+    color: '#9D9AA8',
+    marginTop: 2,
   },
 });

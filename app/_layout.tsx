@@ -565,6 +565,7 @@ function RootLayout() {
                       <Stack.Screen name="(auth)/onboarding/index" options={{ gestureEnabled: false }} />
                       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                       <Stack.Screen name="rooms/index" options={{ headerShown: false }} />
+                      <Stack.Screen name="rooms/create" options={{ headerShown: false }} />
                       <Stack.Screen name="rooms/[id]" options={{ headerShown: false }} />
                       <Stack.Screen name="notifications" options={{ headerShown: false }} />
                       <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_left' }} />

@@ -294,7 +294,7 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
           >
             <Sparkles size={16} color="#FFFFFF" />
             <Text style={styles.doubleXpButtonText}>
-              {isSaving ? 'Claiming 2x XP...' : `Watch Ad for 2x XP (+${calculatedXP * 2} XP) 🎬`}
+              {isSaving ? 'Claiming 2x XP...' : `Watch Ad for 2x XP (+${calculatedXP * 2} XP)`}
             </Text>
           </TouchableOpacity>
         )}

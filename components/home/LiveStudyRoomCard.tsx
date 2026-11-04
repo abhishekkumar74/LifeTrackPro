@@ -10,24 +10,46 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { useActiveRooms } from '@/lib/hooks/use-study-rooms';
+import { useActiveRooms, useMyRooms, RoomWithHost } from '@/lib/hooks/use-study-rooms';
 
 export const LiveStudyRoomCard = React.memo(() => {
   const router = useRouter();
   const { data: activeRooms } = useActiveRooms({ refetchInterval: 15000 });
+  const { data: myRooms } = useMyRooms();
 
-  // Filter for genuine, non-expired active rooms
+  // Combine user's hosted active rooms and public active rooms
   const liveRooms = useMemo(() => {
-    if (!activeRooms || activeRooms.length === 0) return [];
-    return activeRooms.filter((room) => {
-      if (!room.is_active) return false;
-      const createdAt = new Date(room.created_at).getTime();
-      const durationMs = (room.timer_minutes || 60) * 60 * 1000;
-      return Date.now() <= createdAt + durationMs;
-    });
-  }, [activeRooms]);
+    const roomMap = new Map<string, RoomWithHost>();
+
+    // 1. Prioritize user's own active rooms so host always sees their running session
+    if (myRooms) {
+      for (const room of myRooms) {
+        if (!room.is_active) continue;
+        const createdAt = new Date(room.created_at).getTime();
+        const durationMs = (room.timer_minutes || 60) * 60 * 1000;
+        if (Date.now() <= createdAt + durationMs) {
+          roomMap.set(room.id, room);
+        }
+      }
+    }
+
+    // 2. Add public active rooms
+    if (activeRooms) {
+      for (const room of activeRooms) {
+        if (!room.is_active || roomMap.has(room.id)) continue;
+        const createdAt = new Date(room.created_at).getTime();
+        const durationMs = (room.timer_minutes || 60) * 60 * 1000;
+        if (Date.now() <= createdAt + durationMs) {
+          roomMap.set(room.id, room);
+        }
+      }
+    }
+
+    return Array.from(roomMap.values());
+  }, [activeRooms, myRooms]);
 
   const hasLiveRooms = liveRooms.length > 0;
+  const isMultipleRooms = liveRooms.length > 1;
   const topRoom = hasLiveRooms ? liveRooms[0] : null;
 
   // Real participant count from active rooms (no hardcoded fallback)
@@ -71,11 +93,11 @@ export const LiveStudyRoomCard = React.memo(() => {
 
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    if (hasLiveRooms && topRoom?.id) {
-      // Direct 1-tap join into the top active room
+    if (hasLiveRooms && !isMultipleRooms && topRoom?.id) {
+      // Direct 1-tap join into the single active room
       router.push(`/rooms/${topRoom.id}`);
     } else {
-      // Redirect directly to the Study Rooms / Groups section
+      // Multiple rooms or no room -> redirect to Study Rooms / Groups section
       router.push('/rooms');
     }
   };
@@ -87,7 +109,7 @@ export const LiveStudyRoomCard = React.memo(() => {
       activeOpacity={0.88}
       accessibilityLabel={
         hasLiveRooms
-          ? `${totalLiveStudents} students currently studying live. Tap to join.`
+          ? `${totalLiveStudents} students currently studying live across ${liveRooms.length} rooms. Tap to view.`
           : 'Study Groups. Tap to explore study rooms.'
       }
     >
@@ -106,7 +128,9 @@ export const LiveStudyRoomCard = React.memo(() => {
         <View style={styles.titleRow}>
           <Text style={styles.headline} numberOfLines={1}>
             {hasLiveRooms
-              ? `${totalLiveStudents} ${totalLiveStudents === 1 ? 'student' : 'students'} studying live`
+              ? isMultipleRooms
+                ? `${liveRooms.length} Live Study Rooms`
+                : `${totalLiveStudents} ${totalLiveStudents === 1 ? 'student' : 'students'} studying live`
               : 'Study Groups'}
           </Text>
           <View style={[styles.badge, hasLiveRooms ? styles.liveBadge : styles.neutralBadge]}>
@@ -122,7 +146,9 @@ export const LiveStudyRoomCard = React.memo(() => {
         </View>
         <Text style={styles.subtext} numberOfLines={1} ellipsizeMode="tail">
           {hasLiveRooms && topRoom
-            ? `${topRoom.name} · 1-Tap Join`
+            ? isMultipleRooms
+              ? `${topRoom.name} + ${liveRooms.length - 1} more · Tap to view`
+              : `${topRoom.name} · 1-Tap Join`
             : 'No live rooms · Tap to explore'}
         </Text>
       </View>
@@ -135,7 +161,7 @@ export const LiveStudyRoomCard = React.memo(() => {
             !hasLiveRooms && styles.actionButtonTextSecondary,
           ]}
         >
-          {hasLiveRooms ? 'Join →' : 'Explore →'}
+          {hasLiveRooms ? (isMultipleRooms ? `View (${liveRooms.length}) →` : 'Join →') : 'Explore →'}
         </Text>
       </View>
     </TouchableOpacity>

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -35,7 +35,7 @@ function getClipboardModule() {
   }
 }
 
-export type CardTheme = 'obsidian' | 'parchment' | 'indigo';
+export type CardTheme = 'parchment' | 'obsidian' | 'indigo';
 export type CardPeriod = 'week' | 'month' | 'all';
 
 interface ProgressMetrics {
@@ -61,14 +61,21 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
   onClose,
   metrics,
 }) => {
-  const [selectedTheme, setSelectedTheme] = useState<CardTheme>('obsidian');
+  const [selectedTheme, setSelectedTheme] = useState<CardTheme>('parchment');
   const [selectedPeriod, setSelectedPeriod] = useState<CardPeriod>('week');
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const viewShotRef = useRef<any>(null);
 
-  const officialStoreUrl = Platform.OS === 'ios' ? CONFIG.storeUrls.ios : CONFIG.storeUrls.android;
+  // Default to parchment whenever modal becomes visible
+  useEffect(() => {
+    if (visible) {
+      setSelectedTheme('parchment');
+    }
+  }, [visible]);
+
+  const officialStoreUrl = 'https://play.google.com/store/apps/details?id=com.lifetrackpro.app';
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -77,16 +84,16 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
     }, 2500);
   };
 
-  // Generate verified caption text for sharing
+  // Generate verified caption text for sharing with official store download link
   const periodLabel = selectedPeriod === 'week' ? 'This Week' : selectedPeriod === 'month' ? 'This Month' : 'All-Time';
   
   const generateCaption = () => {
-    return `⚡ My LifeTrack Pro Progress (${periodLabel}):\n` +
-      `⏱️ Focus Duration: ${mergedMetrics.focusHours.toFixed(1)} hours\n` +
-      `🔥 Habit Streak: ${mergedMetrics.habitStreak} Days\n` +
-      `✅ Tasks Completed: ${mergedMetrics.tasksDone}\n` +
-      `📈 Consistency: ${mergedMetrics.consistencyRate}%\n\n` +
-      `Track your own growth with LifeTrack Pro:\n` +
+    return `My LifeTrack Pro Progress (${periodLabel}):\n` +
+      `Focus Duration: ${mergedMetrics.focusHours.toFixed(1)} hours\n` +
+      `Habit Streak: ${mergedMetrics.habitStreak} Days\n` +
+      `Tasks Completed: ${mergedMetrics.tasksDone}\n` +
+      `Consistency: ${mergedMetrics.consistencyRate}%\n\n` +
+      `Download LifeTrack Pro on Google Play Store:\n` +
       `${officialStoreUrl}\n\n` +
       `#LifeTrackPro #Consistency #DeepWork #Growth`;
   };
@@ -97,10 +104,24 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
     const clipboard = getClipboardModule();
     if (clipboard?.setStringAsync) {
       await clipboard.setStringAsync(caption);
-      showToast('Caption & App Link copied to clipboard!');
+      showToast('Caption & Store Link copied to clipboard!');
     } else {
       await Share.share({ message: caption, title: 'LifeTrack Pro Progress' }).catch(() => {});
       showToast('Caption shared!');
+    }
+  };
+
+  const handleShareTextAndLink = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    const caption = generateCaption();
+    try {
+      await Share.share({
+        message: caption,
+        title: 'LifeTrack Pro Progress',
+      });
+      showToast('Progress link & caption shared!');
+    } catch (err) {
+      if (__DEV__) console.warn('Share text failed:', err);
     }
   };
 
@@ -109,21 +130,47 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
     setIsExporting(true);
 
     try {
+      const caption = generateCaption();
+      // Pre-copy caption & store link to clipboard so user can paste it anywhere immediately
+      const clipboard = getClipboardModule();
+      if (clipboard?.setStringAsync) {
+        await clipboard.setStringAsync(caption).catch(() => {});
+      }
+
       let sharedSuccessfully = false;
       const sharing = getSharingModule();
 
-      if (viewShotRef.current?.capture && sharing) {
+      // On iOS: Share.share can bundle the local image file url + text message with download link
+      if (Platform.OS === 'ios' && viewShotRef.current?.capture) {
+        try {
+          const uri = await viewShotRef.current.capture();
+          if (uri) {
+            await Share.share({
+              url: uri,
+              message: caption,
+              title: 'LifeTrack Pro Progress',
+            });
+            sharedSuccessfully = true;
+            showToast('Progress card & store link shared!');
+          }
+        } catch (iosShareErr) {
+          if (__DEV__) console.warn('iOS combined share failed, falling back:', iosShareErr);
+        }
+      }
+
+      // Android & fallback: Use expo-sharing for image file with download link dialog title
+      if (!sharedSuccessfully && viewShotRef.current?.capture && sharing) {
         try {
           const uri = await viewShotRef.current.capture();
           const canShare = sharing.isAvailableAsync ? await sharing.isAvailableAsync() : true;
           if (canShare && uri) {
             await sharing.shareAsync(uri, {
-              dialogTitle: 'Share your LifeTrack Pro Progress',
+              dialogTitle: `Share LifeTrack Pro Progress (${officialStoreUrl})`,
               mimeType: 'image/png',
               UTI: 'public.png',
             });
             sharedSuccessfully = true;
-            showToast('Progress card shared!');
+            showToast('Card shared! App link copied to clipboard.');
           }
         } catch (captureErr) {
           if (__DEV__) console.warn('ViewShot capture or sharing failed:', captureErr);
@@ -133,17 +180,14 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
       if (!sharedSuccessfully) {
         // Fallback to text Share API if native file sharing is unavailable
         await Share.share({
-          message: generateCaption(),
+          message: caption,
           title: 'LifeTrack Pro Progress',
         });
+        showToast('Caption & store link shared!');
       }
     } catch (err: any) {
       if (__DEV__) console.warn('Share progress card error:', err);
-      showToast('Copied text caption as fallback');
-      const clipboard = getClipboardModule();
-      if (clipboard?.setStringAsync) {
-        await clipboard.setStringAsync(generateCaption()).catch(() => {});
-      }
+      showToast('Store link copied to clipboard');
     } finally {
       setIsExporting(false);
     }
@@ -186,6 +230,40 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
       case 'parchment': return '#EFE6D8';
       case 'indigo': return '#4A3ED1';
       default: return '#23233B';
+    }
+  };
+
+  const getBadgeStyle = () => {
+    switch (selectedTheme) {
+      case 'parchment':
+        return {
+          backgroundColor: '#EADECF',
+          borderWidth: 1,
+          borderColor: '#D4C4B0',
+        };
+      case 'indigo':
+        return {
+          backgroundColor: 'rgba(255, 255, 255, 0.22)',
+          borderWidth: 1,
+          borderColor: 'rgba(255, 255, 255, 0.35)',
+        };
+      default:
+        return {
+          backgroundColor: 'rgba(255, 255, 255, 0.12)',
+          borderWidth: 1,
+          borderColor: 'rgba(255, 255, 255, 0.18)',
+        };
+    }
+  };
+
+  const getBadgeTextColor = () => {
+    switch (selectedTheme) {
+      case 'parchment':
+        return '#78350F'; // Dark amber-brown for high contrast on light parchment
+      case 'indigo':
+        return '#FFFFFF';
+      default:
+        return '#FFD700';
     }
   };
 
@@ -250,18 +328,18 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
             {/* Theme Selector */}
             <View style={styles.themeRow}>
               <TouchableOpacity
-                style={[styles.themePill, selectedTheme === 'obsidian' && styles.themePillActive]}
-                onPress={() => setSelectedTheme('obsidian')}
-              >
-                <View style={[styles.themeDot, { backgroundColor: '#17172A' }]} />
-                <Text style={styles.themeLabel}>Obsidian</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={[styles.themePill, selectedTheme === 'parchment' && styles.themePillActive]}
                 onPress={() => setSelectedTheme('parchment')}
               >
                 <View style={[styles.themeDot, { backgroundColor: '#F5EFE6', borderWidth: 1, borderColor: '#D0C4B4' }]} />
                 <Text style={styles.themeLabel}>Parchment</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.themePill, selectedTheme === 'obsidian' && styles.themePillActive]}
+                onPress={() => setSelectedTheme('obsidian')}
+              >
+                <View style={[styles.themeDot, { backgroundColor: '#17172A' }]} />
+                <Text style={styles.themeLabel}>Obsidian</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.themePill, selectedTheme === 'indigo' && styles.themePillActive]}
@@ -291,8 +369,8 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
                       Life<Text style={{ color: selectedTheme === 'indigo' ? '#FFD700' : '#5B4FE8' }}>Track</Text> PRO
                     </Text>
                   </View>
-                  <View style={styles.cardBadge}>
-                    <Text style={styles.cardBadgeText}>{categoryText}</Text>
+                  <View style={[styles.cardBadge, getBadgeStyle()]}>
+                    <Text style={[styles.cardBadgeText, { color: getBadgeTextColor() }]}>{categoryText}</Text>
                   </View>
                 </View>
 
@@ -362,12 +440,19 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
                 )}
 
                 {/* Footer Tagline & App Link */}
-                <View style={styles.cardFooter}>
+                <View style={[styles.cardFooter, selectedTheme === 'parchment' && styles.cardFooterParchment]}>
                   <Text style={[styles.cardFooterText, { color: getSubtextColor() }]}>
                     Building real consistency with LifeTrack Pro
                   </Text>
-                  <Text style={styles.cardFooterUrl}>
-                    lifetrackpro.app
+                  <Text
+                    style={[
+                      styles.cardFooterUrl,
+                      { color: selectedTheme === 'indigo' ? '#FFD700' : selectedTheme === 'parchment' ? '#5B4FE8' : '#00B894' },
+                    ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    play.google.com/store/apps/details?id=com.lifetrackpro.app
                   </Text>
                 </View>
               </ViewShot>
@@ -391,14 +476,25 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.copySecondaryBtn}
-                onPress={handleCopyCaption}
-                activeOpacity={0.7}
-              >
-                <Copy size={15} color="#5B4FE8" />
-                <Text style={styles.copySecondaryText}>Copy Caption & Store Link</Text>
-              </TouchableOpacity>
+              <View style={styles.secondaryActionsRow}>
+                <TouchableOpacity
+                  style={styles.shareSecondaryBtn}
+                  onPress={handleShareTextAndLink}
+                  activeOpacity={0.7}
+                >
+                  <Share2 size={14} color="#5B4FE8" />
+                  <Text style={styles.shareSecondaryText}>Share Link & Text</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.copySecondaryBtn}
+                  onPress={handleCopyCaption}
+                  activeOpacity={0.7}
+                >
+                  <Copy size={14} color="#5B4FE8" />
+                  <Text style={styles.copySecondaryText}>Copy Link</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </ScrollView>
 
@@ -609,7 +705,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
     paddingTop: 12,
-    gap: 2,
+    gap: 3,
+  },
+  cardFooterParchment: {
+    borderTopColor: 'rgba(120, 53, 15, 0.15)',
   },
   cardFooterText: {
     fontFamily: 'DMSans',
@@ -617,9 +716,10 @@ const styles = StyleSheet.create({
   },
   cardFooterUrl: {
     fontFamily: 'DMMono',
-    fontSize: 11,
+    fontSize: 9.5,
     color: '#00B894',
     fontWeight: '700',
+    textAlign: 'center',
   },
   actionsContainer: {
     gap: 10,
@@ -644,20 +744,45 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  copySecondaryBtn: {
+  secondaryActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+  },
+  shareSecondaryBtn: {
+    flex: 1,
     backgroundColor: '#EAE8FD',
     height: 44,
     borderRadius: 14,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
+  },
+  shareSecondaryText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#5B4FE8',
+  },
+  copySecondaryBtn: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    height: 44,
+    borderRadius: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
   },
   copySecondaryText: {
     fontFamily: 'DMSans-Medium',
     fontSize: 13,
     fontWeight: '600',
-    color: '#5B4FE8',
+    color: '#374151',
   },
   toastContainer: {
     position: 'absolute',
