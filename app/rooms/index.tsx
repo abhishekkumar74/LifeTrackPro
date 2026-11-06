@@ -18,6 +18,8 @@ import { useActiveRooms, useMyRooms, useEndRoom, RoomWithHost } from '@/lib/hook
 import { LiveBadge } from '@/components/community/LiveBadge';
 import { RoomCard } from '@/components/community/RoomCard';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { useUiStore } from '@/lib/store/ui.store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ArrowLeft, Plus, Moon, Users } from 'lucide-react-native';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { parseRoomSubject } from '@/lib/utils/room-visibility';
@@ -83,14 +85,6 @@ export default function RoomsScreen(): React.JSX.Element {
     setIsRefreshing(false);
   };
 
-  const handleJoinRoom = useCallback((roomId: string) => {
-    router.push(`/rooms/${roomId}` as Href);
-  }, []);
-
-  const handleEndRoom = useCallback((roomId: string) => {
-    endRoom(roomId);
-  }, [endRoom]);
-
   // Combine user's own active rooms with public active rooms
   const allLiveRooms = React.useMemo(() => {
     const roomMap = new Map<string, RoomWithHost>();
@@ -122,6 +116,39 @@ export default function RoomsScreen(): React.JSX.Element {
 
     return Array.from(roomMap.values());
   }, [activeRooms, myRooms]);
+
+  const handleJoinRoom = useCallback(
+    async (roomId: string) => {
+      // 1. Check local device ban cache for this room
+      try {
+        const locallyBanned = await AsyncStorage.getItem(`@lifetrack_banned_room_${roomId}`);
+        if (locallyBanned === 'true') {
+          useUiStore.getState().showToast('Access denied: You were removed from this room by the host.', 'error');
+          try {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          } catch (e) {}
+          return;
+        }
+      } catch (e) {}
+
+      // 2. Check if current user is in room's banned_user_ids
+      const selectedRoom = allLiveRooms.find((r) => r.id === roomId);
+      if (selectedRoom?.banned_user_ids && currentUserId && selectedRoom.banned_user_ids.includes(currentUserId)) {
+        useUiStore.getState().showToast('Access denied: You were removed from this room by the host.', 'error');
+        try {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } catch (e) {}
+        return;
+      }
+
+      router.push(`/rooms/${roomId}` as Href);
+    },
+    [allLiveRooms, currentUserId]
+  );
+
+  const handleEndRoom = useCallback((roomId: string) => {
+    endRoom(roomId);
+  }, [endRoom]);
 
   const totalStudying = React.useMemo(() => {
     return allLiveRooms.reduce((sum, r) => sum + Math.max(r.member_count || 1, 1), 0);
@@ -395,9 +422,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 30,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 26,
     color: '#17172A',
+    letterSpacing: -0.4,
   },
   createTriggerButton: {
     width: 40,

@@ -335,8 +335,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   title: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 24,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: '#17172A',
     textAlign: 'center',
     marginBottom: 6,

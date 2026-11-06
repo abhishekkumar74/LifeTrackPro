@@ -1969,9 +1969,10 @@ const styles = StyleSheet.create({
     height: 54,
   },
   headerTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 30,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 26,
     color: '#17172A',
+    letterSpacing: -0.4,
   },
   headerRight: {
     flexDirection: 'row',
@@ -2034,8 +2035,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 22,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: '#17172A',
     textAlign: 'center',
     marginBottom: 8,
@@ -2975,8 +2976,8 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   setupWelcomeTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 26,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 22,
     color: '#17172A',
     marginBottom: 4,
   },
@@ -3078,8 +3079,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   addSheetTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 24,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: '#17172A',
     marginBottom: 20,
   },

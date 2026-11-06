@@ -1,0 +1,86 @@
+diff --git a/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/SharingModule.kt b/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/SharingModule.kt
+index 69ccba6..3a80096 100644
+--- a/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/SharingModule.kt
++++ b/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/SharingModule.kt
+@@ -37,7 +37,7 @@ class SharingModule : Module() {
+           ?: URLConnection.guessContentTypeFromName(fileToShare.name)
+           ?: "*/*"
+         val intent = Intent.createChooser(
+-          createSharingIntent(contentUri, mimeType),
++          createSharingIntent(contentUri, mimeType, params.message),
+           params.dialogTitle
+         )
+         val resInfoList = context.packageManager.queryIntentActivities(
+@@ -113,9 +113,12 @@ class SharingModule : Module() {
+       .contains(FilePermissionService.Permission.READ)
+   }
+ 
+-  private fun createSharingIntent(uri: Uri, mimeType: String?) =
++  private fun createSharingIntent(uri: Uri, mimeType: String?, message: String? = null) =
+     Intent(Intent.ACTION_SEND).apply {
+       putExtra(Intent.EXTRA_STREAM, uri)
++      if (!message.isNullOrEmpty()) {
++        putExtra(Intent.EXTRA_TEXT, message)
++      }
+       setTypeAndNormalize(mimeType)
+       addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+     }
+diff --git a/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/SharingOptions.kt b/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/SharingOptions.kt
+index 99926bf..689b6c8 100644
+--- a/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/SharingOptions.kt
++++ b/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/SharingOptions.kt
+@@ -8,5 +8,6 @@ import expo.modules.kotlin.types.OptimizedRecord
+ data class SharingOptions(
+   @Field val mimeType: String?,
+   @Field val UTI: String?,
+-  @Field val dialogTitle: String?
++  @Field val dialogTitle: String?,
++  @Field val message: String? = null
+ ) : Record
+diff --git a/node_modules/expo-sharing/build/Sharing.types.d.ts b/node_modules/expo-sharing/build/Sharing.types.d.ts
+index e9820b0..b8bed70 100644
+--- a/node_modules/expo-sharing/build/Sharing.types.d.ts
++++ b/node_modules/expo-sharing/build/Sharing.types.d.ts
+@@ -16,6 +16,12 @@ export type SharingOptions = {
+      * @platform web
+      */
+     dialogTitle?: string;
++    /**
++     * Sets text message or caption to share alongside the file.
++     * @platform android
++     * @platform ios
++     */
++    message?: string;
+     /**
+      * Sets the anchor point for iPad
+      * @platform ios
+diff --git a/node_modules/expo-sharing/ios/SharingModule.swift b/node_modules/expo-sharing/ios/SharingModule.swift
+index 3e1772c..b19d4ea 100644
+--- a/node_modules/expo-sharing/ios/SharingModule.swift
++++ b/node_modules/expo-sharing/ios/SharingModule.swift
+@@ -18,7 +18,12 @@ public final class SharingModule: Module {
+         throw FilePermissionException()
+       }
+ 
+-      let activityController = UIActivityViewController(activityItems: [url], applicationActivities: nil)
++      var activityItems: [Any] = [url]
++      if let message = options.message, !message.isEmpty {
++        activityItems.append(message)
++      }
++
++      let activityController = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+       activityController.title = options.dialogTitle
+ 
+       activityController.completionWithItemsHandler = { _, _, _, _ in
+diff --git a/node_modules/expo-sharing/ios/SharingOptions.swift b/node_modules/expo-sharing/ios/SharingOptions.swift
+index c13fe01..73b47db 100644
+--- a/node_modules/expo-sharing/ios/SharingOptions.swift
++++ b/node_modules/expo-sharing/ios/SharingOptions.swift
+@@ -4,6 +4,7 @@ internal struct SharingOptions: Record {
+   @Field var mimeType: String?
+   @Field var UTI: String?
+   @Field var dialogTitle: String?
++  @Field var message: String?
+   @Field var anchor: Rect?
+ 
+   public struct Rect: Record {

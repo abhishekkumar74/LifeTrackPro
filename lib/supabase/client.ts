@@ -206,6 +206,8 @@ export type StudyRoomRow = {
   member_count: number;
   created_at: string;
   updated_at: string;
+  co_host_ids?: string[];
+  banned_user_ids?: string[];
 }
 
 export type DailyCheckinRow = {

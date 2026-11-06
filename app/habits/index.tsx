@@ -22,7 +22,7 @@ import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 import { COLORS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
 import { getTodayLocal } from '@/lib/utils/date';
-import { ArrowLeft, Flame } from 'lucide-react-native';
+import { ArrowLeft, Flame, ChevronRight } from 'lucide-react-native';
 import { useAuthStore } from '@/lib/store/auth.store';
 import {
   useHabits,
@@ -211,20 +211,23 @@ export default function HabitsManagementScreen() {
             </View>
           </View>
 
-          {/* Checkbox toggle (only when not in edit mode) */}
+          {/* Checkbox toggle & chevron indicator (only when not in edit mode) */}
           {!isEditMode && (
-            <TouchableOpacity
-              style={[styles.checkbox, isDone && styles.checkboxChecked]}
-              onPress={() => handleToggleHabit(habit)}
-              activeOpacity={0.6}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityState={{ checked: isDone }}
-              accessibilityRole="checkbox"
-              accessibilityLabel={`${habit.title} habit, ${isDone ? 'completed' : 'not completed'}`}
-              accessibilityHint="Double tap to toggle completion status"
-            >
-              {isDone && <Text style={styles.checkmark}>✓</Text>}
-            </TouchableOpacity>
+            <View style={styles.actionGroup}>
+              <TouchableOpacity
+                style={[styles.checkbox, isDone && styles.checkboxChecked]}
+                onPress={() => handleToggleHabit(habit)}
+                activeOpacity={0.6}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityState={{ checked: isDone }}
+                accessibilityRole="checkbox"
+                accessibilityLabel={`${habit.title} habit, ${isDone ? 'completed' : 'not completed'}`}
+                accessibilityHint="Double tap to toggle completion status"
+              >
+                {isDone && <Text style={styles.checkmark}>✓</Text>}
+              </TouchableOpacity>
+              <ChevronRight size={17} color="#8E8E93" strokeWidth={2.2} style={styles.rowChevron} />
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -588,6 +591,15 @@ const styles = StyleSheet.create({
     color: '#E8A020',
     fontWeight: '600',
     marginTop: 2,
+  },
+  actionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  rowChevron: {
+    marginLeft: 2,
   },
   checkbox: {
     width: 24,

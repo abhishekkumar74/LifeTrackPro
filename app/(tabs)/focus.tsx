@@ -2564,8 +2564,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   mainHeading: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 32,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 28,
     color: '#FFFFFF',
     textAlign: 'center',
     marginTop: 12,
@@ -2575,7 +2575,7 @@ const styles = StyleSheet.create({
   mainHeadingRunning: {
     marginTop: 6,
     marginBottom: 8,
-    fontSize: 28,
+    fontSize: 22,
   },
   sessionPillCapsule: {
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
@@ -2600,8 +2600,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sessionPillInput: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 18,
+    fontFamily: 'DMSans-Medium',
+    fontSize: 16,
+    fontWeight: '500',
     color: '#FFFFFF',
     textAlign: 'center',
     width: '100%',
@@ -2708,11 +2709,10 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   prominentActionText: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 22,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 18,
     color: '#FFFFFF',
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   runningActionWrapper: {
     flexDirection: 'row',
@@ -2871,8 +2871,8 @@ const styles = StyleSheet.create({
     paddingBottom: 60,
   },
   historySheetTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 26,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 4,
@@ -3262,8 +3262,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingsSheetTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 26,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 16,
@@ -3330,12 +3330,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   rewardsTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 28,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 22,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 6,
-    letterSpacing: 0.3,
+    letterSpacing: -0.3,
   },
   rewardsSubtitle: {
     fontFamily: 'DMSans',
@@ -3756,8 +3756,8 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   soundSheetTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 26,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 4,

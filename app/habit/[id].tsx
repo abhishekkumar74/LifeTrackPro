@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,19 +16,20 @@ import * as Haptics from 'expo-haptics';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import { Skeleton } from '@/components/shared/Skeleton';
 
-import { ArrowLeft, Flame, Star } from 'lucide-react-native';
+import { ArrowLeft, Flame, Star, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase/client';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
 import { getTodayLocal } from '@/lib/utils/date';
+import { useAuthStore } from '@/lib/store/auth.store';
 import {
   useHabitHistory,
+  useHabitLogs,
   useHabitStreak,
   useUpdateHabit,
   useArchiveHabit,
   useDeleteHabit,
   HabitWithStatus,
 } from '@/lib/hooks/use-habits';
-import { useToggleHabit } from '@/lib/hooks/use-toggle-habit';
 import { CreateHabitSheet } from '@/components/habits/CreateHabitSheet';
 import { Habit } from '@/types/app.types';
 
@@ -37,9 +38,10 @@ export default function HabitDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { toggleHabit } = useToggleHabit();
+  const { user } = useAuthStore();
 
   const [editSheetVisible, setEditSheetVisible] = useState(false);
+  const [viewedDate, setViewedDate] = useState<Date>(() => new Date());
 
   // Fetch the specific habit details
   const { data: habit, isLoading: isHabitLoading } = useQuery<Habit>({
@@ -55,9 +57,12 @@ export default function HabitDetailScreen() {
     },
   });
 
-  // Fetch 60-day history logs
+  // Fetch 60-day history logs (for chart & streak)
   const historyQuery = useHabitHistory(id, 60);
   const history = historyQuery.data || [];
+
+  // Fetch full historical logs map for all-time calendar tracking
+  const { data: habitLogs = {}, isLoading: isHabitLogsLoading } = useHabitLogs(id);
 
   // Streak calculations
   const streak = useHabitStreak(id);
@@ -67,11 +72,39 @@ export default function HabitDetailScreen() {
   const archiveHabit = useArchiveHabit();
   const deleteHabit = useDeleteHabit();
 
-  // Calendar Helpers
-  const generateMonthGrid = () => {
+  // Month navigation helpers
+  const isCurrentMonth = useMemo(() => {
     const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
+    return (
+      viewedDate.getFullYear() === now.getFullYear() &&
+      viewedDate.getMonth() === now.getMonth()
+    );
+  }, [viewedDate]);
+
+  const handlePrevMonth = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setViewedDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    if (isCurrentMonth) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setViewedDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const handleJumpToToday = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setViewedDate(new Date());
+  };
+
+  const monthLabel = useMemo(() => {
+    return viewedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }, [viewedDate]);
+
+  // Calendar Helpers
+  const generateMonthGrid = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
 
     const firstDay = new Date(year, month, 1);
     const startDayOfWeek = firstDay.getDay(); // 0 = Sunday
@@ -92,8 +125,9 @@ export default function HabitDetailScreen() {
     const todayStr = getTodayLocal();
 
     for (let d = 1; d <= totalDays; d++) {
-      const dateObj = new Date(year, month, d);
-      const dateStr = dateObj.toLocaleDateString('en-CA');
+      const mm = String(month + 1).padStart(2, '0');
+      const dd = String(d).padStart(2, '0');
+      const dateStr = `${year}-${mm}-${dd}`;
       const isToday = dateStr === todayStr;
       const isFuture = dateStr > todayStr;
       cells.push({
@@ -107,55 +141,49 @@ export default function HabitDetailScreen() {
     return cells;
   };
 
-  const isDateWithin7Days = (dateStr: string): boolean => {
+  const monthGrid = useMemo(() => generateMonthGrid(viewedDate), [viewedDate]);
+
+  const monthStats = useMemo(() => {
+    const year = viewedDate.getFullYear();
+    const month = viewedDate.getMonth();
+    const totalDays = new Date(year, month + 1, 0).getDate();
     const todayStr = getTodayLocal();
-    if (dateStr > todayStr) return false;
+    const habitCreatedStr = habit?.created_at ? habit.created_at.substring(0, 10) : null;
 
-    const today = new Date(todayStr);
-    const target = new Date(dateStr);
-    const diffTime = today.getTime() - target.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    let completed = 0;
+    let trackedDays = 0;
 
-    return diffDays <= 7;
-  };
+    for (let d = 1; d <= totalDays; d++) {
+      const mm = String(month + 1).padStart(2, '0');
+      const dd = String(d).padStart(2, '0');
+      const dateStr = `${year}-${mm}-${dd}`;
 
-  const handleCellPress = async (cell: { dateStr: string | null; isFuture: boolean }) => {
-    if (!cell.dateStr || cell.isFuture) return;
+      if (dateStr > todayStr) {
+        continue;
+      }
 
-    if (!isDateWithin7Days(cell.dateStr)) {
-      Alert.alert(
-        'Read-only Date',
-        'You can only toggle completion status for today and the last 7 days.'
-      );
-      return;
+      if (habitCreatedStr && dateStr < habitCreatedStr && !habitLogs[dateStr]) {
+        continue;
+      }
+
+      trackedDays++;
+      if (habitLogs[dateStr]) {
+        completed++;
+      }
     }
 
-    // Determine current completion state from history
-    const historyEntry = history.find((h) => h.date === cell.dateStr);
-    const isCurrentlyDone = historyEntry?.done ?? false;
+    const missed = Math.max(0, trackedDays - completed);
+    const percent = trackedDays > 0 ? Math.round((completed / trackedDays) * 100) : 0;
 
-    // Trigger toggle
-    await toggleHabit({
-      habitId: id,
-      date: cell.dateStr,
-      completedToday: isCurrentlyDone,
-      onOptimisticUpdate: (newValue) => {
-        // Optimistic query data updates
-        queryClient.setQueryData(['habitHistory', id, 60], (old: any) => {
-          if (!old) return [];
-          return old.map((item: any) =>
-            item.date === cell.dateStr ? { ...item, done: newValue } : item
-          );
-        });
+    return { completed, missed, trackedDays, percent };
+  }, [viewedDate, habitLogs, habit?.created_at]);
 
-        // Trigger refetches to align UI state
-        queryClient.invalidateQueries({ queryKey: ['habitHistory', id] });
-        queryClient.invalidateQueries({ queryKey: ['habits'] });
-        queryClient.invalidateQueries({ queryKey: ['todayStats'] });
-        queryClient.invalidateQueries({ queryKey: ['stats'] });
-      },
-    });
-  };
+  const monthStatsText = useMemo(() => {
+    if (monthStats.trackedDays === 0) {
+      return 'No active logs this month';
+    }
+    return `${monthStats.completed} completed · ${monthStats.missed} missed (${monthStats.percent}%)`;
+  }, [monthStats]);
 
   // Best Time Preference Handler
   const handleSelectBestTime = (time: 'morning' | 'afternoon' | 'evening') => {
@@ -358,7 +386,8 @@ export default function HabitDetailScreen() {
     );
   };
 
-  const isDataLoading = isHabitLoading || historyQuery.isLoading || streak.isLoading;
+  const isDataLoading =
+    isHabitLoading || historyQuery.isLoading || streak.isLoading || isHabitLogsLoading;
 
   if (isDataLoading) {
     return (
@@ -393,7 +422,6 @@ export default function HabitDetailScreen() {
     );
   }
 
-  const monthGrid = generateMonthGrid();
   const weekdayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   return (
@@ -454,7 +482,45 @@ export default function HabitDetailScreen() {
 
         {/* Monthly Calendar View */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>This Month</Text>
+          {/* Interactive Month Navigation */}
+          <View style={styles.calendarNavHeader}>
+            <TouchableOpacity
+              style={styles.monthNavBtn}
+              onPress={handlePrevMonth}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Previous month"
+              activeOpacity={0.6}
+            >
+              <ChevronLeft size={20} color="#17172A" />
+            </TouchableOpacity>
+
+            <View style={styles.monthTitleWrapper}>
+              <Text style={styles.monthTitleText}>{monthLabel}</Text>
+              <Text style={styles.monthStatsSubtext}>{monthStatsText}</Text>
+            </View>
+
+            <View style={styles.monthRightActions}>
+              {!isCurrentMonth && (
+                <TouchableOpacity
+                  style={styles.todayJumpBtn}
+                  onPress={handleJumpToToday}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.todayJumpText}>Today</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.monthNavBtn, isCurrentMonth && styles.monthNavBtnDisabled]}
+                onPress={handleNextMonth}
+                disabled={isCurrentMonth}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Next month"
+                activeOpacity={0.6}
+              >
+                <ChevronRight size={20} color={isCurrentMonth ? '#C4C4D0' : '#17172A'} />
+              </TouchableOpacity>
+            </View>
+          </View>
 
           {/* Calendar Headers */}
           <View style={styles.calendarHeaders}>
@@ -472,11 +538,13 @@ export default function HabitDetailScreen() {
                 return <View key={`pad-${idx}`} style={styles.calendarCell} />;
               }
 
-              // Find completed status from history
+              // Find completed status from full history logs
               const isFuture = cell.isFuture;
-              const logEntry = history.find((h) => h.date === cell.dateStr);
-              const isDone = logEntry?.done ?? false;
               const isToday = cell.isToday;
+              const isDone = cell.dateStr ? !!habitLogs[cell.dateStr] : false;
+              const habitCreatedAt = habit?.created_at ? habit.created_at.substring(0, 10) : null;
+              const isBeforeCreation =
+                habitCreatedAt && cell.dateStr ? cell.dateStr < habitCreatedAt && !isDone : false;
 
               let cellStyle = styles.cellEmpty;
               let textStyle = styles.cellTextEmpty;
@@ -484,40 +552,60 @@ export default function HabitDetailScreen() {
               if (isFuture) {
                 cellStyle = styles.cellFuture;
                 textStyle = styles.cellTextFuture;
+              } else if (isBeforeCreation) {
+                cellStyle = styles.cellBeforeCreated;
+                textStyle = styles.cellTextBeforeCreated;
+              } else if (isDone) {
+                cellStyle = isToday ? styles.cellTodayDone : styles.cellPastDone;
+                textStyle = styles.cellTextWhite;
               } else {
-                if (isDone) {
-                  if (isToday) {
-                    cellStyle = styles.cellTodayDone;
-                  } else {
-                    cellStyle = styles.cellPastDone;
-                  }
-                  textStyle = styles.cellTextWhite;
+                if (isToday) {
+                  cellStyle = styles.cellTodayNotDone;
+                  textStyle = styles.cellTextTodayNotDone;
                 } else {
-                  if (isToday) {
-                    cellStyle = styles.cellTodayNotDone;
-                    textStyle = styles.cellTextTodayNotDone;
-                  } else {
-                    // Past missed
-                    cellStyle = styles.cellPastMissed;
-                    textStyle = styles.cellTextPastMissed;
-                  }
+                  // Past missed
+                  cellStyle = styles.cellPastMissed;
+                  textStyle = styles.cellTextPastMissed;
                 }
               }
 
               return (
-                <TouchableOpacity
-                  key={`day-${cell.dayNum}`}
+                <View
+                  key={`day-${cell.dayNum}-${viewedDate.getMonth()}`}
                   style={styles.calendarCell}
-                  onPress={() => handleCellPress(cell)}
-                  disabled={isFuture}
-                  activeOpacity={0.6}
                 >
                   <View style={[styles.cellCircle, cellStyle]}>
                     <Text style={[styles.cellText, textStyle]}>{cell.dayNum}</Text>
                   </View>
-                </TouchableOpacity>
+                </View>
               );
             })}
+          </View>
+
+          {/* Legend */}
+          <View style={styles.calendarLegend}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#00B894' }]} />
+              <Text style={styles.legendLabel}>Done</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View
+                style={[
+                  styles.legendDot,
+                  { backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#FCA5A5' },
+                ]}
+              />
+              <Text style={styles.legendLabel}>Missed</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View
+                style={[
+                  styles.legendDot,
+                  { backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#5B4FE8' },
+                ]}
+              />
+              <Text style={styles.legendLabel}>Today</Text>
+            </View>
           </View>
         </View>
 
@@ -720,6 +808,59 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 16,
   },
+  calendarNavHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  monthNavBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F5F5F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthNavBtnDisabled: {
+    opacity: 0.35,
+  },
+  monthTitleWrapper: {
+    alignItems: 'center',
+    flex: 1,
+    paddingHorizontal: 8,
+  },
+  monthTitleText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#17172A',
+  },
+  monthStatsSubtext: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 12,
+    color: '#5C5C70',
+    marginTop: 2,
+  },
+  monthRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  todayJumpBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  todayJumpText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4F46E5',
+  },
   calendarHeaders: {
     flexDirection: 'row',
     marginBottom: 8,
@@ -791,6 +932,38 @@ const styles = StyleSheet.create({
   cellTextTodayNotDone: {
     color: '#5B4FE8',
     fontWeight: 'bold',
+  },
+  cellBeforeCreated: {
+    backgroundColor: '#F8F8FA',
+  },
+  cellTextBeforeCreated: {
+    color: '#D1D1D6',
+  },
+  calendarLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0EFEB',
+    gap: 16,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendLabel: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500',
   },
   chartWrapper: {
     alignItems: 'center',

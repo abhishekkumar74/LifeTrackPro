@@ -563,8 +563,8 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   sessionNameText: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 26,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 22,
     color: '#FFFFFF',
     letterSpacing: -0.3,
     marginBottom: 4,
@@ -628,10 +628,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
   },
   primaryStandbyBtnText: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 19,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 16,
     color: '#FFFFFF',
-    fontWeight: '700',
     letterSpacing: 0.3,
   },
   stopStandbyBtn: {

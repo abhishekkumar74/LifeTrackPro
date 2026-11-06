@@ -111,6 +111,9 @@ export const DonutChart: React.FC<DonutChartProps> = ({
   }));
 
   const formatHours = (mins: number) => {
+    if (mins < 60) {
+      return `${mins}m`;
+    }
     return `${(mins / 60).toFixed(1)}h`;
   };
 

@@ -775,9 +775,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   headerTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 30,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 26,
     color: '#17172A',
+    letterSpacing: -0.4,
   },
   plusButton: {
     width: 40,

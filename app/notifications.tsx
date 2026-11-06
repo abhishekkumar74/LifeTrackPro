@@ -532,8 +532,8 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   headerTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 28,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 24,
     color: COLORS.navy,
   },
   headerSub: {
@@ -744,8 +744,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   emptyTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 26,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: COLORS.navy,
     marginBottom: 6,
   },
@@ -800,8 +800,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 24,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: COLORS.navy,
   },
   modalCloseBtn: {

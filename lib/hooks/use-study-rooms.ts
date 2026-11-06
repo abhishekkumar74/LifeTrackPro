@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/lib/store/auth.store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase/client';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
 import { StudyRoom } from '@/types/app.types';
@@ -98,6 +99,8 @@ export function useActiveRooms(options?: { refetchInterval?: number }) {
         is_public: r.is_public,
         member_count: r.member_count,
         created_at: r.created_at,
+        co_host_ids: (r as any).co_host_ids || [],
+        banned_user_ids: (r as any).banned_user_ids || [],
       }));
     },
     refetchInterval: options?.refetchInterval ?? 30000,
@@ -162,6 +165,16 @@ export function useRoomPresence(roomId: string) {
 
     channel
       .on('presence', { event: 'sync' }, handleSync)
+      .on('broadcast', { event: 'kick_member' }, async (eventPayload) => {
+        const targetUserId = eventPayload?.payload?.targetUserId;
+        if (targetUserId === profile.id) {
+          try {
+            await AsyncStorage.setItem(`@lifetrack_banned_room_${roomId}`, 'true');
+            channel.untrack().catch(() => {});
+            supabase.removeChannel(channel).catch(() => {});
+          } catch (e) {}
+        }
+      })
       .subscribe(async (status, err) => {
         if (status === 'SUBSCRIBED') {
           const initialPayload = {
@@ -211,10 +224,34 @@ export function useRoomPresence(roomId: string) {
     [profile]
   );
 
+  const leaveRoom = useCallback(async () => {
+    if (channelRef.current) {
+      try {
+        await channelRef.current.untrack();
+        await supabase.removeChannel(channelRef.current);
+      } catch (e) {}
+      channelRef.current = null;
+    }
+  }, []);
+
+  const broadcastKick = useCallback((targetUserId: string, reason?: string) => {
+    if (channelRef.current) {
+      try {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'kick_member',
+          payload: { targetUserId, reason },
+        });
+      } catch (e) {}
+    }
+  }, []);
+
   return {
     members,
     memberCount: members.length,
     updatePresenceStatus,
+    leaveRoom,
+    broadcastKick,
   };
 }
 
@@ -319,6 +356,136 @@ export function useEndRoom() {
   });
 }
 
+// 4.1 useToggleCoHost
+export function useToggleCoHost() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      roomId,
+      targetUserId,
+      isCurrentlyCoHost,
+    }: {
+      roomId: string;
+      targetUserId: string;
+      isCurrentlyCoHost: boolean;
+    }) => {
+      try {
+        const { data: currentRoom, error: fetchErr } = await supabase
+          .from('study_rooms')
+          .select('co_host_ids')
+          .eq('id', roomId)
+          .single();
+
+        if (fetchErr) {
+          if ((fetchErr as any)?.code === '42703' || fetchErr.message?.includes('does not exist')) {
+            return null; // DB column not yet added to Supabase; handled via Realtime
+          }
+          throw fetchErr;
+        }
+
+        const existingCoHosts: string[] = (currentRoom as any)?.co_host_ids || [];
+        const updatedCoHosts = isCurrentlyCoHost
+          ? existingCoHosts.filter((id) => id !== targetUserId)
+          : Array.from(new Set([...existingCoHosts, targetUserId]));
+
+        const { data, error } = await supabase
+          .from('study_rooms')
+          .update({ co_host_ids: updatedCoHosts })
+          .eq('id', roomId);
+
+        if (error) {
+          if ((error as any)?.code === '42703' || error.message?.includes('does not exist')) {
+            return null;
+          }
+          throw error;
+        }
+        return data;
+      } catch (err: any) {
+        if (err?.code === '42703' || err?.message?.includes('does not exist')) {
+          return null;
+        }
+        if (__DEV__) console.warn('toggleCoHost error:', err);
+        return null;
+      }
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['room', vars.roomId] });
+      queryClient.invalidateQueries({ queryKey: ['activeRooms'] });
+      queryClient.invalidateQueries({ queryKey: ['myRooms'] });
+    },
+    onError: (err: any) => {
+      if (__DEV__) console.warn('useToggleCoHost onError:', err);
+    },
+  });
+}
+
+// 4.2 useKickMember
+export function useKickMember() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      roomId,
+      targetUserId,
+    }: {
+      roomId: string;
+      targetUserId: string;
+    }) => {
+      try {
+        const { data: currentRoom, error: fetchErr } = await supabase
+          .from('study_rooms')
+          .select('banned_user_ids, co_host_ids')
+          .eq('id', roomId)
+          .single();
+
+        if (fetchErr) {
+          if ((fetchErr as any)?.code === '42703' || fetchErr.message?.includes('does not exist')) {
+            return null;
+          }
+          throw fetchErr;
+        }
+
+        const existingBanned: string[] = (currentRoom as any)?.banned_user_ids || [];
+        const existingCoHosts: string[] = (currentRoom as any)?.co_host_ids || [];
+
+        const updatedBanned = Array.from(new Set([...existingBanned, targetUserId]));
+        const updatedCoHosts = existingCoHosts.filter((id) => id !== targetUserId);
+
+        const { data, error } = await supabase
+          .from('study_rooms')
+          .update({
+            banned_user_ids: updatedBanned,
+            co_host_ids: updatedCoHosts,
+          })
+          .eq('id', roomId);
+
+        if (error) {
+          if ((error as any)?.code === '42703' || error.message?.includes('does not exist')) {
+            return null;
+          }
+          throw error;
+        }
+        return data;
+      } catch (err: any) {
+        if (err?.code === '42703' || err?.message?.includes('does not exist')) {
+          return null;
+        }
+        if (__DEV__) console.warn('kickMember error:', err);
+        return null;
+      }
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['room', vars.roomId] });
+      queryClient.invalidateQueries({ queryKey: ['activeRooms'] });
+      queryClient.invalidateQueries({ queryKey: ['myRooms'] });
+    },
+    onError: (err: any) => {
+      if (__DEV__) console.warn('useKickMember onError:', err);
+    },
+  });
+}
+
 // 6. useMyRooms
 export function useMyRooms() {
   return useQuery<RoomWithHost[]>({
@@ -377,6 +544,8 @@ export function useMyRooms() {
         is_public: r.is_public,
         member_count: r.member_count,
         created_at: r.created_at,
+        co_host_ids: (r as any).co_host_ids || [],
+        banned_user_ids: (r as any).banned_user_ids || [],
       }));
     },
   });
@@ -385,6 +554,8 @@ export function useMyRooms() {
 // 5. useRoomChat
 export function useRoomChat(roomId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [bannedUserIds, setBannedUserIds] = useState<string[]>([]);
+  const [coHostIds, setCoHostIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const { profile } = useAuthStore();
   const lastMessageTime = useRef<number>(0);
@@ -403,21 +574,59 @@ export function useRoomChat(roomId: string) {
           .select('*')
           .eq('room_id', roomId)
           .order('created_at', { ascending: true })
-          .limit(100);
+          .limit(200);
 
         if (error) {
           if (__DEV__) console.warn('Failed to load room messages:', error);
         } else if (data && isMounted) {
-          const formatted: ChatMessage[] = data.map((msg) => ({
-            id: msg.id,
-            userId: msg.user_id,
-            userName: msg.user_name,
-            userInitials: msg.user_initials,
-            userAvatar: msg.user_avatar || null,
-            text: msg.text,
-            sentAt: msg.created_at,
-          }));
+          const formatted: ChatMessage[] = [];
+          const initialBanned: string[] = [];
+          const initialCoHosts: string[] = [];
+
+          for (const msg of data) {
+            const text = msg.text || '';
+            // Parse hidden system events for real-time ban & co-host persistence across devices
+            if (text.startsWith('__SYS_EVENT__:BAN:')) {
+              const bId = text.replace('__SYS_EVENT__:BAN:', '').trim();
+              if (bId && !initialBanned.includes(bId)) {
+                initialBanned.push(bId);
+              }
+              continue;
+            }
+            if (text.startsWith('__SYS_EVENT__:COHOST_ADD:')) {
+              const cId = text.replace('__SYS_EVENT__:COHOST_ADD:', '').trim();
+              if (cId && !initialCoHosts.includes(cId)) {
+                initialCoHosts.push(cId);
+              }
+              continue;
+            }
+            if (text.startsWith('__SYS_EVENT__:COHOST_REMOVE:')) {
+              const cId = text.replace('__SYS_EVENT__:COHOST_REMOVE:', '').trim();
+              const idx = initialCoHosts.indexOf(cId);
+              if (idx !== -1) {
+                initialCoHosts.splice(idx, 1);
+              }
+              continue;
+            }
+
+            formatted.push({
+              id: msg.id,
+              userId: msg.user_id,
+              userName: msg.user_name,
+              userInitials: msg.user_initials,
+              userAvatar: msg.user_avatar || null,
+              text: msg.text,
+              sentAt: msg.created_at,
+            });
+          }
+
           setMessages(formatted);
+          if (initialBanned.length > 0) {
+            setBannedUserIds(initialBanned);
+          }
+          if (initialCoHosts.length > 0) {
+            setCoHostIds(initialCoHosts);
+          }
         }
       } catch (err) {
         if (__DEV__) console.warn('Error in fetchHistory:', err);
@@ -443,6 +652,29 @@ export function useRoomChat(roomId: string) {
         (payload) => {
           const newRow = payload.new as any;
           if (!newRow) return;
+
+          const text = newRow.text || '';
+          if (text.startsWith('__SYS_EVENT__:BAN:')) {
+            const bId = text.replace('__SYS_EVENT__:BAN:', '').trim();
+            if (bId) {
+              setBannedUserIds((prev) => Array.from(new Set([...prev, bId])));
+            }
+            return;
+          }
+          if (text.startsWith('__SYS_EVENT__:COHOST_ADD:')) {
+            const cId = text.replace('__SYS_EVENT__:COHOST_ADD:', '').trim();
+            if (cId) {
+              setCoHostIds((prev) => Array.from(new Set([...prev, cId])));
+            }
+            return;
+          }
+          if (text.startsWith('__SYS_EVENT__:COHOST_REMOVE:')) {
+            const cId = text.replace('__SYS_EVENT__:COHOST_REMOVE:', '').trim();
+            if (cId) {
+              setCoHostIds((prev) => prev.filter((id) => id !== cId));
+            }
+            return;
+          }
 
           const newMsg: ChatMessage = {
             id: newRow.id,
@@ -486,6 +718,25 @@ export function useRoomChat(roomId: string) {
       });
     };
   }, [roomId]);
+
+  const sendSystemEvent = useCallback(
+    async (systemText: string) => {
+      if (!profile?.id || !roomId) return;
+      try {
+        await supabase.from('room_messages').insert({
+          room_id: roomId,
+          user_id: profile.id,
+          user_name: 'SYSTEM',
+          user_initials: 'SY',
+          user_avatar: null,
+          text: systemText,
+        });
+      } catch (e) {
+        if (__DEV__) console.warn('Failed to insert system event:', e);
+      }
+    },
+    [roomId, profile?.id]
+  );
 
   const sendMessage = useCallback(async (text: string) => {
     if (!profile?.id) return;
@@ -568,5 +819,8 @@ export function useRoomChat(roomId: string) {
     messages,
     isLoading,
     sendMessage,
+    sendSystemEvent,
+    bannedUserIds,
+    coHostIds,
   };
 }

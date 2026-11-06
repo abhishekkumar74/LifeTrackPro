@@ -311,8 +311,8 @@ const styles = StyleSheet.create({
     paddingBottom: 60,
   },
   sheetHeader: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 26,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: '#17172A',
     marginBottom: 20,
   },

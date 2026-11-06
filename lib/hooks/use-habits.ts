@@ -144,6 +144,34 @@ export function useHabitHistory(habitId: string, days: number) {
   });
 }
 
+// 2.1 Fetch all historical completion logs for a specific habit
+export function useHabitLogs(habitId: string) {
+  const { user } = useAuthStore();
+  return useQuery<{ [date: string]: boolean }>({
+    queryKey: ['habitLogs', user?.id, habitId],
+    queryFn: async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('habit_logs')
+        .select('date, done')
+        .eq('habit_id', habitId)
+        .eq('user_id', currentUser.id)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+
+      const map: { [date: string]: boolean } = {};
+      (data || []).forEach((row) => {
+        map[row.date] = row.done;
+      });
+      return map;
+    },
+    enabled: !!user?.id && !!habitId,
+  });
+}
+
 // 3. Retrieve streak stats for a habit using the 60-day history query
 export function useHabitStreak(habitId: string) {
   const historyQuery = useHabitHistory(habitId, 60);

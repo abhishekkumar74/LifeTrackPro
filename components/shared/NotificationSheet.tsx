@@ -301,8 +301,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 26,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: '#1C1917',
   },
   unreadPill: {
@@ -392,8 +392,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   emptyTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 22,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 18,
     color: '#1C1917',
   },
   emptySub: {

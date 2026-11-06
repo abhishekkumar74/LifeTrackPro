@@ -62,6 +62,14 @@ export const RoomCard = React.memo(({
 
   const isHost = room.host_id === currentUserId;
 
+  const isBanned = useMemo(() => {
+    if (!currentUserId) return false;
+    if (Array.isArray(room.banned_user_ids) && room.banned_user_ids.includes(currentUserId)) {
+      return true;
+    }
+    return false;
+  }, [currentUserId, room.banned_user_ids]);
+
   const { displaySubject, visibility } = useMemo(() => {
     return parseRoomSubject(room.subject, room.is_public);
   }, [room.subject, room.is_public]);
@@ -171,7 +179,11 @@ export const RoomCard = React.memo(({
         </View>
 
         <View style={styles.rightColumn}>
-          {!room.is_active || timerText === 'Ended' ? (
+          {isBanned ? (
+            <View style={[styles.joinButton, { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }]}>
+              <Text style={[styles.joinButtonText, { color: '#EF4444' }]}>Removed</Text>
+            </View>
+          ) : !room.is_active || timerText === 'Ended' ? (
             <View style={styles.endedBadge}>
               <Text style={styles.endedBadgeText}>Ended</Text>
             </View>

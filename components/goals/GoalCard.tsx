@@ -669,9 +669,9 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
   titleNormal: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 22,
-    lineHeight: 26,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 18,
+    lineHeight: 24,
     color: '#17172A',
   },
   goalMeta: {

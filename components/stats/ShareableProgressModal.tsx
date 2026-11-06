@@ -42,11 +42,13 @@ interface ProgressMetrics {
   userName: string;
   category: string;
   focusHours: number;
+  focusMinutes?: number;
   habitStreak: number;
   tasksDone: number;
   consistencyRate: number;
   bestDayName?: string;
   bestDayHours?: number;
+  bestDayMinutes?: number;
   totalEntriesCount?: number;
 }
 
@@ -75,7 +77,9 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
     }
   }, [visible]);
 
-  const officialStoreUrl = 'https://play.google.com/store/apps/details?id=com.lifetrackpro.app';
+  const getStoreUrl = () => {
+    return Platform.OS === 'ios' ? CONFIG.storeUrls.ios : CONFIG.storeUrls.android;
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -84,42 +88,35 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
     }, 2500);
   };
 
-  // Generate verified caption text for sharing with official store download link
+  // Concise download link text to send alongside the card (no redundant stats because card has everything)
   const periodLabel = selectedPeriod === 'week' ? 'This Week' : selectedPeriod === 'month' ? 'This Month' : 'All-Time';
-  
-  const generateCaption = () => {
-    return `My LifeTrack Pro Progress (${periodLabel}):\n` +
-      `Focus Duration: ${mergedMetrics.focusHours.toFixed(1)} hours\n` +
-      `Habit Streak: ${mergedMetrics.habitStreak} Days\n` +
-      `Tasks Completed: ${mergedMetrics.tasksDone}\n` +
-      `Consistency: ${mergedMetrics.consistencyRate}%\n\n` +
-      `Download LifeTrack Pro on Google Play Store:\n` +
-      `${officialStoreUrl}\n\n` +
-      `#LifeTrackPro #Consistency #DeepWork #Growth`;
+
+  const getShareText = () => {
+    return `Download LifeTrack Pro:\n${getStoreUrl()}`;
   };
 
   const handleCopyCaption = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const caption = generateCaption();
+    const shareText = getShareText();
     const clipboard = getClipboardModule();
     if (clipboard?.setStringAsync) {
-      await clipboard.setStringAsync(caption);
-      showToast('Caption & Store Link copied to clipboard!');
+      await clipboard.setStringAsync(shareText);
+      showToast('Download link copied to clipboard!');
     } else {
-      await Share.share({ message: caption, title: 'LifeTrack Pro Progress' }).catch(() => {});
-      showToast('Caption shared!');
+      await Share.share({ message: shareText, title: 'LifeTrack Pro' }).catch(() => {});
+      showToast('Download link shared!');
     }
   };
 
   const handleShareTextAndLink = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const caption = generateCaption();
+    const shareText = getShareText();
     try {
       await Share.share({
-        message: caption,
-        title: 'LifeTrack Pro Progress',
+        message: shareText,
+        title: 'LifeTrack Pro',
       });
-      showToast('Progress link & caption shared!');
+      showToast('Download link shared!');
     } catch (err) {
       if (__DEV__) console.warn('Share text failed:', err);
     }
@@ -130,11 +127,11 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
     setIsExporting(true);
 
     try {
-      const caption = generateCaption();
-      // Pre-copy caption & store link to clipboard so user can paste it anywhere immediately
+      const shareText = getShareText();
+      // Pre-copy download link to clipboard as a safety convenience
       const clipboard = getClipboardModule();
       if (clipboard?.setStringAsync) {
-        await clipboard.setStringAsync(caption).catch(() => {});
+        await clipboard.setStringAsync(shareText).catch(() => {});
       }
 
       let sharedSuccessfully = false;
@@ -147,30 +144,31 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
           if (uri) {
             await Share.share({
               url: uri,
-              message: caption,
-              title: 'LifeTrack Pro Progress',
+              message: shareText,
+              title: 'LifeTrack Pro',
             });
             sharedSuccessfully = true;
-            showToast('Progress card & store link shared!');
+            showToast('Progress card & download link shared!');
           }
         } catch (iosShareErr) {
           if (__DEV__) console.warn('iOS combined share failed, falling back:', iosShareErr);
         }
       }
 
-      // Android & fallback: Use expo-sharing for image file with download link dialog title
+      // Android & fallback: Use expo-sharing with message support so both card image and download link are sent together
       if (!sharedSuccessfully && viewShotRef.current?.capture && sharing) {
         try {
           const uri = await viewShotRef.current.capture();
           const canShare = sharing.isAvailableAsync ? await sharing.isAvailableAsync() : true;
           if (canShare && uri) {
             await sharing.shareAsync(uri, {
-              dialogTitle: `Share LifeTrack Pro Progress (${officialStoreUrl})`,
+              dialogTitle: 'Share LifeTrack Pro Progress',
               mimeType: 'image/png',
               UTI: 'public.png',
+              message: shareText,
             });
             sharedSuccessfully = true;
-            showToast('Card shared! App link copied to clipboard.');
+            showToast('Progress card & download link shared!');
           }
         } catch (captureErr) {
           if (__DEV__) console.warn('ViewShot capture or sharing failed:', captureErr);
@@ -180,14 +178,14 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
       if (!sharedSuccessfully) {
         // Fallback to text Share API if native file sharing is unavailable
         await Share.share({
-          message: caption,
-          title: 'LifeTrack Pro Progress',
+          message: shareText,
+          title: 'LifeTrack Pro',
         });
-        showToast('Caption & store link shared!');
+        showToast('Download link shared!');
       }
     } catch (err: any) {
       if (__DEV__) console.warn('Share progress card error:', err);
-      showToast('Store link copied to clipboard');
+      showToast('Download link copied to clipboard');
     } finally {
       setIsExporting(false);
     }
@@ -269,15 +267,23 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
 
   const periodMultiplier = selectedPeriod === 'month' ? 3.8 : selectedPeriod === 'all' ? 12.5 : 1;
 
+  const baseMinutes = metrics?.focusMinutes != null
+    ? metrics.focusMinutes
+    : Math.round((metrics?.focusHours || 0) * 60);
+
   const mergedMetrics: ProgressMetrics = {
     userName: metrics?.userName || 'Achiever',
     category: metrics?.category || 'Student',
     focusHours: metrics?.focusHours ? metrics.focusHours * periodMultiplier : 0,
+    focusMinutes: Math.round(baseMinutes * periodMultiplier),
     habitStreak: metrics?.habitStreak ?? 0,
     tasksDone: metrics?.tasksDone ? Math.round(metrics.tasksDone * periodMultiplier) : 0,
     consistencyRate: metrics?.consistencyRate ?? 0,
     bestDayName: metrics?.bestDayName,
     bestDayHours: metrics?.bestDayHours,
+    bestDayMinutes: metrics?.bestDayMinutes != null
+      ? metrics.bestDayMinutes
+      : Math.round((metrics?.bestDayHours || 0) * 60),
   };
 
   const categoryText = mergedMetrics.category ? mergedMetrics.category.replace('_', ' ').toUpperCase() : 'STUDENT';
@@ -383,7 +389,6 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
                     style={[
                       styles.cardHeadline,
                       { color: getSubtextColor() },
-                      selectedTheme === 'parchment' && { fontFamily: 'InstrumentSerif', fontSize: 24 },
                     ]}
                   >
                     "{periodLabel} Progress Report"
@@ -392,11 +397,16 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
 
                 {/* Core Metrics Grid */}
                 <View style={styles.cardMetricsGrid}>
-                  {/* Metric 1: Focus Hours */}
+                  {/* Metric 1: Focus Minutes */}
                   <View style={[styles.cardStatBox, { backgroundColor: getStatBoxBg() }]}>
                     <Clock size={16} color={selectedTheme === 'indigo' ? '#FFD700' : '#5B4FE8'} />
-                    <Text style={[styles.cardStatValue, { color: getTextColor() }]}>
-                      {mergedMetrics.focusHours.toFixed(1)}h
+                    <Text
+                      style={[styles.cardStatValue, { color: getTextColor() }]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.75}
+                    >
+                      {mergedMetrics.focusMinutes} min
                     </Text>
                     <Text style={[styles.cardStatLabel, { color: getSubtextColor() }]}>Deep Focus</Text>
                   </View>
@@ -434,7 +444,7 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
                   <View style={[styles.cardHighlightBox, { backgroundColor: getStatBoxBg() }]}>
                     <Sparkles size={14} color="#E8A020" />
                     <Text style={[styles.cardHighlightText, { color: getTextColor() }]}>
-                      Peak Focus: <Text style={{ fontWeight: 'bold' }}>{mergedMetrics.bestDayName}</Text> ({mergedMetrics.bestDayHours?.toFixed(1) || 0}h)
+                      Peak Focus: <Text style={{ fontWeight: 'bold' }}>{mergedMetrics.bestDayName}</Text> ({mergedMetrics.bestDayMinutes || 0} min)
                     </Text>
                   </View>
                 )}
@@ -655,15 +665,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   cardUserName: {
-    fontFamily: 'DMSans-Bold',
+    fontFamily: 'Outfit-Bold',
     fontSize: 22,
-    fontWeight: '700',
     marginBottom: 2,
   },
   cardHeadline: {
-    fontFamily: 'DMSans',
+    fontFamily: 'Outfit-SemiBold',
     fontSize: 13,
-    fontStyle: 'italic',
   },
   cardMetricsGrid: {
     flexDirection: 'row',

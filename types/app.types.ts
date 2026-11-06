@@ -242,6 +242,8 @@ export interface StudyRoom {
   is_public: boolean;
   member_count: number;
   created_at: string;
+  co_host_ids?: string[];
+  banned_user_ids?: string[];
 }
 
 export interface DailyCheckin {

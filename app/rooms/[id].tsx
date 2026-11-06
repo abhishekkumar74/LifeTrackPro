@@ -1,12 +1,21 @@
 import { Skeleton } from '@/components/shared/Skeleton';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
-import { ChatMessage, RoomMember, useEndRoom, useRoomChat, useRoomPresence } from '@/lib/hooks/use-study-rooms';
+import {
+  ChatMessage,
+  RoomMember,
+  useEndRoom,
+  useKickMember,
+  useRoomChat,
+  useRoomPresence,
+  useToggleCoHost,
+} from '@/lib/hooks/use-study-rooms';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useUiStore } from '@/lib/store/ui.store';
 import { supabase } from '@/lib/supabase/client';
 import { StudyRoom } from '@/types/app.types';
 import { CONFIG } from '@/constants/config';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { Href, router, useLocalSearchParams } from 'expo-router';
 import {
@@ -38,6 +47,13 @@ import {
   ChevronDown,
   Copy,
   UserPlus,
+  Crown,
+  Shield,
+  ShieldCheck,
+  UserX,
+  Sparkles,
+  User,
+  AlertCircle,
 } from 'lucide-react-native';
 import { parseRoomSubject } from '@/lib/utils/room-visibility';
 import { RoomVolumeSlider } from '@/components/community/RoomVolumeSlider';
@@ -194,10 +210,91 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   });
 
   // Hooks for Presence & Chat
-  const { members, memberCount, updatePresenceStatus } = useRoomPresence(id || '');
-  const { messages, sendMessage } = useRoomChat(id || '');
+  const queryClient = useQueryClient();
+  const { members, memberCount, updatePresenceStatus, leaveRoom, broadcastKick } = useRoomPresence(id || '');
+  const {
+    messages,
+    sendMessage,
+    sendSystemEvent,
+    bannedUserIds: chatBannedIds,
+    coHostIds: chatCoHostIds,
+  } = useRoomChat(id || '');
   const endRoomMutation = useEndRoom();
+  const kickMemberMutation = useKickMember();
+  const toggleCoHostMutation = useToggleCoHost();
   const hasExpiredRef = useRef(false);
+
+  // Local real-time role & banned states (syncs via Realtime Broadcast + DB)
+  const [liveCoHostIds, setLiveCoHostIds] = useState<string[]>([]);
+  const [liveBannedIds, setLiveBannedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadBanned = async () => {
+      try {
+        const key = `@lifetrack_room_banned_${id}`;
+        const raw = await AsyncStorage.getItem(key);
+        if (raw && isMounted) {
+          const storedBanned = JSON.parse(raw);
+          if (Array.isArray(storedBanned)) {
+            setLiveBannedIds((prev) => Array.from(new Set([...prev, ...storedBanned])));
+          }
+        }
+      } catch (e) {}
+    };
+    loadBanned();
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (room?.co_host_ids && Array.isArray(room.co_host_ids)) {
+      setLiveCoHostIds((prev) => Array.from(new Set([...prev, ...room.co_host_ids!])));
+    }
+    if (room?.banned_user_ids && Array.isArray(room.banned_user_ids)) {
+      setLiveBannedIds((prev) => Array.from(new Set([...prev, ...room.banned_user_ids!])));
+    }
+  }, [room?.co_host_ids, room?.banned_user_ids]);
+
+  // Combined real-time lists from DB, Realtime, Chat System Events, and local storage
+  const allBannedIds = useMemo(() => {
+    const set = new Set<string>();
+    liveBannedIds.forEach((uid) => set.add(uid));
+    chatBannedIds.forEach((uid) => set.add(uid));
+    if (Array.isArray(room?.banned_user_ids)) {
+      room.banned_user_ids.forEach((uid) => set.add(uid));
+    }
+    return Array.from(set);
+  }, [liveBannedIds, chatBannedIds, room?.banned_user_ids]);
+
+  const allCoHostIds = useMemo(() => {
+    const set = new Set<string>();
+    liveCoHostIds.forEach((uid) => set.add(uid));
+    chatCoHostIds.forEach((uid) => set.add(uid));
+    if (Array.isArray(room?.co_host_ids)) {
+      room.co_host_ids.forEach((uid) => set.add(uid));
+    }
+    return Array.from(set);
+  }, [liveCoHostIds, chatCoHostIds, room?.co_host_ids]);
+
+  // Active filtered members (excludes anyone who has been removed/banned)
+  const activeMembers = useMemo(() => {
+    return members.filter((m) => !allBannedIds.includes(m.userId));
+  }, [members, allBannedIds]);
+
+  // Role Resolution
+  const isHost = !!room && room.host_id === currentUserId;
+  const isCoHost = allCoHostIds.includes(currentUserId);
+  const canManageRoom = isHost || isCoHost;
+
+  // Selected Member for Moderation Sheet
+  const [selectedMember, setSelectedMember] = useState<RoomMember | null>(null);
+
+  // Individual Device Audio Mute & Volume State
+  const [isLocallyMuted, setIsLocallyMuted] = useState(false);
+  const isLocallyMutedRef = useRef(false);
+  isLocallyMutedRef.current = isLocallyMuted;
 
   // Room State
   const [activeTab, setActiveTab] = useState<'lounge' | 'chat'>('lounge');
@@ -212,11 +309,26 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   // Memoized reversed message history to prevent re-reversing on every render
   const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
 
+  const handleMemberPress = useCallback((member: RoomMember) => {
+    setSelectedMember(member);
+  }, []);
+
   const renderMessageItem = useCallback(
-    ({ item }: { item: ChatMessage }) => (
-      <MessageRow message={item} isMe={item.userId === currentUserId} />
-    ),
-    [currentUserId]
+    ({ item }: { item: ChatMessage }) => {
+      const isHostUser = item.userId === room?.host_id;
+      const isCoHostUser = allCoHostIds.includes(item.userId);
+      const memberObj = activeMembers.find((m) => m.userId === item.userId);
+      return (
+        <MessageRow
+          message={item}
+          isMe={item.userId === currentUserId}
+          isHostUser={isHostUser}
+          isCoHostUser={isCoHostUser}
+          onPressAvatar={memberObj ? () => handleMemberPress(memberObj) : undefined}
+        />
+      );
+    },
+    [currentUserId, room?.host_id, allCoHostIds, activeMembers, handleMemberPress]
   );
 
   // Session tracking in room
@@ -299,7 +411,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           if (uri) {
             const webAudio = new (window as any).Audio(uri);
             webAudio.loop = true;
-            webAudio.volume = Math.min(1, Math.max(0, volume));
+            webAudio.volume = isLocallyMutedRef.current ? 0 : Math.min(1, Math.max(0, volume));
             await webAudio.play();
             if (loadingSoundIdRef.current !== loadId) {
               webAudio.pause();
@@ -328,7 +440,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           const player = createAudioPlayer(station.asset);
           if (player) {
             player.loop = true;
-            player.volume = Math.min(1, Math.max(0, volume));
+            player.volume = isLocallyMutedRef.current ? 0 : Math.min(1, Math.max(0, volume));
             player.play?.();
             if (loadingSoundIdRef.current !== loadId) {
               player.pause?.();
@@ -367,18 +479,42 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
   const changeVolume = useCallback(async (vol: number) => {
     setMusicVolume(vol);
+    if (vol > 0 && isLocallyMutedRef.current) {
+      setIsLocallyMuted(false);
+      isLocallyMutedRef.current = false;
+    }
     try {
       if (soundInstanceRef.current) {
-        soundInstanceRef.current.volume = Math.min(1, Math.max(0, vol));
+        soundInstanceRef.current.volume = isLocallyMutedRef.current ? 0 : Math.min(1, Math.max(0, vol));
+      } else if (vol > 0 && isPlayingMusic) {
+        playStation(currentStation, vol);
       }
     } catch (e) {}
-  }, []);
+  }, [isPlayingMusic, currentStation, playStation]);
+
+  const toggleLocalMute = useCallback(() => {
+    setIsLocallyMuted((prev) => {
+      const next = !prev;
+      isLocallyMutedRef.current = next;
+      try {
+        if (soundInstanceRef.current) {
+          soundInstanceRef.current.volume = next ? 0 : Math.min(1, Math.max(0, musicVolume));
+        } else if (!next && isPlayingMusic) {
+          playStation(currentStation, musicVolume);
+        }
+      } catch (e) {}
+      return next;
+    });
+  }, [musicVolume, isPlayingMusic, currentStation, playStation]);
 
   const handleHostSelectStation = useCallback((station: MusicStation) => {
     setCurrentStation(station);
+    setIsPlayingMusic(true);
+    setIsLocallyMuted(false);
+    isLocallyMutedRef.current = false;
     playStation(station, musicVolume);
 
-    if (reactionChannelRef.current) {
+    if (canManageRoom && reactionChannelRef.current) {
       reactionChannelRef.current.send({
         type: 'broadcast',
         event: 'music',
@@ -388,17 +524,20 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         },
       });
     }
-  }, [musicVolume, playStation]);
+  }, [canManageRoom, musicVolume, playStation]);
 
-  const handleHostTogglePlay = useCallback(() => {
+  const handleTogglePlay = useCallback(() => {
     const nextPlaying = !isPlayingMusic;
+    setIsPlayingMusic(nextPlaying);
     if (nextPlaying) {
+      setIsLocallyMuted(false);
+      isLocallyMutedRef.current = false;
       playStation(currentStation, musicVolume);
     } else {
       stopMusic();
     }
 
-    if (reactionChannelRef.current) {
+    if (canManageRoom && reactionChannelRef.current) {
       reactionChannelRef.current.send({
         type: 'broadcast',
         event: 'music',
@@ -408,15 +547,21 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         },
       });
     }
-  }, [isPlayingMusic, currentStation, musicVolume, playStation, stopMusic]);
+  }, [canManageRoom, isPlayingMusic, currentStation, musicVolume, playStation, stopMusic]);
 
-  const handleMemberTogglePlay = useCallback(() => {
-    if (isPlayingMusic) {
-      stopMusic();
-    } else {
+  const handleHostTogglePlay = handleTogglePlay;
+  const handleMemberTogglePlay = handleTogglePlay;
+
+  // Auto-start ambient station if room type is 'music'
+  const hasAutoStartedRef = useRef(false);
+  useEffect(() => {
+    if (!room || hasAutoStartedRef.current) return;
+    if (room.room_type === 'music') {
+      hasAutoStartedRef.current = true;
+      setIsPlayingMusic(true);
       playStation(currentStation, musicVolume);
     }
-  }, [isPlayingMusic, currentStation, musicVolume, playStation, stopMusic]);
+  }, [room, currentStation, musicVolume, playStation]);
 
   // Clean up sound on unmount
   useEffect(() => {
@@ -435,7 +580,75 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   }, []);
 
   const hostIsPremium = hostProfile?.is_premium || false;
-  const isHost = room?.host_id === currentUserId;
+
+  // Immediate eviction helper for banned users
+  const ejectCurrentBannedUser = useCallback(
+    async (reason?: string) => {
+      stopMusic();
+      leaveRoom();
+      try {
+        await AsyncStorage.setItem(`@lifetrack_banned_room_${id}`, 'true');
+      } catch (e) {}
+      router.replace('/rooms' as Href);
+      useUiStore.getState().showToast(
+        reason || 'You have been removed from this study room by the host and cannot re-enter.',
+        'error'
+      );
+    },
+    [id, stopMusic, leaveRoom]
+  );
+
+  // Check if current user is banned from this room
+  const isCurrentBanned = useMemo(() => {
+    if (!currentUserId) return false;
+    return allBannedIds.includes(currentUserId);
+  }, [currentUserId, allBannedIds]);
+
+  // 1. Instant ejection if current user is identified as banned
+  useEffect(() => {
+    if (isCurrentBanned) {
+      ejectCurrentBannedUser();
+    }
+  }, [isCurrentBanned, ejectCurrentBannedUser]);
+
+  // 2. Initial check of local AsyncStorage on mount
+  useEffect(() => {
+    if (!id || !currentUserId) return;
+    let isMounted = true;
+    const checkBannedStatus = async () => {
+      try {
+        const locallyBanned = await AsyncStorage.getItem(`@lifetrack_banned_room_${id}`);
+        if (locallyBanned === 'true' && isMounted) {
+          ejectCurrentBannedUser();
+        }
+      } catch (e) {}
+    };
+    checkBannedStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, [id, currentUserId, ejectCurrentBannedUser]);
+
+  // 3. Active Auto-Bouncer: Host & Co-Admins automatically boot any banned user who attempts to join presence
+  useEffect(() => {
+    if (!canManageRoom) return;
+    const trespassers = members.filter((m) => allBannedIds.includes(m.userId));
+    if (trespassers.length > 0) {
+      trespassers.forEach((m) => {
+        broadcastKick(m.userId, 'You have been removed from this room by the host.');
+        if (reactionChannelRef.current) {
+          reactionChannelRef.current.send({
+            type: 'broadcast',
+            event: 'kick_member',
+            payload: {
+              targetUserId: m.userId,
+              reason: 'You have been removed from this room by the host.',
+            },
+          });
+        }
+      });
+    }
+  }, [canManageRoom, members, allBannedIds, broadcastKick]);
 
   useEffect(() => {
     if (isRoomLoading || !room) return;
@@ -539,11 +752,49 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       .on('broadcast', { event: 'music' }, ({ payload }) => {
         const station = STATIONS.find((s) => s.id === payload.stationId) || STATIONS[0];
         setCurrentStation(station);
+        setIsPlayingMusic(payload.isPlaying);
         if (payload.isPlaying) {
-          playStationRef.current(station, musicVolumeRef.current);
+          playStationRef.current(station, isLocallyMutedRef.current ? 0 : musicVolumeRef.current);
         } else {
           stopMusicRef.current();
         }
+      })
+      .on('broadcast', { event: 'kick_member' }, async ({ payload }) => {
+        if (payload?.targetUserId) {
+          setLiveBannedIds((prev) => Array.from(new Set([...prev, payload.targetUserId])));
+          setLiveCoHostIds((prev) => prev.filter((uid) => uid !== payload.targetUserId));
+        }
+        if (payload?.targetUserId === currentUserId) {
+          try {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          } catch (e) {}
+
+          // 1. Immediately stop audio
+          stopMusicRef.current();
+
+          // 2. Persist local ban for this room so user cannot re-enter
+          try {
+            await AsyncStorage.setItem(`@lifetrack_banned_room_${id}`, 'true');
+          } catch (e) {}
+
+          // 3. Immediately untrack from presence
+          leaveRoom();
+
+          // 4. Immediately boot the user out of the room to /rooms list
+          router.replace('/rooms' as Href);
+
+          // 5. Show toast notice
+          useUiStore.getState().showToast(
+            payload?.reason || 'You were removed from this study room by the host.',
+            'error'
+          );
+        }
+      })
+      .on('broadcast', { event: 'role_updated' }, ({ payload }) => {
+        if (payload?.co_host_ids && Array.isArray(payload.co_host_ids)) {
+          setLiveCoHostIds(payload.co_host_ids);
+        }
+        queryClient.invalidateQueries({ queryKey: ['room', id] });
       })
       .on('broadcast', { event: 'room_ended' }, () => {
         handleRoomExpiredRef.current();
@@ -738,18 +989,137 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     }
   };
 
-  const handleMemberPress = (member: RoomMember) => {
-    if (member.userId === currentUserId) return;
-    Alert.alert(
-      `Support ${member.name}`,
-      'Send a quick cheer to boost their focus session:',
-      [
-        { text: 'Send Cheer', onPress: () => sendCheerOrNudge(member.userId, 'cheer') },
-        { text: 'Nudge to Focus', onPress: () => sendCheerOrNudge(member.userId, 'nudge') },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
+  const handleKickMember = useCallback(
+    (target: RoomMember) => {
+      Alert.alert(
+        'Remove Member',
+        `Are you sure you want to remove ${target.name} from this study room? They will not be able to re-enter.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                setSelectedMember(null);
+
+                // 1. Immediately update local banned & co-host lists (0ms UI disappearance)
+                setLiveBannedIds((prev) => Array.from(new Set([...prev, target.userId])));
+                setLiveCoHostIds((prev) => prev.filter((uid) => uid !== target.userId));
+
+                // 2. Persist locally on host device so banned state survives
+                try {
+                  const key = `@lifetrack_room_banned_${id}`;
+                  const raw = await AsyncStorage.getItem(key);
+                  const existing: string[] = raw ? JSON.parse(raw) : [];
+                  await AsyncStorage.setItem(key, JSON.stringify(Array.from(new Set([...existing, target.userId]))));
+                } catch (e) {}
+
+                // 3. Send broadcast kick event on BOTH channels for 100% instant delivery
+                const kickPayload = {
+                  targetUserId: target.userId,
+                  reason: `You were removed from this room by ${profile?.name || 'the room admin'}.`,
+                };
+
+                broadcastKick(target.userId, kickPayload.reason);
+
+                if (reactionChannelRef.current) {
+                  reactionChannelRef.current.send({
+                    type: 'broadcast',
+                    event: 'kick_member',
+                    payload: kickPayload,
+                  });
+                }
+
+                // 4. Send persistent system event via room_messages (persists across restarts and all devices)
+                sendSystemEvent(`__SYS_EVENT__:BAN:${target.userId}`);
+
+                useUiStore.getState().showToast(`${target.name} has been removed from the room.`, 'info');
+
+                // 5. Persist to banned_user_ids in Supabase
+                try {
+                  await kickMemberMutation.mutateAsync({
+                    roomId: id || '',
+                    targetUserId: target.userId,
+                  });
+                } catch (err) {}
+              } catch (err) {
+                useUiStore.getState().showToast(`${target.name} has been removed from the room.`, 'info');
+              }
+            },
+          },
+        ]
+      );
+    },
+    [id, profile?.name, broadcastKick, sendSystemEvent, kickMemberMutation]
+  );
+
+  const handleToggleCoHost = useCallback(
+    (target: RoomMember) => {
+      const isTargetCoHost = allCoHostIds.includes(target.userId);
+      const actionTitle = isTargetCoHost ? 'Dismiss Co-Admin' : 'Make Co-Admin';
+      const actionDesc = isTargetCoHost
+        ? `Remove Co-Admin privileges from ${target.name}? They will become a regular member.`
+        : `Promote ${target.name} to Co-Admin? They will be able to manage room audio and moderate members.`;
+
+      Alert.alert(
+        actionTitle,
+        actionDesc,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: isTargetCoHost ? 'Dismiss' : 'Make Co-Admin',
+            style: isTargetCoHost ? 'destructive' : 'default',
+            onPress: async () => {
+              setSelectedMember(null);
+
+              // 1. Immediately update local state for 0ms instant UI update
+              const nextCoHosts = isTargetCoHost
+                ? allCoHostIds.filter((uid) => uid !== target.userId)
+                : Array.from(new Set([...allCoHostIds, target.userId]));
+              setLiveCoHostIds(nextCoHosts);
+
+              // 2. Broadcast role change to all users in the room
+              if (reactionChannelRef.current) {
+                reactionChannelRef.current.send({
+                  type: 'broadcast',
+                  event: 'role_updated',
+                  payload: {
+                    co_host_ids: nextCoHosts,
+                    targetUserId: target.userId,
+                  },
+                });
+              }
+
+              // 3. Send persistent system event via room_messages
+              sendSystemEvent(
+                isTargetCoHost
+                  ? `__SYS_EVENT__:COHOST_REMOVE:${target.userId}`
+                  : `__SYS_EVENT__:COHOST_ADD:${target.userId}`
+              );
+
+              useUiStore.getState().showToast(
+                isTargetCoHost
+                  ? `${target.name} is no longer a Co-Admin.`
+                  : `${target.name} is now a Co-Admin!`,
+                'success'
+              );
+
+              // 4. Persist to DB
+              try {
+                await toggleCoHostMutation.mutateAsync({
+                  roomId: id || '',
+                  targetUserId: target.userId,
+                  isCurrentlyCoHost: isTargetCoHost,
+                });
+              } catch (err) {}
+            },
+          },
+        ]
+      );
+    },
+    [id, allCoHostIds, toggleCoHostMutation, sendSystemEvent]
+  );
 
   const formatTimeAgo = (joinedAtStr: string) => {
     const diffMs = Date.now() - new Date(joinedAtStr).getTime();
@@ -851,7 +1221,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               </View>
               <View style={styles.memberPill}>
                 <Users size={11} color="#A78BFA" />
-                <Text style={styles.memberPillText}>{members.length}</Text>
+                <Text style={styles.memberPillText}>{activeMembers.length}</Text>
               </View>
             </View>
           </View>
@@ -1008,7 +1378,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                       {/* Play / Pause circular button */}
                       <TouchableOpacity
                         style={styles.timerPlayPauseBtn}
-                        onPress={isHost ? handleHostTogglePlay : handleMemberTogglePlay}
+                        onPress={handleTogglePlay}
                         activeOpacity={0.8}
                       >
                         {isPlayingMusic ? (
@@ -1038,11 +1408,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                         onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                           if (isCurrent) {
-                            if (isPlayingMusic) {
-                              stopMusic();
-                            } else {
-                              playStation(currentStation, musicVolume);
-                            }
+                            handleTogglePlay();
                           } else {
                             handleHostSelectStation(station);
                           }
@@ -1064,13 +1430,15 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                   onPress={() => setShowSoundModal(true)}
                   activeOpacity={0.8}
                 >
-                  {isPlayingMusic ? (
+                  {isLocallyMuted ? (
+                    <VolumeX size={12} color="#EF4444" />
+                  ) : isPlayingMusic ? (
                     <Volume2 size={12} color="#A78BFA" />
                   ) : (
                     <VolumeX size={12} color="#9D9AA8" />
                   )}
                   <Text style={styles.soundDropdownText} numberOfLines={1}>
-                    {isPlayingMusic ? currentStation.name : 'Lo-fi Study'}
+                    {isLocallyMuted ? 'Muted on Device' : isPlayingMusic ? currentStation.name : 'Audio Paused'}
                   </Text>
                   <ChevronDown size={11} color="#9D9AA8" />
                 </TouchableOpacity>
@@ -1079,9 +1447,9 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               {/* IN-ROOM AMBIENT VOLUME SLIDER */}
               <View style={styles.inlineVolumeSliderRow}>
                 <RoomVolumeSlider
-                  volume={musicVolume}
+                  volume={isLocallyMuted ? 0 : musicVolume}
                   onVolumeChange={changeVolume}
-                  accentColor="#7C5CFC"
+                  accentColor={isLocallyMuted ? '#9D9AA8' : '#7C5CFC'}
                   trackHeight={28}
                 />
               </View>
@@ -1090,7 +1458,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               <View style={styles.studyingNowSection}>
                 <View style={styles.studyingNowHeader}>
                   <Users size={14} color="#A78BFA" />
-                  <Text style={styles.studyingNowTitle}>Studying Now ({members.length})</Text>
+                  <Text style={styles.studyingNowTitle}>Studying Now ({activeMembers.length})</Text>
                 </View>
 
                 <ScrollView
@@ -1098,26 +1466,42 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.studyingNowList}
                 >
-                  {members.map((member) => (
-                    <TouchableOpacity
-                      key={member.userId}
-                      style={styles.memberAvatarTouch}
-                      onPress={() => handleMemberPress(member)}
-                      activeOpacity={0.8}
-                    >
-                      <View style={styles.memberAvatarWrapper}>
-                        {member.avatarUrl ? (
-                          <Image source={{ uri: member.avatarUrl }} style={styles.memberAvatarImage} />
-                        ) : (
-                          <View style={[styles.memberAvatarFallback, { backgroundColor: getColorForUser(member.userId) }]}>
-                            <Text style={styles.memberInitialsText}>{member.initials}</Text>
-                          </View>
-                        )}
-                        {/* Active green status indicator dot */}
-                        <View style={styles.memberActiveDot} />
-                      </View>
-                    </TouchableOpacity>
-                  ))}
+                  {activeMembers.map((member) => {
+                    const isMemberHost = member.userId === room?.host_id;
+                    const isMemberCoHost = allCoHostIds.includes(member.userId);
+                    return (
+                      <TouchableOpacity
+                        key={member.userId}
+                        style={styles.memberAvatarTouch}
+                        onPress={() => handleMemberPress(member)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.memberAvatarWrapper}>
+                          {member.avatarUrl ? (
+                            <Image source={{ uri: member.avatarUrl }} style={styles.memberAvatarImage} />
+                          ) : (
+                            <View style={[styles.memberAvatarFallback, { backgroundColor: getColorForUser(member.userId) }]}>
+                              <Text style={styles.memberInitialsText}>{member.initials}</Text>
+                            </View>
+                          )}
+                          {/* Active green status indicator dot */}
+                          <View style={styles.memberActiveDot} />
+
+                          {/* Role Badges */}
+                          {isMemberHost && (
+                            <View style={styles.avatarCrownBadge}>
+                              <Crown size={8} color="#FFFFFF" />
+                            </View>
+                          )}
+                          {!isMemberHost && isMemberCoHost && (
+                            <View style={styles.avatarShieldBadge}>
+                              <ShieldCheck size={8} color="#FFFFFF" />
+                            </View>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
 
                   {/* + Invite Dashed Circle Button */}
                   <TouchableOpacity
@@ -1200,7 +1584,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               </View>
               <TouchableOpacity
                 style={styles.stickyMiniItem}
-                onPress={isHost ? handleHostTogglePlay : handleMemberTogglePlay}
+                onPress={handleTogglePlay}
                 activeOpacity={0.7}
               >
                 <Music size={13} color="#A78BFA" />
@@ -1372,55 +1756,105 @@ export default function ActiveRoomScreen(): React.JSX.Element {
             activeOpacity={1}
             onPress={(e) => e.stopPropagation()}
           >
-            <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Volume2 size={18} color="#7C5CFC" />
-                <Text style={styles.modalTitle}>Soundscape Stations</Text>
+            <View>
+              <View style={styles.modalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Volume2 size={18} color="#7C5CFC" />
+                  <View>
+                    <Text style={styles.modalTitle}>Soundscape Stations</Text>
+                    <Text style={styles.soundModalSubtitle}>
+                      {canManageRoom
+                        ? 'Admin Broadcast • Plays for all members'
+                        : 'Personal Audio • Select soundscape & volume'}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity onPress={() => setShowSoundModal(false)}>
+                  <X size={18} color="#9D9AA8" />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => setShowSoundModal(false)}>
-                <X size={18} color="#9D9AA8" />
+
+              {/* Master Play/Pause Button */}
+              <TouchableOpacity
+                style={[
+                  styles.masterPlayBtn,
+                  isPlayingMusic ? styles.masterPlayBtnPlaying : styles.masterPlayBtnPaused,
+                ]}
+                onPress={handleTogglePlay}
+                activeOpacity={0.8}
+              >
+                {isPlayingMusic ? <Pause size={15} color="#FFFFFF" /> : <Play size={15} color="#FFFFFF" />}
+                <Text style={styles.masterPlayBtnText}>
+                  {isPlayingMusic
+                    ? (canManageRoom ? 'Pause Audio for Room' : 'Pause Audio')
+                    : (canManageRoom ? 'Broadcast Audio to Room' : 'Play Soundscape')}
+                </Text>
               </TouchableOpacity>
-            </View>
 
-            <View style={styles.soundStationsList}>
-              {STATIONS.map((station) => {
-                const isSelected = currentStation.id === station.id;
-                return (
-                  <TouchableOpacity
-                    key={station.id}
-                    style={[styles.soundStationCard, isSelected && styles.soundStationCardActive]}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      handleHostSelectStation(station);
-                      setShowSoundModal(false);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.stationInfoLeft}>
-                      <Text style={styles.stationNameText}>{station.name}</Text>
-                      <Text style={styles.stationGenreText}>{station.genre}</Text>
-                    </View>
-                    {isSelected && (
-                      <View style={styles.stationActivePill}>
-                        <Text style={styles.stationActivePillText}>Playing</Text>
+              {/* Stations List */}
+              <View style={styles.soundStationsList}>
+                {STATIONS.map((station) => {
+                  const isSelected = currentStation.id === station.id;
+                  return (
+                    <TouchableOpacity
+                      key={station.id}
+                      style={[styles.soundStationCard, isSelected && styles.soundStationCardActive]}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        handleHostSelectStation(station);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.stationInfoLeft}>
+                        <Text style={styles.stationNameText}>{station.name}</Text>
+                        <Text style={styles.stationGenreText}>{station.genre}</Text>
                       </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Volume Control Slider */}
-            <View style={styles.modalVolumeSection}>
-              <View style={styles.modalVolumeHeader}>
-                <Text style={styles.volumeLabel}>Volume</Text>
+                      {isSelected && (
+                        <View style={styles.stationActivePill}>
+                          <Text style={styles.stationActivePillText}>
+                            {isPlayingMusic ? 'Playing' : 'Selected'}
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              <RoomVolumeSlider
-                volume={musicVolume}
-                onVolumeChange={changeVolume}
-                accentColor="#7C5CFC"
-                trackHeight={34}
-              />
+
+              {/* Individual Device Volume Control */}
+              <View style={styles.modalVolumeSection}>
+                <View style={styles.modalVolumeHeader}>
+                  <View>
+                    <Text style={styles.volumeLabel}>Device Volume</Text>
+                    <Text style={styles.volumeSubLabel}>Personal audio level on your phone</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.personalMuteBtn, isLocallyMuted && styles.personalMuteBtnActive]}
+                    onPress={toggleLocalMute}
+                    activeOpacity={0.7}
+                  >
+                    {isLocallyMuted ? (
+                      <VolumeX size={14} color="#EF4444" />
+                    ) : (
+                      <Volume2 size={14} color="#7C5CFC" />
+                    )}
+                    <Text style={[styles.personalMuteBtnText, isLocallyMuted && { color: '#EF4444' }]}>
+                      {isLocallyMuted ? 'Unmute' : 'Mute'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <RoomVolumeSlider
+                  volume={isLocallyMuted ? 0 : musicVolume}
+                  onVolumeChange={changeVolume}
+                  accentColor={isLocallyMuted ? '#9D9AA8' : '#7C5CFC'}
+                  trackHeight={34}
+                />
+                {isLocallyMuted && (
+                  <Text style={styles.mutedDisclaimerText}>
+                    Audio is muted on your phone.
+                  </Text>
+                )}
+              </View>
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -1515,12 +1949,213 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* MEMBER MODERATION & DETAILS SHEET */}
+      <Modal
+        visible={!!selectedMember}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedMember(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setSelectedMember(null)}
+        >
+          <TouchableOpacity
+            style={styles.memberModalContent}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {selectedMember && (() => {
+              const isTargetHost = selectedMember.userId === room?.host_id;
+              const isTargetCoHost = allCoHostIds.includes(selectedMember.userId);
+              const isTargetMe = selectedMember.userId === currentUserId;
+
+              const canKickTarget = !isTargetMe && (
+                isHost || (isCoHost && !isTargetHost && !isTargetCoHost)
+              );
+              const canToggleCoHost = isHost && !isTargetMe;
+
+              return (
+                <View>
+                  {/* Modal Header */}
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Member Details</Text>
+                    <TouchableOpacity onPress={() => setSelectedMember(null)}>
+                      <X size={18} color="#9D9AA8" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Profile Info Card */}
+                  <View style={styles.memberProfileCard}>
+                    <View style={styles.memberProfileAvatarWrap}>
+                      {selectedMember.avatarUrl ? (
+                        <Image source={{ uri: selectedMember.avatarUrl }} style={styles.memberProfileAvatar} />
+                      ) : (
+                        <View style={[styles.memberProfileAvatarFallback, { backgroundColor: getColorForUser(selectedMember.userId) }]}>
+                          <Text style={styles.memberProfileInitials}>{selectedMember.initials}</Text>
+                        </View>
+                      )}
+                      <View style={styles.memberProfileActiveDot} />
+                    </View>
+
+                    <View style={styles.memberProfileDetails}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <Text style={styles.memberProfileName}>{selectedMember.name}</Text>
+                        {isTargetMe && (
+                          <View style={styles.roleBadgeYou}>
+                            <Text style={styles.roleBadgeYouText}>You</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Role Pill */}
+                      <View style={styles.rolePillRow}>
+                        {isTargetHost ? (
+                          <View style={styles.rolePillHost}>
+                            <Crown size={12} color="#F59E0B" />
+                            <Text style={styles.rolePillHostText}>Room Admin</Text>
+                          </View>
+                        ) : isTargetCoHost ? (
+                          <View style={styles.rolePillCoHost}>
+                            <ShieldCheck size={12} color="#A78BFA" />
+                            <Text style={styles.rolePillCoHostText}>Co-Admin</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.rolePillMember}>
+                            <User size={12} color="#9D9AA8" />
+                            <Text style={styles.rolePillMemberText}>Student</Text>
+                          </View>
+                        )}
+
+                        <Text style={styles.memberJoinedText}>
+                          {formatTimeAgo(selectedMember.joinedAt)}
+                        </Text>
+                      </View>
+
+                      {/* Subject or Check-in Goal */}
+                      {selectedMember.checkinGoal ? (
+                        <View style={styles.memberGoalBox}>
+                          <Target size={12} color="#00B894" />
+                          <Text style={styles.memberGoalText} numberOfLines={2}>
+                            {selectedMember.checkinGoal}
+                          </Text>
+                        </View>
+                      ) : selectedMember.currentSubject ? (
+                        <Text style={styles.memberSubjectText}>
+                          Studying: {selectedMember.currentSubject}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  {/* Actions Section */}
+                  <View style={styles.memberActionsContainer}>
+                    {/* Admin Power: Promote / Demote Co-Admin */}
+                    {canToggleCoHost && (
+                      <TouchableOpacity
+                        style={styles.memberActionBtn}
+                        onPress={() => handleToggleCoHost(selectedMember)}
+                        activeOpacity={0.7}
+                      >
+                        <View
+                          style={[
+                            styles.memberActionIconWrap,
+                            {
+                              backgroundColor: isTargetCoHost
+                                ? 'rgba(167, 139, 250, 0.15)'
+                                : 'rgba(245, 158, 11, 0.15)',
+                            },
+                          ]}
+                        >
+                          {isTargetCoHost ? (
+                            <Shield size={16} color="#A78BFA" />
+                          ) : (
+                            <Crown size={16} color="#F59E0B" />
+                          )}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.memberActionBtnTitle}>
+                            {isTargetCoHost ? 'Dismiss Co-Admin' : 'Make Co-Admin'}
+                          </Text>
+                          <Text style={styles.memberActionBtnSub}>
+                            {isTargetCoHost
+                              ? 'Revert to regular student privileges'
+                              : 'Grant audio control & member moderation'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Admin / Co-Admin Power: Kick Member */}
+                    {canKickTarget && (
+                      <TouchableOpacity
+                        style={[styles.memberActionBtn, styles.memberActionBtnDestructive]}
+                        onPress={() => handleKickMember(selectedMember)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.memberActionIconWrap, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
+                          <UserX size={16} color="#EF4444" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.memberActionBtnTitle, { color: '#EF4444' }]}>
+                            Remove from Room
+                          </Text>
+                          <Text style={styles.memberActionBtnSub}>
+                            Remove member and prevent re-joining
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Social Support: Cheers & Nudges (for any peer except self) */}
+                    {!isTargetMe && (
+                      <View style={styles.socialButtonsRow}>
+                        <TouchableOpacity
+                          style={styles.cheerQuickBtn}
+                          onPress={() => {
+                            sendCheerOrNudge(selectedMember.userId, 'cheer');
+                            setSelectedMember(null);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Sparkles size={14} color="#00B894" />
+                          <Text style={styles.cheerQuickBtnText}>Send Cheer</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.nudgeQuickBtn}
+                          onPress={() => {
+                            sendCheerOrNudge(selectedMember.userId, 'nudge');
+                            setSelectedMember(null);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Target size={14} color="#7C5CFC" />
+                          <Text style={styles.nudgeQuickBtnText}>Nudge to Focus</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              );
+            })()}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 // Chat message bubble subcomponent
-const MessageRow = React.memo<{ message: ChatMessage; isMe: boolean }>(({ message, isMe }) => {
+const MessageRow = React.memo<{
+  message: ChatMessage;
+  isMe: boolean;
+  isHostUser?: boolean;
+  isCoHostUser?: boolean;
+  onPressAvatar?: () => void;
+}>(({ message, isMe, isHostUser, isCoHostUser, onPressAvatar }) => {
   const avatarColor = useMemo(() => getColorForUser(message.userId), [message.userId]);
 
   const formattedTime = useMemo(() => {
@@ -1535,17 +2170,37 @@ const MessageRow = React.memo<{ message: ChatMessage; isMe: boolean }>(({ messag
   return (
     <View style={[styles.messageRow, isMe && styles.messageRowOwn]}>
       {!isMe && (
-        <View style={[styles.msgAvatar, { backgroundColor: avatarColor }]}>
+        <TouchableOpacity
+          style={[styles.msgAvatar, { backgroundColor: avatarColor }]}
+          onPress={onPressAvatar}
+          activeOpacity={0.8}
+        >
           {message.userAvatar ? (
             <Image source={{ uri: message.userAvatar }} style={styles.msgAvatarImage} />
           ) : (
             <Text style={styles.msgAvatarText}>{message.userInitials}</Text>
           )}
-        </View>
+        </TouchableOpacity>
       )}
 
       <View style={[styles.messageBubbleColumn, isMe && styles.messageBubbleColumnOwn]}>
-        {!isMe && <Text style={styles.messageSenderName}>{message.userName}</Text>}
+        {!isMe && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+            <Text style={styles.messageSenderName}>{message.userName}</Text>
+            {isHostUser && (
+              <View style={styles.chatCrownPill}>
+                <Crown size={9} color="#F59E0B" />
+                <Text style={styles.chatCrownPillText}>Admin</Text>
+              </View>
+            )}
+            {!isHostUser && isCoHostUser && (
+              <View style={styles.chatShieldPill}>
+                <ShieldCheck size={9} color="#A78BFA" />
+                <Text style={styles.chatShieldPillText}>Co-Admin</Text>
+              </View>
+            )}
+          </View>
+        )}
         <View style={[styles.messageBubble, isMe ? styles.messageBubbleOwn : styles.messageBubbleOther]}>
           <Text style={styles.messageText}>{message.text}</Text>
           <Text style={[styles.messageTimeText, isMe ? styles.messageTimeTextOwn : styles.messageTimeTextOther]}>
@@ -2532,5 +3187,381 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9D9AA8',
     marginTop: 2,
+  },
+
+  // Role Badges on Avatars
+  avatarCrownBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#F59E0B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#0D0C1D',
+  },
+  avatarShieldBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#7C5CFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#0D0C1D',
+  },
+
+  // Chat Role Pills
+  chatCrownPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  chatCrownPillText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9,
+    color: '#F59E0B',
+  },
+  chatShieldPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(124, 92, 252, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: 'rgba(124, 92, 252, 0.3)',
+  },
+  chatShieldPillText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 9,
+    color: '#A78BFA',
+  },
+
+  // Sound Modal Extras
+  soundModalSubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9D9AA8',
+    marginTop: 1,
+  },
+  masterPlayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  masterPlayBtnPlaying: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  masterPlayBtnPaused: {
+    backgroundColor: '#7C5CFC',
+  },
+  masterPlayBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12.5,
+    color: '#FFFFFF',
+  },
+  soundStationCardActiveReadOnly: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#2B2456',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#7C5CFC',
+    marginVertical: 12,
+  },
+  soundLockNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  soundLockNoticeText: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#9D9AA8',
+    flex: 1,
+  },
+  volumeSubLabel: {
+    fontFamily: 'DMSans',
+    fontSize: 10.5,
+    color: '#6B6880',
+    marginTop: 1,
+  },
+  personalMuteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(124, 92, 252, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(124, 92, 252, 0.25)',
+  },
+  personalMuteBtnActive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  personalMuteBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#A78BFA',
+  },
+  mutedDisclaimerText: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#EF4444',
+    marginTop: 4,
+  },
+
+  // Member Moderation Sheet Styles
+  memberModalContent: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#191736',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  memberProfileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#231F44',
+    padding: 14,
+    borderRadius: 16,
+    marginVertical: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  memberProfileAvatarWrap: {
+    position: 'relative',
+  },
+  memberProfileAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  memberProfileAvatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  memberProfileInitials: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 18,
+    color: '#FFFFFF',
+  },
+  memberProfileActiveDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#00B894',
+    borderWidth: 2,
+    borderColor: '#231F44',
+  },
+  memberProfileDetails: {
+    flex: 1,
+    gap: 4,
+  },
+  memberProfileName: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 15,
+    color: '#FFFFFF',
+  },
+  roleBadgeYou: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  roleBadgeYouText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    color: '#C4B5FD',
+  },
+  rolePillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rolePillHost: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  rolePillHostText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#F59E0B',
+  },
+  rolePillCoHost: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(124, 92, 252, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(124, 92, 252, 0.3)',
+  },
+  rolePillCoHostText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#A78BFA',
+  },
+  rolePillMember: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  rolePillMemberText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#9D9AA8',
+  },
+  memberJoinedText: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#6B6880',
+  },
+  memberGoalBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0, 184, 148, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 2,
+  },
+  memberGoalText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#00B894',
+    flex: 1,
+  },
+  memberSubjectText: {
+    fontFamily: 'DMSans',
+    fontSize: 11,
+    color: '#A78BFA',
+  },
+  memberActionsContainer: {
+    gap: 8,
+  },
+  memberActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#231F44',
+    padding: 12,
+    borderRadius: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  memberActionBtnDestructive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  memberActionIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  memberActionBtnTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+  memberActionBtnSub: {
+    fontFamily: 'DMSans',
+    fontSize: 10.5,
+    color: '#9D9AA8',
+    marginTop: 1,
+  },
+  socialButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  cheerQuickBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0, 184, 148, 0.12)',
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 184, 148, 0.25)',
+  },
+  cheerQuickBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12,
+    color: '#00B894',
+  },
+  nudgeQuickBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(124, 92, 252, 0.12)',
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(124, 92, 252, 0.25)',
+  },
+  nudgeQuickBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12,
+    color: '#A78BFA',
   },
 });

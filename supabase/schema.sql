@@ -235,6 +235,8 @@ CREATE TABLE IF NOT EXISTS public.study_rooms (
   is_active BOOLEAN NOT NULL DEFAULT true,
   is_public BOOLEAN NOT NULL DEFAULT true,
   member_count INTEGER NOT NULL DEFAULT 0 CHECK (member_count >= 0),
+  co_host_ids UUID[] NOT NULL DEFAULT '{}'::uuid[],
+  banned_user_ids UUID[] NOT NULL DEFAULT '{}'::uuid[],
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -498,7 +500,8 @@ DROP POLICY IF EXISTS "Allow insert study rooms for host" ON public.study_rooms;
 CREATE POLICY "Allow insert study rooms for host" ON public.study_rooms FOR INSERT TO authenticated WITH CHECK (host_id = auth.uid());
 
 DROP POLICY IF EXISTS "Allow update study rooms for host" ON public.study_rooms;
-CREATE POLICY "Allow update study rooms for host" ON public.study_rooms FOR UPDATE TO authenticated USING (host_id = auth.uid()) WITH CHECK (host_id = auth.uid());
+DROP POLICY IF EXISTS "Allow update study rooms for host and co-hosts" ON public.study_rooms;
+CREATE POLICY "Allow update study rooms for host and co-hosts" ON public.study_rooms FOR UPDATE TO authenticated USING (host_id = auth.uid() OR auth.uid() = ANY(co_host_ids)) WITH CHECK (host_id = auth.uid() OR auth.uid() = ANY(co_host_ids));
 
 DROP POLICY IF EXISTS "Allow delete study rooms for host" ON public.study_rooms;
 CREATE POLICY "Allow delete study rooms for host" ON public.study_rooms FOR DELETE TO authenticated USING (host_id = auth.uid());

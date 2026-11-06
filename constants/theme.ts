@@ -48,7 +48,7 @@ export const RADIUS = {
 
 export const TYPOGRAPHY = {
   fonts: {
-    display: 'InstrumentSerif', // Screen titles, hero headings
+    display: 'Outfit-Bold',     // Premium modern headline font (luxury geometric display)
     sans: 'DMSans',             // UI labels, buttons, body
     mono: 'DMMono',             // Timers, statistics, streaks
   },

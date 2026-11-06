@@ -133,8 +133,8 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   headerTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 26,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 22,
     color: '#17172A',
   },
   scrollContent: {

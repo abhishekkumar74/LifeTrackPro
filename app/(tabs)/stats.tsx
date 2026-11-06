@@ -180,17 +180,21 @@ export default function StatsScreen(): React.JSX.Element {
     return (periodFocusMinutes / 60).toFixed(1);
   }, [periodFocusMinutes]);
 
-  // Aggregate daily average focus hours for selected period
-  const dailyAverageFocusHours = React.useMemo(() => {
+  // Aggregate daily average focus minutes for selected period
+  const dailyAverageFocusMinutes = React.useMemo(() => {
     if (selectedPeriod === 'day') {
-      return periodFocusHours;
+      return Math.round(periodFocusMinutes);
     }
     const barData = barChartQuery.data || [];
     const activeDays = barData.filter((d) => !d.isFuture);
     const totalMins = activeDays.reduce((sum, d) => sum + d.minutes, 0);
     const count = activeDays.length > 0 ? activeDays.length : 1;
-    return ((totalMins / count) / 60).toFixed(1);
-  }, [selectedPeriod, periodFocusHours, barChartQuery.data]);
+    return Math.round(totalMins / count);
+  }, [selectedPeriod, periodFocusMinutes, barChartQuery.data]);
+
+  const dailyAverageFocusHours = React.useMemo(() => {
+    return (dailyAverageFocusMinutes / 60).toFixed(1);
+  }, [dailyAverageFocusMinutes]);
 
   const totalPeriodFocusMinutes = periodFocusMinutes;
 
@@ -269,6 +273,7 @@ export default function StatsScreen(): React.JSX.Element {
   };
 
   const formatPeriodFocusHours = (mins: number) => {
+    if (mins < 60) return `${mins}m`;
     return `${(mins / 60).toFixed(1)}h`;
   };
 
@@ -285,6 +290,7 @@ export default function StatsScreen(): React.JSX.Element {
     const category = profile?.category || 'Student';
 
     const focusHours = parseFloat(periodFocusHours) || 0;
+    const focusMinutes = Math.round(periodFocusMinutes) || 0;
     const habitStreak = todayStats.habitStreak ?? enhancedStats?.focusStats?.focusStreak ?? 0;
     const tasksDone = periodStatsQuery.data?.tasksDone ?? enhancedStats?.todaySummary?.todayTasksDone ?? 0;
     const consistencyRate = periodStatsQuery.data?.tasksTotal && periodStatsQuery.data.tasksTotal > 0
@@ -292,21 +298,25 @@ export default function StatsScreen(): React.JSX.Element {
       : (enhancedStats?.reportCard?.habitConsistencyRate || 85);
     const bestDayName = periodPeakStat;
     const bestDayHours = enhancedStats?.reportCard?.bestDayHours || 0;
+    const bestDayMinutes = enhancedStats?.personalRecords?.bestFocusDayMins ?? Math.round((enhancedStats?.reportCard?.bestDayHours || 0) * 60);
 
     return {
       userName,
       category,
       focusHours,
+      focusMinutes,
       habitStreak,
       tasksDone,
       consistencyRate,
       bestDayName,
       bestDayHours,
+      bestDayMinutes,
     };
   }, [
     profile,
     user,
     periodFocusHours,
+    periodFocusMinutes,
     todayStats.habitStreak,
     enhancedStats,
     periodStatsQuery.data,
@@ -696,15 +706,15 @@ export default function StatsScreen(): React.JSX.Element {
 
             {selectedPeriod === 'day' ? (
               <Text style={styles.unifiedHeroDesc}>
-                You logged <Text style={styles.highlightWhite}>{dailyAverageFocusHours}h</Text> of focus today — outperforming <Text style={styles.highlightGold}>92% of peers</Text> in your category!
+                You logged <Text style={styles.highlightWhite}>{dailyAverageFocusMinutes} min</Text> of focus today — outperforming <Text style={styles.highlightGold}>92% of peers</Text> in your category!
               </Text>
             ) : selectedPeriod === 'month' ? (
               <Text style={styles.unifiedHeroDesc}>
-                You averaged <Text style={styles.highlightWhite}>{dailyAverageFocusHours}h/day</Text> this month — staying ahead of <Text style={styles.highlightGold}>92% of peers</Text> in your category!
+                You averaged <Text style={styles.highlightWhite}>{dailyAverageFocusMinutes} min/day</Text> this month — staying ahead of <Text style={styles.highlightGold}>92% of peers</Text> in your category!
               </Text>
             ) : (
               <Text style={styles.unifiedHeroDesc}>
-                You focused for <Text style={styles.highlightWhite}>{dailyAverageFocusHours}h/day</Text> on average — studying more than <Text style={styles.highlightGold}>92% of peers</Text> in your category!
+                You focused for <Text style={styles.highlightWhite}>{dailyAverageFocusMinutes} min/day</Text> on average — studying more than <Text style={styles.highlightGold}>92% of peers</Text> in your category!
               </Text>
             )}
 
@@ -718,7 +728,7 @@ export default function StatsScreen(): React.JSX.Element {
                   </Text>
                 </View>
                 <Text style={styles.unifiedMetricValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                  {periodFocusHours}h
+                  {Math.round(periodFocusMinutes)} min
                 </Text>
               </View>
 
@@ -899,10 +909,17 @@ export default function StatsScreen(): React.JSX.Element {
                 {/* Total Focus */}
                 <View style={styles.focusSummaryCard}>
                   <Text style={styles.focusCardLabel}>Total Focus</Text>
-                  <Text style={styles.focusCardValue}>
+                  <Text
+                    style={styles.focusCardValue}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
                     {focusToggle === 'today' 
-                      ? `${enhancedStats?.todaySummary.focusMinsToday || 0}m`
-                      : `${(enhancedStats?.reportCard.thisWeekHours || 0).toFixed(1)}h`
+                      ? ((enhancedStats?.todaySummary.focusMinsToday || 0) < 60
+                          ? `${enhancedStats?.todaySummary.focusMinsToday || 0}m`
+                          : `${((enhancedStats?.todaySummary.focusMinsToday || 0) / 60).toFixed(1)}h`)
+                      : `${(enhancedStats?.reportCard.thisWeekHours || ((enhancedStats?.reportCard?.thisWeekMins || 0) / 60)).toFixed(1)}h`
                     }
                   </Text>
                 </View>
@@ -1124,7 +1141,7 @@ export default function StatsScreen(): React.JSX.Element {
                         </View>
                       </View>
                       <Text style={styles.recordValueText}>
-                        {(enhancedStats.personalRecords.bestFocusDayMins / 60).toFixed(1)}h
+                        {enhancedStats.personalRecords.bestFocusDayMins} min
                       </Text>
                     </View>
                   )}
@@ -1158,11 +1175,11 @@ export default function StatsScreen(): React.JSX.Element {
                         </View>
                         <View>
                           <Text style={styles.recordLabelText}>Best Weekly Total</Text>
-                          <Text style={styles.recordSubtext}>Highest weekly hours</Text>
+                          <Text style={styles.recordSubtext}>Highest weekly focus</Text>
                         </View>
                       </View>
                       <Text style={styles.recordValueText}>
-                        {(enhancedStats.personalRecords.bestWeekMins / 60).toFixed(1)}h
+                        {enhancedStats.personalRecords.bestWeekMins} min
                       </Text>
                     </View>
                   )}
@@ -1241,7 +1258,7 @@ export default function StatsScreen(): React.JSX.Element {
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionHeading}>Daily Focus</Text>
             {!barChartQuery.isLoading && (
-              <Text style={styles.sectionSubheading}>Avg {dailyAverageFocusHours}h/day</Text>
+              <Text style={styles.sectionSubheading}>Avg {dailyAverageFocusMinutes} min/day</Text>
             )}
           </View>
           <View style={styles.sectionCard}>
@@ -1313,9 +1330,10 @@ const styles = StyleSheet.create({
     height: 54,
   },
   headerTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 30,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 26,
     color: '#17172A',
+    letterSpacing: -0.4,
   },
   segmentContainer: {
     flexDirection: 'row',
@@ -1368,12 +1386,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   unifiedHeroTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 26,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 22,
     color: '#FFFFFF',
     letterSpacing: -0.3,
     marginBottom: 8,
-    lineHeight: 32,
+    lineHeight: 28,
   },
   unifiedHeroDesc: {
     fontFamily: 'DMSans',

@@ -404,8 +404,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 24,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: '#17172A',
   },
   closeBtn: {

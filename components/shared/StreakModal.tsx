@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2',
   },
   streakNumber: {
-    fontFamily: 'InstrumentSerif',
+    fontFamily: 'Outfit-Bold',
     fontSize: 28,
     color: '#17172A',
     textAlign: 'center',

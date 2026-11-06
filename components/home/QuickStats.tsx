@@ -121,13 +121,13 @@ export const QuickStats = React.memo<QuickStatsProps>(({
   }));
 
   // Target values with real data support
-  const targetHours = focusMinutes > 0 ? Number((focusMinutes / 60).toFixed(1)) : 0;
+  const targetMinutes = Math.max(0, Math.round(focusMinutes));
   const targetTasksDone = tasksDone || 0;
   const targetTasksTotal = tasksTotal || 0;
   const targetStreak = Math.max(0, streakDays);
 
   // Animated Count-Up values on page load
-  const animatedHours = useCountUp(targetHours, 900);
+  const animatedMinutes = useCountUp(targetMinutes, 900);
   const animatedTasksDone = useCountUp(targetTasksDone, 750);
   const animatedStreak = useCountUp(targetStreak, 950);
 
@@ -176,8 +176,13 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         activeOpacity={0.8}
       >
         <Text style={styles.iconEmoji}>⏱️</Text>
-        <Text style={styles.number}>
-          {`${animatedHours.toFixed(1)}h`}
+        <Text
+          style={styles.number}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+        >
+          {`${Math.round(animatedMinutes)} min`}
         </Text>
         <Text style={styles.label}>Focus time</Text>
 

@@ -2350,8 +2350,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   profileName: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 24,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 22,
     color: '#FFFFFF',
   },
   goldMemberBadge: {
@@ -3091,8 +3091,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sheetTitle: {
-    fontFamily: 'InstrumentSerif',
-    fontSize: 22,
+    fontFamily: 'Outfit-Bold',
+    fontSize: 20,
     color: '#17172A',
     flex: 1,
     marginRight: 12,
