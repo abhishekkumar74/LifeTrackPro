@@ -924,6 +924,23 @@ export default function SyllabusScreen(): React.JSX.Element {
     });
   }, [studentExams, manageSearchQuery, selectedCurriculumCategory]);
 
+  const groupedAvailableExams = useMemo(() => {
+    if (selectedCurriculumCategory !== 'all' || manageSearchQuery.trim()) {
+      return [{ category: null, exams: availableExamsFiltered }];
+    }
+
+    const groups: { category: (typeof CURRICULUM_CATEGORIES)[number]; exams: typeof availableExamsFiltered }[] = [];
+    CURRICULUM_CATEGORIES.forEach((cat) => {
+      if (cat.id === 'all') return;
+      const inCat = availableExamsFiltered.filter((e) => getExamCategory(e) === cat.id);
+      if (inCat.length > 0) {
+        groups.push({ category: cat, exams: inCat });
+      }
+    });
+
+    return groups;
+  }, [availableExamsFiltered, selectedCurriculumCategory, manageSearchQuery]);
+
   const getExamsForSubjectGroup = useCallback(
     (subjectName: string, groupedSub: GroupedSubject) => {
       const slugs = (groupedSub.examSlugs || []).map((s) => s.toLowerCase());
@@ -2046,72 +2063,84 @@ export default function SyllabusScreen(): React.JSX.Element {
                 </View>
               )}
 
-              {/* List of Available Seed Exams */}
-              {availableExamsFiltered.map((exam) => {
-                const isEnrolled = userSelectedExams.some(
-                  (e) =>
-                    (e.slug || '').toLowerCase() === (exam.slug || '').toLowerCase() ||
-                    e.id === exam.id ||
-                    (e.name || '').toLowerCase() === (exam.name || '').toLowerCase()
-                );
-                const isLoadingThis = loadingExamKey === (exam.slug || exam.id);
-                const color = exam.color || '#5B4FE8';
-                const examCat = getExamCategory(exam);
-                const examCatLabel = CURRICULUM_CATEGORIES.find((c) => c.id === examCat)?.label || 'Exam';
+              {/* List of Available Seed Exams (Grouped by Category) */}
+              {groupedAvailableExams.map((group, groupIdx) => (
+                <View key={group.category ? group.category.id : `group-${groupIdx}`}>
+                  {group.category && (
+                    <View style={styles.manageCategorySectionHeader}>
+                      <Text style={styles.manageCategorySectionTitle}>
+                        {group.category.label.toUpperCase()} ({group.exams.length})
+                      </Text>
+                    </View>
+                  )}
 
-                return (
-                  <View key={exam.id || exam.slug} style={styles.availableExamCard}>
-                    <View style={styles.availableExamLeft}>
-                      <View style={[styles.enrolledItemIcon, { backgroundColor: `${color}15` }]}>
-                        {renderExamIcon(exam.slug || exam.name, 16, color)}
-                      </View>
-                      <View style={styles.availableExamTextWrap}>
-                        <View style={styles.availableExamNameRow}>
-                          <Text style={styles.availableExamName} numberOfLines={1}>{exam.name}</Text>
-                          <View style={styles.availableExamCategoryTag}>
-                            <Text style={styles.availableExamCategoryTagText}>{examCatLabel}</Text>
+                  {group.exams.map((exam) => {
+                    const isEnrolled = userSelectedExams.some(
+                      (e) =>
+                        (e.slug || '').toLowerCase() === (exam.slug || '').toLowerCase() ||
+                        e.id === exam.id ||
+                        (e.name || '').toLowerCase() === (exam.name || '').toLowerCase()
+                    );
+                    const isLoadingThis = loadingExamKey === (exam.slug || exam.id);
+                    const color = exam.color || '#5B4FE8';
+                    const examCat = getExamCategory(exam);
+                    const examCatLabel = CURRICULUM_CATEGORIES.find((c) => c.id === examCat)?.label || 'Exam';
+
+                    return (
+                      <View key={exam.id || exam.slug} style={styles.availableExamCard}>
+                        <View style={styles.availableExamLeft}>
+                          <View style={[styles.enrolledItemIcon, { backgroundColor: `${color}15` }]}>
+                            {renderExamIcon(exam.slug || exam.name, 16, color)}
+                          </View>
+                          <View style={styles.availableExamTextWrap}>
+                            <View style={styles.availableExamNameRow}>
+                              <Text style={styles.availableExamName} numberOfLines={1}>{exam.name}</Text>
+                              <View style={styles.availableExamCategoryTag}>
+                                <Text style={styles.availableExamCategoryTagText}>{examCatLabel}</Text>
+                              </View>
+                            </View>
+                            <Text style={styles.availableExamSubjects} numberOfLines={1}>
+                              {exam.description || (exam.subjects ? `${exam.subjects.length} subjects` : 'Complete Curriculum')}
+                            </Text>
                           </View>
                         </View>
-                        <Text style={styles.availableExamSubjects} numberOfLines={1}>
-                          {exam.description || (exam.subjects ? `${exam.subjects.length} subjects` : 'Complete Curriculum')}
-                        </Text>
-                      </View>
-                    </View>
 
-                    {isEnrolled ? (
-                      <View style={styles.enrolledBadgePill}>
-                        <Check size={11} color="#00B894" strokeWidth={2.5} style={{ marginRight: 3 }} />
-                        <Text style={styles.enrolledBadgeText}>Enrolled</Text>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={[styles.addCurriculumBtn, isLoadingThis && { opacity: 0.7 }]}
-                        disabled={isLoadingThis || setupSyllabusMutation.isPending}
-                        onPress={async () => {
-                          try {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-                            await handleLoadSyllabusTemplate(exam.slug || exam.id);
-                            setActiveExamFilter(exam.slug || exam.id);
-                            useUiStore.getState().showToast(`${exam.name} added to syllabus!`, 'success');
-                          } catch (err: any) {
-                            Alert.alert('Error', err?.message || 'Failed to add curriculum');
-                          }
-                        }}
-                        activeOpacity={0.8}
-                      >
-                        {isLoadingThis ? (
-                          <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 4 }} />
+                        {isEnrolled ? (
+                          <View style={styles.enrolledBadgePill}>
+                            <Check size={11} color="#00B894" strokeWidth={2.5} style={{ marginRight: 3 }} />
+                            <Text style={styles.enrolledBadgeText}>Enrolled</Text>
+                          </View>
                         ) : (
-                          <Plus size={13} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 4 }} />
+                          <TouchableOpacity
+                            style={[styles.addCurriculumBtn, isLoadingThis && { opacity: 0.7 }]}
+                            disabled={isLoadingThis || setupSyllabusMutation.isPending}
+                            onPress={async () => {
+                              try {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                                await handleLoadSyllabusTemplate(exam.slug || exam.id);
+                                setActiveExamFilter(exam.slug || exam.id);
+                                useUiStore.getState().showToast(`${exam.name} added to syllabus!`, 'success');
+                              } catch (err: any) {
+                                Alert.alert('Error', err?.message || 'Failed to add curriculum');
+                              }
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            {isLoadingThis ? (
+                              <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 4 }} />
+                            ) : (
+                              <Plus size={13} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 4 }} />
+                            )}
+                            <Text style={styles.addCurriculumBtnText}>
+                              {isLoadingThis ? 'Adding...' : 'Add'}
+                            </Text>
+                          </TouchableOpacity>
                         )}
-                        <Text style={styles.addCurriculumBtnText}>
-                          {isLoadingThis ? 'Adding...' : 'Add'}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                );
-              })}
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
             </ScrollView>
           </View>
 
@@ -2793,6 +2822,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#5B4FE8',
     fontWeight: '700',
+  },
+  manageCategorySectionHeader: {
+    marginTop: 14,
+    marginBottom: 6,
+    paddingHorizontal: 2,
+  },
+  manageCategorySectionTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#8E8EA0',
+    letterSpacing: 0.5,
   },
   manageSearchInput: {
     flex: 1,
