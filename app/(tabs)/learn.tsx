@@ -1035,7 +1035,7 @@ export default function SyllabusScreen(): React.JSX.Element {
         chapterCount: chapters.length,
         completeChaptersCount,
         isExpanded,
-        data: isExpanded ? chapters : [],
+        data: isExpanded ? chapters.map((ch) => `${subjectName}:::${ch}`) : [],
         exams: matchedExams,
         groupedSub,
         isFirstInExamGroup,
@@ -1113,13 +1113,13 @@ export default function SyllabusScreen(): React.JSX.Element {
             <SectionList
               ref={syllabusListRef}
               sections={sections}
-              keyExtractor={(item, index) => item + index}
+              keyExtractor={(item: any) => (typeof item === 'string' ? item : `${item}`)}
               stickySectionHeadersEnabled={false}
               keyboardDismissMode="on-drag"
-              removeClippedSubviews={Platform.OS === 'android'}
+              removeClippedSubviews={false}
               maxToRenderPerBatch={10}
-              windowSize={5}
-              initialNumToRender={8}
+              windowSize={11}
+              initialNumToRender={10}
               onScrollToIndexFailed={() => {
                 try {
                   syllabusListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -1346,7 +1346,9 @@ export default function SyllabusScreen(): React.JSX.Element {
                   </View>
                 );
               }}
-              renderItem={({ item: chapterName, index, section }: any) => {
+              renderItem={({ item, index, section }: any) => {
+                const chapterName =
+                  typeof item === 'string' && item.includes(':::') ? item.split(':::')[1] : item;
                 const groupedSub =
                   section.groupedSub || filteredSyllabus[section.key] || filteredSyllabus[section.title];
                 const topicsList = groupedSub?.chapters[chapterName] || [];
@@ -2679,6 +2681,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 14,
+    minHeight: 64,
     backgroundColor: '#FFFFFF',
   },
   subjectIconBox: {

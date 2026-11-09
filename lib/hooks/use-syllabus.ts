@@ -109,13 +109,15 @@ export function useSyllabus() {
         }
 
         // 4. Fetch master curriculum for each active exam and synthesize topics
-        const combinedTopics: SyllabusTopic[] = [...customTopics];
-        const existingKeys = new Set(
-          customTopics.map(
-            (t) =>
-              `${t.subject.toLowerCase().trim()}:::${t.chapter.toLowerCase().trim()}:::${t.topic.toLowerCase().trim()}`
-          )
-        );
+        const combinedTopics: SyllabusTopic[] = [];
+        const seenMasterKeys = new Set<string>();
+
+        // Index any user-created or legacy custom topics by key
+        const customTopicsMap = new Map<string, SyllabusTopic>();
+        customTopics.forEach((ct) => {
+          const key = `${ct.subject.toLowerCase().trim()}:::${ct.chapter.toLowerCase().trim()}:::${ct.topic.toLowerCase().trim()}`;
+          customTopicsMap.set(key, ct);
+        });
 
         for (const slug of Array.from(activeSlugs)) {
           try {
@@ -125,15 +127,34 @@ export function useSyllabus() {
               masterExam.topics.forEach((mt) => {
                 const key = `${mt.subject.toLowerCase().trim()}:::${mt.chapter.toLowerCase().trim()}:::${mt.topic.toLowerCase().trim()}`;
                 const topicSlug = mt.exam_slug || examSlugToAdd;
-                if (!existingKeys.has(key)) {
-                  existingKeys.add(key);
+
+                if (!seenMasterKeys.has(key)) {
+                  seenMasterKeys.add(key);
+
+                  // Resolve progress for this specific topic
                   const progress = mt.chapter_id ? progressMap.get(mt.chapter_id) : undefined;
                   let status: SyllabusStatus = 'not_started';
-                  if (progress?.topicStatuses && mt.id && progress.topicStatuses[mt.id]) {
-                    status = progress.topicStatuses[mt.id];
-                  } else if (progress) {
-                    status = progress.status;
+
+                  if (progress?.topicStatuses) {
+                    if (mt.id && progress.topicStatuses[mt.id]) {
+                      status = progress.topicStatuses[mt.id];
+                    } else if (progress.topicStatuses[mt.topic]) {
+                      status = progress.topicStatuses[mt.topic];
+                    }
+                  } else if (progress && !progress.topicStatuses && progress.status === 'done') {
+                    // Legacy whole-chapter marked complete
+                    status = 'done';
                   }
+
+                  // If still not started, fallback to custom topics table if user marked it there previously
+                  if (status === 'not_started' && customTopicsMap.has(key)) {
+                    const ct = customTopicsMap.get(key);
+                    if (ct && ct.status && ct.status !== 'not_started') {
+                      status = ct.status;
+                    }
+                  }
+
+                  // Stable ID & metadata guaranteed: Never replace mt.id with a random UUID
                   combinedTopics.push({
                     id: mt.id || `master-ch-${mt.chapter_id || mt.chapter}`,
                     user_id: userId,
@@ -170,6 +191,14 @@ export function useSyllabus() {
             // ignore network/seed lookup failure
           }
         }
+
+        // 5. Append any genuine custom topics created by user (not in master curriculum)
+        customTopics.forEach((ct) => {
+          const key = `${ct.subject.toLowerCase().trim()}:::${ct.chapter.toLowerCase().trim()}:::${ct.topic.toLowerCase().trim()}`;
+          if (!seenMasterKeys.has(key)) {
+            combinedTopics.push(ct);
+          }
+        });
 
         // 5. Group into GroupedSyllabus structure
         const grouped: GroupedSyllabus = {};
@@ -248,14 +277,68 @@ export function useUpdateTopicStatus() {
     { topicId: string; newStatus: SyllabusStatus },
     { previousSyllabus: GroupedSyllabus | undefined }
   >({
+    onMutate: async ({ topicId, newStatus }) => {
+      const activeUserId = userId || useAuthStore.getState().user?.id || useAuthStore.getState().profile?.id;
+      const targetKey = ['syllabus', activeUserId];
+      await queryClient.cancelQueries({ queryKey: ['syllabus'] });
+
+      // Snapshot previous state from cache
+      const previousSyllabus =
+        queryClient.getQueryData<GroupedSyllabus>(targetKey) ||
+        queryClient.getQueryData<GroupedSyllabus>(['syllabus', userId]) ||
+        queryClient.getQueryData<GroupedSyllabus>(['syllabus']);
+
+      if (previousSyllabus) {
+        const nextSyllabus = JSON.parse(JSON.stringify(previousSyllabus)) as GroupedSyllabus;
+        let updated = false;
+
+        Object.keys(nextSyllabus).forEach((subject) => {
+          const sub = nextSyllabus[subject];
+          Object.keys(sub.chapters).forEach((chapter) => {
+            const list = sub.chapters[chapter];
+            const idx = list.findIndex((t) => t.id === topicId);
+            if (idx !== -1) {
+              const topic = list[idx];
+              const oldStatus = topic.status;
+              topic.status = newStatus;
+              updated = true;
+
+              // Adjust subject totals
+              if (oldStatus === 'done' && newStatus !== 'done') {
+                sub.doneCount = Math.max(0, sub.doneCount - 1);
+              } else if (oldStatus !== 'done' && newStatus === 'done') {
+                sub.doneCount++;
+              }
+
+              // Recalculate percent
+              sub.completionPercent =
+                sub.totalCount > 0 ? Math.round((sub.doneCount / sub.totalCount) * 100) : 0;
+            }
+          });
+        });
+
+        if (updated) {
+          queryClient.setQueryData(targetKey, nextSyllabus);
+          if (userId && userId !== activeUserId) {
+            queryClient.setQueryData(['syllabus', userId], nextSyllabus);
+          }
+          queryClient.setQueryData(['syllabus'], nextSyllabus);
+          const cacheKey = `syllabus_grouped_v6_${activeUserId || userId || 'guest'}`;
+          AsyncStorage.setItem(cacheKey, JSON.stringify(nextSyllabus)).catch(() => {});
+        }
+      }
+
+      return { previousSyllabus };
+    },
     mutationFn: async ({ topicId, newStatus }) => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
       const currentUserId = session?.user?.id || userId || useAuthStore.getState().profile?.id;
       if (!currentUserId) throw new Error('Not authenticated');
 
       // 1. Locate topic details from current cache
       const previousSyllabus =
         queryClient.getQueryData<GroupedSyllabus>(['syllabus', currentUserId]) ||
+        queryClient.getQueryData<GroupedSyllabus>(['syllabus', userId]) ||
         queryClient.getQueryData<GroupedSyllabus>(['syllabus']);
 
       let matchedTopic: SyllabusTopic | null = null;
@@ -302,8 +385,6 @@ export function useUpdateTopicStatus() {
       }
 
       // 2. Storage-Optimized Progress update for master chapters:
-      // If chapterId is a valid UUID, update user_chapter_progress table with topic-level notes
-      let progSaved = false;
       if (isChapterUuid && chapterId) {
         try {
           const { data: existingProg } = await supabase
@@ -324,9 +405,20 @@ export function useUpdateTopicStatus() {
 
           if (newStatus === 'not_started') {
             delete currentTopicMap[topicId];
+            if (matchedTopic?.topic) {
+              delete currentTopicMap[matchedTopic.topic];
+            }
             delete currentTopicMap[`master-ch-${chapterId}`];
+            Object.keys(currentTopicMap).forEach((k) => {
+              if (k === topicId || (matchedTopic && (k === matchedTopic.topic || k.includes(matchedTopic.topic)))) {
+                delete currentTopicMap[k];
+              }
+            });
           } else {
             currentTopicMap[topicId] = newStatus;
+            if (matchedTopic?.topic) {
+              currentTopicMap[matchedTopic.topic] = newStatus;
+            }
           }
 
           const hasActiveTopics = Object.keys(currentTopicMap).length > 0;
@@ -334,7 +426,7 @@ export function useUpdateTopicStatus() {
             const allDone = Object.values(currentTopicMap).every((st) => st === 'done');
             const overallChapterStatus = allDone ? 'done' : 'in_progress';
 
-            const { error: progErr } = await supabase.from('user_chapter_progress').upsert(
+            await supabase.from('user_chapter_progress').upsert(
               {
                 user_id: currentUserId,
                 chapter_id: chapterId,
@@ -344,39 +436,36 @@ export function useUpdateTopicStatus() {
               },
               { onConflict: 'user_id,chapter_id' }
             );
-            if (!progErr) {
-              progSaved = true;
-            } else {
-              console.warn('user_chapter_progress upsert warning:', progErr);
-            }
           } else {
             await supabase
               .from('user_chapter_progress')
               .delete()
               .eq('user_id', currentUserId)
               .eq('chapter_id', chapterId);
-            progSaved = true;
           }
         } catch (e) {
           console.warn('user_chapter_progress update error:', e);
         }
       }
 
-      // 3. Robust Direct Persistence in syllabus_topics:
-      // Always persist topic status in syllabus_topics so it NEVER undos or reverts!
+      // 3. User-created custom topics update or legacy cleanup:
       const isTopicUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(topicId);
       if (isTopicUuid && !topicId.startsWith('master-ch-') && !topicId.startsWith('seed-')) {
         try {
-          await supabase
-            .from('syllabus_topics')
-            .update({ status: newStatus })
-            .eq('id', topicId)
-            .eq('user_id', currentUserId);
+          if (newStatus === 'not_started') {
+            await supabase.from('syllabus_topics').delete().eq('id', topicId).eq('user_id', currentUserId);
+          } else {
+            await supabase
+              .from('syllabus_topics')
+              .update({ status: newStatus })
+              .eq('id', topicId)
+              .eq('user_id', currentUserId);
+          }
         } catch (e) {
           console.warn('syllabus_topics update error:', e);
         }
       } else if (matchedTopic?.subject && matchedTopic?.chapter && matchedTopic?.topic) {
-        // Master / seed / template topic persistence fallback
+        // If an old duplicate row exists in syllabus_topics, clean it up or keep in sync
         try {
           const { data: existingTopic } = await supabase
             .from('syllabus_topics')
@@ -396,21 +485,9 @@ export function useUpdateTopicStatus() {
                 .update({ status: newStatus })
                 .eq('id', existingTopic.id);
             }
-          } else if (newStatus !== 'not_started') {
-            await supabase
-              .from('syllabus_topics')
-              .insert({
-                user_id: currentUserId,
-                subject: matchedTopic.subject,
-                chapter: matchedTopic.chapter,
-                topic: matchedTopic.topic,
-                status: newStatus,
-                order_index: matchedTopic.order_index ?? 0,
-                exam_slug: matchedTopic.exam_slug ?? null,
-              });
           }
         } catch (e) {
-          console.warn('syllabus_topics fallback persistence error:', e);
+          console.warn('syllabus_topics sync error:', e);
         }
       }
 
@@ -420,60 +497,12 @@ export function useUpdateTopicStatus() {
           : { id: topicId, status: newStatus }
       ) as SyllabusTopic;
     },
-    onMutate: async ({ topicId, newStatus }) => {
-      const targetKey = ['syllabus', userId];
-      await queryClient.cancelQueries({ queryKey: targetKey });
-
-      // Snapshot previous state from targetKey
-      const previousSyllabus = queryClient.getQueryData<GroupedSyllabus>(targetKey);
-
-      if (previousSyllabus) {
-        const nextSyllabus = JSON.parse(JSON.stringify(previousSyllabus)) as GroupedSyllabus;
-        let updated = false;
-
-        Object.keys(nextSyllabus).forEach((subject) => {
-          const sub = nextSyllabus[subject];
-          Object.keys(sub.chapters).forEach((chapter) => {
-            const list = sub.chapters[chapter];
-            const idx = list.findIndex((t) => t.id === topicId);
-            if (idx !== -1) {
-              const topic = list[idx];
-              const oldStatus = topic.status;
-              topic.status = newStatus;
-              updated = true;
-
-              // Adjust subject totals
-              if (oldStatus === 'done' && newStatus !== 'done') {
-                sub.doneCount = Math.max(0, sub.doneCount - 1);
-              } else if (oldStatus !== 'done' && newStatus === 'done') {
-                sub.doneCount++;
-              }
-
-              // Recalculate percent
-              sub.completionPercent =
-                sub.totalCount > 0 ? Math.round((sub.doneCount / sub.totalCount) * 100) : 0;
-            }
-          });
-        });
-
-        if (updated) {
-          queryClient.setQueryData<GroupedSyllabus>(targetKey, nextSyllabus);
-          AsyncStorage.setItem(
-            `syllabus_grouped_v6_${userId || 'guest'}`,
-            JSON.stringify(nextSyllabus)
-          ).catch(() => {});
-        }
-      }
-
-      return { previousSyllabus };
-    },
     onError: (_err, _variables, context) => {
       if (context?.previousSyllabus) {
-        queryClient.setQueryData(['syllabus', userId], context.previousSyllabus);
+        const activeUserId = userId || useAuthStore.getState().user?.id || useAuthStore.getState().profile?.id;
+        queryClient.setQueryData(['syllabus', activeUserId], context.previousSyllabus);
+        queryClient.setQueryData(['syllabus'], context.previousSyllabus);
       }
-    },
-    onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['syllabus'] });
     },
   });
 }

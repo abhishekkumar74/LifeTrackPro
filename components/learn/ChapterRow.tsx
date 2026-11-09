@@ -154,7 +154,9 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
   const completionPercent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
   const handleTogglePress = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (Platform.OS === 'ios') {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
     onToggle();
   };
 
