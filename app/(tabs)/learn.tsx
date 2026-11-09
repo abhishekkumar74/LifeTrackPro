@@ -1012,15 +1012,56 @@ export default function SyllabusScreen(): React.JSX.Element {
     });
 
     let lastExamKey = '';
-    return activeSubjects.map((subjectName) => {
+    const sectionList: any[] = [];
+
+    activeSubjects.forEach((subjectName) => {
       const groupedSub = filteredSyllabus[subjectName];
       const isExpanded = expandedSubjects.includes(subjectName);
-      const chapters = Object.keys(groupedSub.chapters);
+      const allChapters = Object.keys(groupedSub.chapters);
+
+      // Filter chapters for this specific exam if not 'all'
+      const chapters = allChapters.filter((chapterName) => {
+        if (activeExamFilter === 'all') return true;
+        const topics = groupedSub.chapters[chapterName] || [];
+        return topics.some((t) => {
+          if (!t.exam_slug) return true;
+          const slugs = t.exam_slug.toLowerCase().split(',').map((s: string) => s.trim());
+          const target = activeExamFilter.toLowerCase();
+          return slugs.includes(target) || slugs.some((s: string) => target.includes(s) || s.includes(target));
+        });
+      });
+
+      if (activeExamFilter !== 'all' && chapters.length === 0) return;
 
       const completeChaptersCount = chapters.filter((chapterName) => {
-        const topics = groupedSub.chapters[chapterName];
-        return topics.every((t) => t.status === 'done');
+        const topics = (groupedSub.chapters[chapterName] || []).filter((t) => {
+          if (activeExamFilter === 'all') return true;
+          if (!t.exam_slug) return true;
+          const slugs = t.exam_slug.toLowerCase().split(',').map((s: string) => s.trim());
+          const target = activeExamFilter.toLowerCase();
+          return slugs.includes(target) || slugs.some((s: string) => target.includes(s) || s.includes(target));
+        });
+        return topics.length > 0 && topics.every((t) => t.status === 'done');
       }).length;
+
+      let filteredDone = 0;
+      let filteredTotal = 0;
+      chapters.forEach((ch) => {
+        const topics = (groupedSub.chapters[ch] || []).filter((t) => {
+          if (activeExamFilter === 'all') return true;
+          if (!t.exam_slug) return true;
+          const slugs = t.exam_slug.toLowerCase().split(',').map((s: string) => s.trim());
+          const target = activeExamFilter.toLowerCase();
+          return slugs.includes(target) || slugs.some((s: string) => target.includes(s) || s.includes(target));
+        });
+        filteredTotal += topics.length;
+        filteredDone += topics.filter((t) => t.status === 'done').length;
+      });
+
+      const completionPercent =
+        filteredTotal > 0
+          ? Math.round((filteredDone / filteredTotal) * 100)
+          : groupedSub.completionPercent;
 
       const matchedExams = getExamsForSubjectGroup(subjectName, groupedSub);
       const primaryExam = matchedExams[0];
@@ -1028,10 +1069,10 @@ export default function SyllabusScreen(): React.JSX.Element {
       const isFirstInExamGroup = primaryExamKey !== lastExamKey;
       lastExamKey = primaryExamKey;
 
-      return {
+      sectionList.push({
         key: subjectName,
         title: subjectName,
-        completionPercent: groupedSub.completionPercent,
+        completionPercent,
         chapterCount: chapters.length,
         completeChaptersCount,
         isExpanded,
@@ -1041,8 +1082,10 @@ export default function SyllabusScreen(): React.JSX.Element {
         isFirstInExamGroup,
         groupExamName: primaryExam?.name || primaryExamKey,
         groupExamColor: primaryExam?.color || '#5B4FE8',
-      };
+      });
     });
+
+    return sectionList;
   }, [filteredSyllabus, expandedSubjects, getExamsForSubjectGroup, activeExamFilter]);
 
   useEffect(() => {
@@ -1132,43 +1175,69 @@ export default function SyllabusScreen(): React.JSX.Element {
                 if (!syllabusExists) return null;
                 return (
                   <View style={styles.goalSelectorHeaderContainer}>
-                    {/* Active Goal Hero Card */}
-                    <View style={styles.goalActiveMainCard}>
-                      <View style={styles.goalActiveTopRow}>
-                        <TouchableOpacity
-                          style={styles.goalDropdownTrigger}
-                          onPress={() => setIsGoalModalOpen(true)}
-                          activeOpacity={0.7}
-                        >
-                          <View style={[styles.goalEmojiBadge, { backgroundColor: `${activeGoalColor}14` }]}>
-                            {renderExamIcon(activeExamObj ? activeExamObj.slug || activeExamObj.name : 'all', 20, activeGoalColor)}
-                          </View>
-                          <View style={styles.goalDropdownTextContainer}>
-                            <Text style={styles.goalDropdownSmallLabel}>ACTIVE CURRICULUM</Text>
-                            <View style={styles.goalDropdownNameRow}>
-                              <Text style={styles.goalDropdownNameText} numberOfLines={1}>
-                                {activeExamObj ? activeExamObj.name : 'All Goals & Subjects'}
+                    {/* Modern Curriculum Dropdown Filter Bar */}
+                    <TouchableOpacity
+                      style={[
+                        styles.curriculumDropdownCard,
+                        activeExamObj && { borderColor: `${activeGoalColor}40` },
+                      ]}
+                      onPress={() => setIsGoalModalOpen(true)}
+                      activeOpacity={0.75}
+                    >
+                      <View style={styles.curriculumDropdownLeft}>
+                        <View style={[styles.curriculumIconBadge, { backgroundColor: `${activeGoalColor}16` }]}>
+                          {renderExamIcon(activeExamObj ? activeExamObj.slug || activeExamObj.name : 'all', 20, activeGoalColor)}
+                        </View>
+                        <View style={styles.curriculumTextColumn}>
+                          <View style={styles.curriculumLabelRow}>
+                            <Text style={styles.curriculumSmallLabel}>CURRICULUM FILTER</Text>
+                            <View style={[styles.curriculumFilterStatusPill, { backgroundColor: `${activeGoalColor}16` }]}>
+                              <Text style={[styles.curriculumFilterStatusText, { color: activeGoalColor }]}>
+                                {activeExamObj ? 'TARGET EXAM' : 'ALL SUBJECTS'}
                               </Text>
-                              <ChevronDown size={14} color="#717188" style={{ marginLeft: 4 }} />
                             </View>
                           </View>
-                        </TouchableOpacity>
-
-                        <View style={styles.goalProgressBadge}>
-                          <Text style={[styles.goalProgressBadgePercent, { color: activeGoalColor }]}>
-                            {activeGoalMetrics.percent}%
-                          </Text>
-                          <Text style={styles.goalProgressBadgeSub}>
-                            {activeGoalMetrics.completed}/{activeGoalMetrics.total} done
+                          <Text style={styles.curriculumSelectedTitle} numberOfLines={1}>
+                            {activeExamObj ? activeExamObj.name : 'All Goals & Subjects'}
                           </Text>
                         </View>
                       </View>
 
-                      {/* Linear Goal Progress Bar */}
-                      <View style={styles.goalLinearProgressBarTrack}>
+                      <View style={styles.curriculumDropdownRight}>
+                        <View style={[styles.curriculumChangeBtn, { backgroundColor: `${activeGoalColor}14` }]}>
+                          <Text style={[styles.curriculumChangeBtnText, { color: activeGoalColor }]}>
+                            Filter
+                          </Text>
+                          <ChevronDown size={14} color={activeGoalColor} style={{ marginLeft: 3 }} />
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+
+                    {/* Progress Card below Dropdown */}
+                    <View style={styles.curriculumProgressCard}>
+                      <View style={styles.curriculumProgressTopRow}>
+                        <View style={styles.curriculumProgressCountWrap}>
+                          <Text style={styles.curriculumProgressCountText}>
+                            {activeGoalMetrics.completed} of {activeGoalMetrics.total} topics done
+                          </Text>
+                          <Text style={styles.curriculumProgressSubText}>
+                            {activeExamObj
+                              ? `${sections.length} subjects in ${activeExamObj.name}`
+                              : `Combined progress across ${userSelectedExams.length} curricula`}
+                          </Text>
+                        </View>
+                        <View style={styles.curriculumProgressPercentWrap}>
+                          <Text style={[styles.curriculumProgressPercentText, { color: activeGoalColor }]}>
+                            {activeGoalMetrics.percent}%
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Smooth Progress Bar */}
+                      <View style={styles.curriculumProgressBarTrack}>
                         <View
                           style={[
-                            styles.goalLinearProgressBarFill,
+                            styles.curriculumProgressBarFill,
                             {
                               width: `${activeGoalMetrics.percent}%`,
                               backgroundColor: activeGoalColor,
@@ -1176,71 +1245,6 @@ export default function SyllabusScreen(): React.JSX.Element {
                           ]}
                         />
                       </View>
-
-                      {/* Quick-switch pills if user has multiple exams */}
-                      {userSelectedExams.length > 1 && (
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          contentContainerStyle={styles.goalQuickChipsScroll}
-                        >
-                          <TouchableOpacity
-                            style={[
-                              styles.goalQuickChip,
-                              activeExamFilter === 'all' && styles.goalQuickChipActiveAll,
-                            ]}
-                            onPress={() => setActiveExamFilter('all')}
-                            activeOpacity={0.7}
-                          >
-                            <Globe size={13} color={activeExamFilter === 'all' ? '#FFFFFF' : '#717188'} />
-                            <Text
-                              style={[
-                                styles.goalQuickChipText,
-                                activeExamFilter === 'all' && styles.goalQuickChipTextActiveAll,
-                              ]}
-                            >
-                              All Subjects
-                            </Text>
-                          </TouchableOpacity>
-
-                          {userSelectedExams.map((exam) => {
-                            const isActive =
-                              activeExamFilter === (exam.slug || exam.id || exam.name);
-                            const color = exam.color || '#5B4FE8';
-                            const shortLabel =
-                              (exam as any).short_name ||
-                              (exam.slug === 'btech-cse' ? 'B.Tech CSE' : exam.name);
-
-                            return (
-                              <TouchableOpacity
-                                key={exam.id || exam.slug}
-                                style={[
-                                  styles.goalQuickChip,
-                                  isActive && [
-                                    styles.goalQuickChipActive,
-                                    { backgroundColor: color, borderColor: color },
-                                  ],
-                                ]}
-                                onPress={() =>
-                                  setActiveExamFilter(exam.slug || exam.id || exam.name)
-                                }
-                                activeOpacity={0.7}
-                              >
-                                {renderExamIcon(exam.slug || exam.name, 13, isActive ? '#FFFFFF' : color)}
-                                <Text
-                                  style={[
-                                    styles.goalQuickChipText,
-                                    isActive && styles.goalQuickChipTextActive,
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {shortLabel}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </ScrollView>
-                      )}
                     </View>
                   </View>
                 );
@@ -1283,21 +1287,21 @@ export default function SyllabusScreen(): React.JSX.Element {
                           </View>
                           <View style={styles.textContainer}>
                             <View style={styles.subjectTitleRow}>
-                              <Text style={styles.subjectText} numberOfLines={1}>{section.title}</Text>
+                              <Text style={styles.subjectText} numberOfLines={2}>{section.title}</Text>
                             </View>
                             <View style={styles.subjectMetaLine}>
                               <Text style={styles.chaptersCountText}>
                                 {`${section.completeChaptersCount}/${section.chapterCount} chapters`}
                               </Text>
-                              {section.exams && section.exams.length > 0 && (
+                              {section.exams && section.exams.length > 0 && activeExamFilter === 'all' && (
                                 <View style={styles.subjectTagsRow}>
                                   {section.exams.map((exam: any) => {
                                     const label =
                                       exam.short_name ||
                                       (exam.slug === 'btech-cse'
                                         ? 'B.Tech CSE'
-                                        : exam.name.length > 12
-                                        ? exam.name.substring(0, 11) + '…'
+                                        : exam.name.length > 14
+                                        ? exam.name.substring(0, 13) + '…'
                                         : exam.name);
                                     return (
                                       <View
@@ -1351,7 +1355,14 @@ export default function SyllabusScreen(): React.JSX.Element {
                   typeof item === 'string' && item.includes(':::') ? item.split(':::')[1] : item;
                 const groupedSub =
                   section.groupedSub || filteredSyllabus[section.key] || filteredSyllabus[section.title];
-                const topicsList = groupedSub?.chapters[chapterName] || [];
+                const rawTopics = groupedSub?.chapters[chapterName] || [];
+                const topicsList = rawTopics.filter((t: any) => {
+                  if (activeExamFilter === 'all') return true;
+                  if (!t.exam_slug) return true;
+                  const slugs = t.exam_slug.toLowerCase().split(',').map((s: string) => s.trim());
+                  const target = activeExamFilter.toLowerCase();
+                  return slugs.includes(target) || slugs.some((s: string) => target.includes(s) || s.includes(target));
+                });
                 const chapterKey = `${section.key}-${chapterName}`;
                 const isChapExpanded = expandedChapters.includes(chapterKey);
                 const isLast = index === section.data.length - 1;
@@ -2113,6 +2124,138 @@ const styles = StyleSheet.create({
   // Goal Selector Card
   goalSelectorHeaderContainer: {
     marginBottom: 14,
+  },
+  curriculumDropdownCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#ECEBE6',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+    marginBottom: 10,
+  },
+  curriculumDropdownLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  curriculumIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  curriculumTextColumn: {
+    flex: 1,
+  },
+  curriculumLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  curriculumSmallLabel: {
+    fontFamily: 'DMMono-Medium',
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#9B9BAF',
+    letterSpacing: 0.6,
+  },
+  curriculumFilterStatusPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  curriculumFilterStatusText: {
+    fontFamily: 'DMMono-Medium',
+    fontSize: 8.5,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  curriculumSelectedTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#17172A',
+    marginTop: 2,
+  },
+  curriculumDropdownRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  curriculumChangeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  curriculumChangeBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  curriculumProgressCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#ECEBE6',
+    padding: 14,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+    marginBottom: 6,
+  },
+  curriculumProgressTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  curriculumProgressCountWrap: {
+    flex: 1,
+  },
+  curriculumProgressCountText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#17172A',
+  },
+  curriculumProgressSubText: {
+    fontFamily: 'DMSans',
+    fontSize: 11.5,
+    color: '#717188',
+    marginTop: 1,
+  },
+  curriculumProgressPercentWrap: {
+    paddingLeft: 8,
+  },
+  curriculumProgressPercentText: {
+    fontFamily: 'DMMono-Medium',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  curriculumProgressBarTrack: {
+    height: 6,
+    backgroundColor: '#F0EFEA',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  curriculumProgressBarFill: {
+    height: '100%',
+    borderRadius: 3,
   },
   goalActiveMainCard: {
     backgroundColor: '#FFFFFF',
