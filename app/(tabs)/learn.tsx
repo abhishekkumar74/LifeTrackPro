@@ -1187,6 +1187,25 @@ export default function SyllabusScreen(): React.JSX.Element {
                 if (!syllabusExists) return null;
                 return (
                   <View style={styles.inlineFilterSection}>
+                    {/* Clear Label & Hint so user immediately knows this is a filter / switcher */}
+                    <View style={styles.filterHeaderRow}>
+                      <View style={styles.filterHeaderLeft}>
+                        <Target size={12} color="#717188" strokeWidth={2.4} />
+                        <Text style={styles.filterHeaderLabel}>TARGET CURRICULUM</Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                          setIsDropdownMenuOpen((prev) => !prev);
+                        }}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={styles.filterHeaderActionHint}>Tap to change</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Dropdown Selector Bar */}
                     <TouchableOpacity
                       style={[
                         styles.inlineDropdownBar,
@@ -1199,25 +1218,22 @@ export default function SyllabusScreen(): React.JSX.Element {
                       }}
                       activeOpacity={0.8}
                     >
-                      {/* Left: Icon + Exam Name */}
-                      <View style={styles.inlineDropdownLeft}>
-                        <View style={[styles.inlineDropdownIconCircle, { backgroundColor: `${activeGoalColor}14` }]}>
-                          {renderExamIcon(activeExamObj ? activeExamObj.slug || activeExamObj.name : 'all', 15, activeGoalColor)}
-                        </View>
+                      {/* Left: Round icon */}
+                      <View style={[styles.inlineDropdownIconCircle, { backgroundColor: `${activeGoalColor}16` }]}>
+                        {renderExamIcon(activeExamObj ? activeExamObj.slug || activeExamObj.name : 'all', 17, activeGoalColor)}
+                      </View>
+
+                      {/* Middle: Title & Micro-label */}
+                      <View style={styles.inlineDropdownMiddle}>
+                        <Text style={styles.inlineDropdownMicroLabel}>
+                          {activeExamObj ? 'Active Curriculum' : 'Combined View'}
+                        </Text>
                         <Text style={styles.inlineDropdownNameText} numberOfLines={1}>
                           {activeExamObj ? activeExamObj.name : 'All Enrolled Curricula'}
                         </Text>
-                        <ChevronDown
-                          size={14}
-                          color="#717188"
-                          style={[
-                            styles.inlineDropdownChevron,
-                            isDropdownMenuOpen && styles.inlineDropdownChevronRotated,
-                          ]}
-                        />
                       </View>
 
-                      {/* Right: Clean minimal completion pill */}
+                      {/* Right: Progress pill + Dedicated Circular Dropdown Button */}
                       <View style={styles.inlineDropdownRight}>
                         <View style={[styles.inlineProgressPill, { backgroundColor: `${activeGoalColor}12` }]}>
                           <Text style={[styles.inlineProgressPillPercent, { color: activeGoalColor }]}>
@@ -1226,6 +1242,15 @@ export default function SyllabusScreen(): React.JSX.Element {
                           <Text style={styles.inlineProgressPillFraction}>
                             ({activeGoalMetrics.completed}/{activeGoalMetrics.total})
                           </Text>
+                        </View>
+
+                        <View
+                          style={[
+                            styles.inlineDropdownChevronCircle,
+                            isDropdownMenuOpen && styles.inlineDropdownChevronCircleRotated,
+                          ]}
+                        >
+                          <ChevronDown size={14} color="#17172A" strokeWidth={2.5} />
                         </View>
                       </View>
 
@@ -1258,7 +1283,7 @@ export default function SyllabusScreen(): React.JSX.Element {
                         >
                           <View style={styles.inlineMenuItemLeft}>
                             <View style={[styles.inlineMenuIconWrap, { backgroundColor: '#F1F0FA' }]}>
-                              <Globe size={14} color="#5B4FE8" />
+                              <Globe size={15} color="#5B4FE8" />
                             </View>
                             <Text style={[styles.inlineMenuText, activeExamFilter === 'all' && styles.inlineMenuTextActive]}>
                               All Enrolled Curricula
@@ -1299,7 +1324,7 @@ export default function SyllabusScreen(): React.JSX.Element {
                             >
                               <View style={styles.inlineMenuItemLeft}>
                                 <View style={[styles.inlineMenuIconWrap, { backgroundColor: `${color}14` }]}>
-                                  {renderExamIcon(exam.slug || exam.name, 14, color)}
+                                  {renderExamIcon(exam.slug || exam.name, 15, color)}
                                 </View>
                                 <Text
                                   style={[
@@ -1321,6 +1346,19 @@ export default function SyllabusScreen(): React.JSX.Element {
                             </TouchableOpacity>
                           );
                         })}
+
+                        {/* Manage Target Goals Footer */}
+                        <TouchableOpacity
+                          style={styles.inlineMenuFooterBtn}
+                          onPress={() => {
+                            setIsDropdownMenuOpen(false);
+                            router.push('/profile');
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.inlineMenuFooterText}>+ Add or Manage Target Goals</Text>
+                          <ChevronRight size={13} color="#5B4FE8" />
+                        </TouchableOpacity>
                       </View>
                     )}
                   </View>
@@ -2104,10 +2142,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#ECEBE6',
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     gap: 10,
     height: 44,
     shadowColor: '#17172A',
@@ -2217,18 +2255,49 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     zIndex: 10,
   },
+  filterHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    paddingHorizontal: 4,
+  },
+  filterHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  filterHeaderLabel: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#717188',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  filterHeaderActionHint: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11.5,
+    color: '#5B4FE8',
+    fontWeight: '600',
+  },
   inlineDropdownBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 20,
     borderWidth: 1.5,
     borderColor: '#ECEBE6',
     paddingVertical: 10,
     paddingHorizontal: 12,
     position: 'relative',
     overflow: 'hidden',
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 5,
+    elevation: 1,
   },
   inlineDropdownBarExpanded: {
     borderBottomLeftRadius: 0,
@@ -2242,36 +2311,43 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   inlineDropdownIconCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 10,
+  },
+  inlineDropdownMiddle: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  inlineDropdownMicroLabel: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10.5,
+    color: '#8E8EA0',
+    marginBottom: 1.5,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   inlineDropdownNameText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 13.5,
+    fontSize: 14,
     color: '#17172A',
     fontWeight: '700',
-    flexShrink: 1,
-  },
-  inlineDropdownChevron: {
-    marginLeft: 6,
-  },
-  inlineDropdownChevronRotated: {
-    transform: [{ rotate: '180deg' }],
+    letterSpacing: -0.2,
   },
   inlineDropdownRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
   inlineProgressPill: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 3.5,
-    borderRadius: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
     gap: 4,
   },
   inlineProgressPillPercent: {
@@ -2283,6 +2359,18 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans-Medium',
     fontSize: 11,
     color: '#717188',
+  },
+  inlineDropdownChevronCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F0EFEA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inlineDropdownChevronCircleRotated: {
+    transform: [{ rotate: '180deg' }],
+    backgroundColor: '#EEEDFA',
   },
   inlineHairlineProgressTrack: {
     position: 'absolute',
@@ -2297,8 +2385,8 @@ const styles = StyleSheet.create({
   },
   inlineDropdownMenu: {
     backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
     borderWidth: 1.5,
     borderTopWidth: 0,
     borderColor: '#ECEBE6',
@@ -2313,8 +2401,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F7F6F3',
   },
@@ -2328,16 +2416,16 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   inlineMenuIconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
   },
   inlineMenuText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 13,
+    fontSize: 13.5,
     color: '#3C3C4E',
     flexShrink: 1,
   },
@@ -2355,6 +2443,23 @@ const styles = StyleSheet.create({
     fontFamily: 'DMMono-Medium',
     fontSize: 11.5,
     color: '#9B9BAF',
+  },
+  inlineMenuFooterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 6,
+    backgroundColor: '#FAF9F6',
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+  },
+  inlineMenuFooterText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12.5,
+    color: '#5B4FE8',
+    fontWeight: '700',
   },
   goalActiveMainCard: {
     backgroundColor: '#FFFFFF',
@@ -2890,7 +2995,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   subjectCardCollapsed: {
-    borderRadius: 16,
+    borderRadius: 22,
     borderWidth: 1.5,
     borderColor: '#ECEBE5',
     marginBottom: 10,
@@ -2903,8 +3008,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   subjectCardExpanded: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     borderWidth: 1.5,
     borderBottomWidth: 0,
     borderColor: '#ECEBE5',
@@ -2924,6 +3029,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     minHeight: 68,
     backgroundColor: '#FFFFFF',
+    borderRadius: 22,
   },
   subjectCardLeft: {
     flexDirection: 'row',
@@ -2932,9 +3038,9 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   subjectIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -2974,7 +3080,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2F9F3',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   subjectCompletedBadgeText: {
     fontFamily: 'DMSans-Bold',
@@ -2988,9 +3094,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   subjectPercentPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
+    borderRadius: 12,
   },
   subjectPercentText: {
     fontFamily: 'DMMono-Medium',
@@ -2998,9 +3104,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   subjectChevronCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#F5F4EF',
     justifyContent: 'center',
     alignItems: 'center',
@@ -3009,11 +3115,11 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '90deg' }],
   },
   subjectProgressTrack: {
-    height: 3,
+    height: 3.5,
     backgroundColor: '#F3F2EB',
     width: '100%',
-    borderBottomLeftRadius: 15,
-    borderBottomRightRadius: 15,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
     overflow: 'hidden',
   },
   subjectProgressFill: {
@@ -3028,8 +3134,8 @@ const styles = StyleSheet.create({
   },
   chapterRowCardWrapperLast: {
     borderBottomWidth: 1.5,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
     marginBottom: 10,
     shadowColor: '#17172A',
     shadowOffset: { width: 0, height: 1 },
