@@ -117,12 +117,99 @@ const getExamIcon = (_slugOrName: string = ''): string => {
   return '';
 };
 
+type CurriculumCategory =
+  | 'all'
+  | 'sarkari'
+  | 'engineering'
+  | 'medical'
+  | 'boards'
+  | 'defence'
+  | 'banking'
+  | 'commerce'
+  | 'law_mba';
+
+const CURRICULUM_CATEGORIES: { id: CurriculumCategory; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'sarkari', label: 'Govt / Sarkari' },
+  { id: 'engineering', label: 'Engineering' },
+  { id: 'medical', label: 'Medical' },
+  { id: 'boards', label: 'Boards' },
+  { id: 'defence', label: 'Defence' },
+  { id: 'banking', label: 'Banking' },
+  { id: 'commerce', label: 'Commerce & CA' },
+  { id: 'law_mba', label: 'MBA & Law' },
+];
+
+const getExamCategory = (exam: { name?: string; slug?: string; exam_type?: string }): CurriculumCategory => {
+  const slug = (exam.slug || '').toLowerCase();
+  const name = (exam.name || '').toLowerCase();
+
+  // Defence
+  if (slug === 'nda' || slug === 'cds' || slug === 'afcat' || name.includes('defence') || name.includes('nda') || name.includes('cds')) {
+    return 'defence';
+  }
+  // Sarkari / Civil Services / Railway / SSC
+  if (
+    slug.includes('upsc') ||
+    name.includes('upsc') ||
+    slug.includes('state-pcs') ||
+    name.includes('pcs') ||
+    slug.includes('ssc') ||
+    name.includes('ssc') ||
+    slug.includes('rrb') ||
+    name.includes('railway')
+  ) {
+    return 'sarkari';
+  }
+  // Medical
+  if (slug.includes('neet') || name.includes('medical') || name.includes('mbbs') || name.includes('aiims')) {
+    return 'medical';
+  }
+  // Engineering / Tech
+  if (
+    slug.includes('jee') ||
+    slug.includes('gate') ||
+    slug.includes('btech') ||
+    name.includes('engineering') ||
+    name.includes('computer science')
+  ) {
+    return 'engineering';
+  }
+  // Banking
+  if (slug.includes('ibps') || slug.includes('sbi') || slug.includes('rbi') || name.includes('bank')) {
+    return 'banking';
+  }
+  // Boards
+  if (slug.includes('board') || name.includes('board') || slug.includes('class-') || name.includes('class ') || exam.exam_type === 'board') {
+    return 'boards';
+  }
+  // Commerce & CA / CS
+  if (
+    slug.includes('ca-') ||
+    slug.includes('cs-') ||
+    name.includes('ca foundation') ||
+    name.includes('cs foundation') ||
+    name.includes('commerce')
+  ) {
+    return 'commerce';
+  }
+  // Law & MBA
+  if (slug === 'cat' || slug === 'clat' || slug === 'cuet' || name.includes('mba') || name.includes('law') || name.includes('cuet')) {
+    return 'law_mba';
+  }
+
+  if (exam.exam_type === 'sarkari') return 'sarkari';
+  if (exam.exam_type === 'board') return 'boards';
+  return 'engineering';
+};
+
 export default function SyllabusScreen(): React.JSX.Element {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeExamFilter, setActiveExamFilter] = useState<string>('all');
   const [isManageCurriculumOpen, setIsManageCurriculumOpen] = useState(false);
   const [manageSearchQuery, setManageSearchQuery] = useState('');
+  const [selectedCurriculumCategory, setSelectedCurriculumCategory] = useState<CurriculumCategory>('all');
   const [isDropdownMenuOpen, setIsDropdownMenuOpen] = useState(false);
   const [examToDelete, setExamToDelete] = useState<{ id?: string; slug?: string; name: string } | null>(null);
   const [isAddTopicOpen, setIsAddTopicOpen] = useState(false);
@@ -795,6 +882,22 @@ export default function SyllabusScreen(): React.JSX.Element {
     });
   }, [profile?.sub_category, profile?.category, studentExams, enrollmentsQuery.data, syllabusQuery.data]);
 
+  const categoryCounts = useMemo(() => {
+    const list: typeof SEED_EXAMS = [...SEED_EXAMS];
+    studentExams.forEach((se) => {
+      if (!list.some((item) => (item.slug && item.slug === se.slug) || item.id === se.id)) {
+        list.push(se as any);
+      }
+    });
+
+    const counts: Record<string, number> = { all: list.length };
+    list.forEach((e) => {
+      const cat = getExamCategory(e);
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [studentExams]);
+
   const availableExamsFiltered = useMemo(() => {
     const list: typeof SEED_EXAMS = [...SEED_EXAMS];
     studentExams.forEach((se) => {
@@ -803,15 +906,23 @@ export default function SyllabusScreen(): React.JSX.Element {
       }
     });
 
-    if (!manageSearchQuery.trim()) return list;
-    const q = manageSearchQuery.toLowerCase().trim();
-    return list.filter(
-      (e) =>
+    return list.filter((e) => {
+      // 1. Category Filter (Flipkart / Amazon style)
+      if (selectedCurriculumCategory !== 'all') {
+        const cat = getExamCategory(e);
+        if (cat !== selectedCurriculumCategory) return false;
+      }
+
+      // 2. Search Query Filter
+      if (!manageSearchQuery.trim()) return true;
+      const q = manageSearchQuery.toLowerCase().trim();
+      return (
         e.name.toLowerCase().includes(q) ||
         (e.slug || '').toLowerCase().includes(q) ||
         (e.description || '').toLowerCase().includes(q)
-    );
-  }, [studentExams, manageSearchQuery]);
+      );
+    });
+  }, [studentExams, manageSearchQuery, selectedCurriculumCategory]);
 
   const getExamsForSubjectGroup = useCallback(
     (subjectName: string, groupedSub: GroupedSubject) => {
@@ -1861,6 +1972,80 @@ export default function SyllabusScreen(): React.JSX.Element {
                 )}
               </View>
 
+              {/* Flipkart / Amazon Style Category Filter Pills */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.manageCategoryPillsScroll}
+                style={styles.manageCategoryPillsContainer}
+              >
+                {CURRICULUM_CATEGORIES.map((cat) => {
+                  const isSelected = selectedCurriculumCategory === cat.id;
+                  const count = categoryCounts[cat.id] ?? 0;
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[
+                        styles.manageCategoryPill,
+                        isSelected && styles.manageCategoryPillActive,
+                      ]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                        setSelectedCurriculumCategory(cat.id);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.manageCategoryPillText,
+                          isSelected && styles.manageCategoryPillTextActive,
+                        ]}
+                      >
+                        {cat.label}
+                      </Text>
+                      <View
+                        style={[
+                          styles.manageCategoryPillBadge,
+                          isSelected && styles.manageCategoryPillBadgeActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.manageCategoryPillBadgeText,
+                            isSelected && styles.manageCategoryPillBadgeTextActive,
+                          ]}
+                        >
+                          {count}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {/* Empty state when no exam matches category + search query */}
+              {availableExamsFiltered.length === 0 && (
+                <View style={styles.manageCategoryEmpty}>
+                  <Search size={24} color="#9B9BAF" />
+                  <Text style={styles.manageCategoryEmptyTitle}>No curriculums found</Text>
+                  <Text style={styles.manageCategoryEmptySubtitle}>
+                    Try searching for another exam or reset your category filter.
+                  </Text>
+                  {(manageSearchQuery.length > 0 || selectedCurriculumCategory !== 'all') && (
+                    <TouchableOpacity
+                      style={styles.manageResetFilterBtn}
+                      onPress={() => {
+                        setManageSearchQuery('');
+                        setSelectedCurriculumCategory('all');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.manageResetFilterBtnText}>Show All Curricula</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
               {/* List of Available Seed Exams */}
               {availableExamsFiltered.map((exam) => {
                 const isEnrolled = userSelectedExams.some(
@@ -1871,6 +2056,8 @@ export default function SyllabusScreen(): React.JSX.Element {
                 );
                 const isLoadingThis = loadingExamKey === (exam.slug || exam.id);
                 const color = exam.color || '#5B4FE8';
+                const examCat = getExamCategory(exam);
+                const examCatLabel = CURRICULUM_CATEGORIES.find((c) => c.id === examCat)?.label || 'Exam';
 
                 return (
                   <View key={exam.id || exam.slug} style={styles.availableExamCard}>
@@ -1879,7 +2066,12 @@ export default function SyllabusScreen(): React.JSX.Element {
                         {renderExamIcon(exam.slug || exam.name, 16, color)}
                       </View>
                       <View style={styles.availableExamTextWrap}>
-                        <Text style={styles.availableExamName} numberOfLines={1}>{exam.name}</Text>
+                        <View style={styles.availableExamNameRow}>
+                          <Text style={styles.availableExamName} numberOfLines={1}>{exam.name}</Text>
+                          <View style={styles.availableExamCategoryTag}>
+                            <Text style={styles.availableExamCategoryTagText}>{examCatLabel}</Text>
+                          </View>
+                        </View>
                         <Text style={styles.availableExamSubjects} numberOfLines={1}>
                           {exam.description || (exam.subjects ? `${exam.subjects.length} subjects` : 'Complete Curriculum')}
                         </Text>
@@ -2509,7 +2701,98 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 42,
     gap: 8,
+    marginBottom: 10,
+  },
+  manageCategoryPillsContainer: {
     marginBottom: 12,
+  },
+  manageCategoryPillsScroll: {
+    gap: 8,
+    paddingRight: 6,
+  },
+  manageCategoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#FAF9F6',
+    borderWidth: 1.2,
+    borderColor: '#ECEBE5',
+    gap: 6,
+  },
+  manageCategoryPillActive: {
+    backgroundColor: '#5B4FE8',
+    borderColor: '#5B4FE8',
+    shadowColor: '#5B4FE8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  manageCategoryPillText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12.5,
+    color: '#4B4B60',
+  },
+  manageCategoryPillTextActive: {
+    fontFamily: 'DMSans-Bold',
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  manageCategoryPillBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+    backgroundColor: '#EAE9E3',
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  manageCategoryPillBadgeActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.28)',
+  },
+  manageCategoryPillBadgeText: {
+    fontFamily: 'DMMono-Medium',
+    fontSize: 10.5,
+    color: '#656578',
+    fontWeight: '700',
+  },
+  manageCategoryPillBadgeTextActive: {
+    color: '#FFFFFF',
+  },
+  manageCategoryEmpty: {
+    paddingVertical: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  manageCategoryEmptyTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#17172A',
+    marginTop: 10,
+  },
+  manageCategoryEmptySubtitle: {
+    fontFamily: 'DMSans',
+    fontSize: 12,
+    color: '#8E8EA0',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  manageResetFilterBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    backgroundColor: '#ECEAFE',
+    borderRadius: 10,
+  },
+  manageResetFilterBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12,
+    color: '#5B4FE8',
+    fontWeight: '700',
   },
   manageSearchInput: {
     flex: 1,
@@ -2537,6 +2820,23 @@ const styles = StyleSheet.create({
   },
   availableExamTextWrap: {
     flex: 1,
+  },
+  availableExamNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  availableExamCategoryTag: {
+    backgroundColor: '#F3F2EE',
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  availableExamCategoryTagText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#717188',
   },
   availableExamName: {
     fontFamily: 'DMSans-Bold',
