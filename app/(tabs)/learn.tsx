@@ -80,6 +80,7 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { SYLLABUS_TEMPLATES, getTemplateForExam } from '@/lib/utils/syllabus-templates';
 import { CSE_SYLLABUS } from '@/lib/utils/cse-syllabus-templates';
 import { useExams, fetchExamSyllabusTopics } from '@/lib/hooks/use-exams';
+import { SEED_EXAMS } from '@/lib/constants/exams-seed';
 
 const ADD_TOPIC_SNAP_POINTS = ['55%'];
 
@@ -120,7 +121,8 @@ export default function SyllabusScreen(): React.JSX.Element {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeExamFilter, setActiveExamFilter] = useState<string>('all');
-  const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
+  const [isManageCurriculumOpen, setIsManageCurriculumOpen] = useState(false);
+  const [manageSearchQuery, setManageSearchQuery] = useState('');
   const [isDropdownMenuOpen, setIsDropdownMenuOpen] = useState(false);
   const [examToDelete, setExamToDelete] = useState<{ id?: string; slug?: string; name: string } | null>(null);
   const [isAddTopicOpen, setIsAddTopicOpen] = useState(false);
@@ -155,8 +157,8 @@ export default function SyllabusScreen(): React.JSX.Element {
       setIsDropdownMenuOpen(false);
       return true;
     }
-    if (isGoalModalOpen) {
-      setIsGoalModalOpen(false);
+    if (isManageCurriculumOpen) {
+      setIsManageCurriculumOpen(false);
       return true;
     }
     if (isAddTopicOpen) {
@@ -793,6 +795,24 @@ export default function SyllabusScreen(): React.JSX.Element {
     });
   }, [profile?.sub_category, profile?.category, studentExams, enrollmentsQuery.data, syllabusQuery.data]);
 
+  const availableExamsFiltered = useMemo(() => {
+    const list: typeof SEED_EXAMS = [...SEED_EXAMS];
+    studentExams.forEach((se) => {
+      if (!list.some((item) => (item.slug && item.slug === se.slug) || item.id === se.id)) {
+        list.push(se as any);
+      }
+    });
+
+    if (!manageSearchQuery.trim()) return list;
+    const q = manageSearchQuery.toLowerCase().trim();
+    return list.filter(
+      (e) =>
+        e.name.toLowerCase().includes(q) ||
+        (e.slug || '').toLowerCase().includes(q) ||
+        (e.description || '').toLowerCase().includes(q)
+    );
+  }, [studentExams, manageSearchQuery]);
+
   const getExamsForSubjectGroup = useCallback(
     (subjectName: string, groupedSub: GroupedSubject) => {
       const slugs = (groupedSub.examSlugs || []).map((s) => s.toLowerCase());
@@ -1186,31 +1206,26 @@ export default function SyllabusScreen(): React.JSX.Element {
               ListHeaderComponent={() => {
                 if (!syllabusExists) return null;
                 return (
-                  <View style={styles.inlineFilterSection}>
-                    {/* Clear Label & Hint so user immediately knows this is a filter / switcher */}
-                    <View style={styles.filterHeaderRow}>
-                      <View style={styles.filterHeaderLeft}>
-                        <Target size={12} color="#717188" strokeWidth={2.4} />
-                        <Text style={styles.filterHeaderLabel}>TARGET CURRICULUM</Text>
-                      </View>
+                  <View style={styles.selectFieldContainer}>
+                    {/* Standard Form Select Label Row */}
+                    <View style={styles.selectLabelRow}>
+                      <Text style={styles.selectFieldLabel}>Curriculum / Target Goal</Text>
                       <TouchableOpacity
                         onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                          setIsDropdownMenuOpen((prev) => !prev);
+                          setIsDropdownMenuOpen(false);
+                          setIsManageCurriculumOpen(true);
                         }}
-                        activeOpacity={0.7}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
-                        <Text style={styles.filterHeaderActionHint}>Tap to change</Text>
+                        <Text style={styles.manageGoalsLinkText}>+ Add / Manage</Text>
                       </TouchableOpacity>
                     </View>
 
-                    {/* Dropdown Selector Bar */}
+                    {/* Standard Form Select Box (Jaise State / District select field) */}
                     <TouchableOpacity
                       style={[
-                        styles.inlineDropdownBar,
-                        isDropdownMenuOpen && styles.inlineDropdownBarExpanded,
-                        activeExamObj && { borderColor: `${activeGoalColor}40` },
+                        styles.selectBox,
+                        isDropdownMenuOpen && styles.selectBoxOpen,
                       ]}
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -1218,61 +1233,39 @@ export default function SyllabusScreen(): React.JSX.Element {
                       }}
                       activeOpacity={0.8}
                     >
-                      {/* Left: Round icon */}
-                      <View style={[styles.inlineDropdownIconCircle, { backgroundColor: `${activeGoalColor}16` }]}>
-                        {renderExamIcon(activeExamObj ? activeExamObj.slug || activeExamObj.name : 'all', 17, activeGoalColor)}
-                      </View>
-
-                      {/* Middle: Title & Micro-label */}
-                      <View style={styles.inlineDropdownMiddle}>
-                        <Text style={styles.inlineDropdownMicroLabel}>
-                          {activeExamObj ? 'Active Curriculum' : 'Combined View'}
-                        </Text>
-                        <Text style={styles.inlineDropdownNameText} numberOfLines={1}>
-                          {activeExamObj ? activeExamObj.name : 'All Enrolled Curricula'}
+                      <View style={styles.selectBoxLeft}>
+                        <View style={[styles.selectIconWrap, { backgroundColor: `${activeGoalColor}16` }]}>
+                          {renderExamIcon(activeExamObj ? activeExamObj.slug || activeExamObj.name : 'all', 15, activeGoalColor)}
+                        </View>
+                        <Text style={styles.selectBoxValueText} numberOfLines={1}>
+                          {activeExamObj ? activeExamObj.name : 'All Curricula & Subjects'}
                         </Text>
                       </View>
 
-                      {/* Right: Progress pill + Dedicated Circular Dropdown Button */}
-                      <View style={styles.inlineDropdownRight}>
-                        <View style={[styles.inlineProgressPill, { backgroundColor: `${activeGoalColor}12` }]}>
-                          <Text style={[styles.inlineProgressPillPercent, { color: activeGoalColor }]}>
-                            {activeGoalMetrics.percent}%
-                          </Text>
-                          <Text style={styles.inlineProgressPillFraction}>
-                            ({activeGoalMetrics.completed}/{activeGoalMetrics.total})
-                          </Text>
-                        </View>
-
-                        <View
-                          style={[
-                            styles.inlineDropdownChevronCircle,
-                            isDropdownMenuOpen && styles.inlineDropdownChevronCircleRotated,
-                          ]}
-                        >
-                          <ChevronDown size={14} color="#17172A" strokeWidth={2.5} />
-                        </View>
-                      </View>
-
-                      {/* Thin 2.5px hairline progress indicator directly on bottom border */}
-                      <View style={styles.inlineHairlineProgressTrack}>
-                        <View
-                          style={[
-                            styles.inlineHairlineProgressFill,
-                            { width: `${activeGoalMetrics.percent}%`, backgroundColor: activeGoalColor },
-                          ]}
+                      <View style={styles.selectBoxRight}>
+                        {activeGoalMetrics.total > 0 && (
+                          <View style={[styles.selectPercentPill, { backgroundColor: `${activeGoalColor}14` }]}>
+                            <Text style={[styles.selectPercentText, { color: activeGoalColor }]}>
+                              {activeGoalMetrics.percent}%
+                            </Text>
+                          </View>
+                        )}
+                        <ChevronDown
+                          size={16}
+                          color="#5C5C70"
+                          style={isDropdownMenuOpen ? styles.selectChevronRotated : styles.selectChevron}
                         />
                       </View>
                     </TouchableOpacity>
 
-                    {/* Inline Dropdown Popover Menu */}
+                    {/* Standard Native-Style Dropdown Options List */}
                     {isDropdownMenuOpen && (
-                      <View style={styles.inlineDropdownMenu}>
+                      <View style={styles.selectDropdownList}>
                         {/* Option: All Curricula */}
                         <TouchableOpacity
                           style={[
-                            styles.inlineMenuItem,
-                            activeExamFilter === 'all' && styles.inlineMenuItemActive,
+                            styles.selectOptionRow,
+                            activeExamFilter === 'all' && styles.selectOptionRowActive,
                           ]}
                           onPress={() => {
                             setActiveExamFilter('all');
@@ -1281,16 +1274,16 @@ export default function SyllabusScreen(): React.JSX.Element {
                           }}
                           activeOpacity={0.7}
                         >
-                          <View style={styles.inlineMenuItemLeft}>
-                            <View style={[styles.inlineMenuIconWrap, { backgroundColor: '#F1F0FA' }]}>
-                              <Globe size={15} color="#5B4FE8" />
+                          <View style={styles.selectOptionLeft}>
+                            <View style={[styles.selectOptionIconWrap, { backgroundColor: '#F1F0FA' }]}>
+                              <Globe size={14} color="#5B4FE8" />
                             </View>
-                            <Text style={[styles.inlineMenuText, activeExamFilter === 'all' && styles.inlineMenuTextActive]}>
-                              All Enrolled Curricula
+                            <Text style={[styles.selectOptionText, activeExamFilter === 'all' && styles.selectOptionTextActive]}>
+                              All Curricula & Subjects
                             </Text>
                           </View>
-                          <View style={styles.inlineMenuItemRight}>
-                            <Text style={styles.inlineMenuMetric}>
+                          <View style={styles.selectOptionRight}>
+                            <Text style={styles.selectOptionMetric}>
                               {overallMetrics.completed}/{overallMetrics.total} ({overallMetrics.percent}%)
                             </Text>
                             {activeExamFilter === 'all' && <Check size={14} color="#5B4FE8" strokeWidth={2.5} />}
@@ -1312,8 +1305,8 @@ export default function SyllabusScreen(): React.JSX.Element {
                             <TouchableOpacity
                               key={exam.id || exam.slug}
                               style={[
-                                styles.inlineMenuItem,
-                                isSelected && styles.inlineMenuItemActive,
+                                styles.selectOptionRow,
+                                isSelected && styles.selectOptionRowActive,
                               ]}
                               onPress={() => {
                                 setActiveExamFilter(exam.slug || exam.id || exam.name);
@@ -1322,14 +1315,14 @@ export default function SyllabusScreen(): React.JSX.Element {
                               }}
                               activeOpacity={0.7}
                             >
-                              <View style={styles.inlineMenuItemLeft}>
-                                <View style={[styles.inlineMenuIconWrap, { backgroundColor: `${color}14` }]}>
-                                  {renderExamIcon(exam.slug || exam.name, 15, color)}
+                              <View style={styles.selectOptionLeft}>
+                                <View style={[styles.selectOptionIconWrap, { backgroundColor: `${color}14` }]}>
+                                  {renderExamIcon(exam.slug || exam.name, 14, color)}
                                 </View>
                                 <Text
                                   style={[
-                                    styles.inlineMenuText,
-                                    isSelected && styles.inlineMenuTextActive,
+                                    styles.selectOptionText,
+                                    isSelected && styles.selectOptionTextActive,
                                     isSelected && { color },
                                   ]}
                                   numberOfLines={1}
@@ -1337,8 +1330,8 @@ export default function SyllabusScreen(): React.JSX.Element {
                                   {exam.name}
                                 </Text>
                               </View>
-                              <View style={styles.inlineMenuItemRight}>
-                                <Text style={styles.inlineMenuMetric}>
+                              <View style={styles.selectOptionRight}>
+                                <Text style={styles.selectOptionMetric}>
                                   {metric.completed}/{metric.total} ({metric.percent}%)
                                 </Text>
                                 {isSelected && <Check size={14} color={color} strokeWidth={2.5} />}
@@ -1347,16 +1340,17 @@ export default function SyllabusScreen(): React.JSX.Element {
                           );
                         })}
 
-                        {/* Manage Target Goals Footer */}
+                        {/* Action row inside dropdown: Add / Manage Goals right here */}
                         <TouchableOpacity
-                          style={styles.inlineMenuFooterBtn}
+                          style={styles.selectActionRow}
                           onPress={() => {
                             setIsDropdownMenuOpen(false);
-                            router.push('/profile');
+                            setIsManageCurriculumOpen(true);
                           }}
                           activeOpacity={0.8}
                         >
-                          <Text style={styles.inlineMenuFooterText}>+ Add or Manage Target Goals</Text>
+                          <Plus size={14} color="#5B4FE8" strokeWidth={2.5} />
+                          <Text style={styles.selectActionText}>Add or Manage Target Goals</Text>
                           <ChevronRight size={13} color="#5B4FE8" />
                         </TouchableOpacity>
                       </View>
@@ -1755,225 +1749,181 @@ export default function SyllabusScreen(): React.JSX.Element {
         </View>
       </SafeAreaView>
 
-      {/* Goal Switcher Modal */}
+      {/* Manage & Add Target Goals Modal (Directly inside Syllabus) */}
       <Modal
-        visible={isGoalModalOpen}
+        visible={isManageCurriculumOpen}
         transparent={true}
         animationType="slide"
         onRequestClose={() => {
           if (examToDelete) {
             setExamToDelete(null);
           } else {
-            setIsGoalModalOpen(false);
+            setIsManageCurriculumOpen(false);
           }
         }}
       >
-        <View style={styles.goalModalBackdrop}>
-          <TouchableWithoutFeedback onPress={() => !examToDelete && setIsGoalModalOpen(false)}>
-            <View style={styles.goalModalBackdropPressable} />
+        <View style={styles.manageModalBackdrop}>
+          <TouchableWithoutFeedback onPress={() => !examToDelete && setIsManageCurriculumOpen(false)}>
+            <View style={styles.manageModalBackdropPressable} />
           </TouchableWithoutFeedback>
-          <View style={styles.goalModalContent}>
-            <View style={styles.goalModalHeader}>
-              <View style={styles.goalModalHeaderLeft}>
-                <View style={styles.goalModalIconCircle}>
-                  <Target size={20} color="#5B4FE8" />
+          <View style={styles.manageModalContent}>
+            {/* Header */}
+            <View style={styles.manageModalHeader}>
+              <View style={styles.manageModalHeaderLeft}>
+                <View style={styles.manageModalIconCircle}>
+                  <Target size={18} color="#5B4FE8" />
                 </View>
                 <View>
-                  <Text style={styles.goalModalTitle}>Select Target Goal</Text>
-                  <Text style={styles.goalModalSubtitle}>Switch curriculum to focus your study</Text>
+                  <Text style={styles.manageModalTitle}>Manage Target Goals</Text>
+                  <Text style={styles.manageModalSubtitle}>Add or remove curriculum tracks</Text>
                 </View>
               </View>
               <TouchableOpacity
-                onPress={() => setIsGoalModalOpen(false)}
-                style={styles.goalModalCloseBtn}
+                onPress={() => setIsManageCurriculumOpen(false)}
+                style={styles.manageModalCloseBtn}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <X size={20} color="#5C5C70" />
+                <X size={18} color="#5C5C70" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.goalModalList} showsVerticalScrollIndicator={false}>
-              {/* All Goals / Combined Option */}
-              <TouchableOpacity
-                style={[
-                  styles.goalOptionCard,
-                  activeExamFilter === 'all' && styles.goalOptionCardActive,
-                ]}
-                onPress={() => {
-                  setActiveExamFilter('all');
-                  setIsGoalModalOpen(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.goalOptionTopRow}>
-                  <View style={styles.goalOptionIconBadge}>
-                    <Globe size={20} color="#5B4FE8" />
-                  </View>
-                  <View style={styles.goalOptionTextWrap}>
-                    <View style={styles.goalOptionTitleRow}>
-                      <Text style={styles.goalOptionTitle}>All Goals & Subjects</Text>
-                      {activeExamFilter === 'all' && (
-                        <View style={styles.goalActiveIndicator}>
-                          <Check size={12} color="#FFFFFF" />
+            <ScrollView style={styles.manageModalBody} showsVerticalScrollIndicator={false}>
+              {/* SECTION 1: Currently Enrolled */}
+              <Text style={styles.manageSectionTitle}>
+                CURRENTLY ENROLLED ({userSelectedExams.length})
+              </Text>
+
+              {userSelectedExams.length === 0 ? (
+                <View style={styles.manageEmptyBox}>
+                  <Text style={styles.manageEmptyText}>No target goals enrolled yet.</Text>
+                </View>
+              ) : (
+                userSelectedExams.map((exam) => {
+                  const metric = examMetrics.find(
+                    (m) =>
+                      (m.exam.slug || '').toLowerCase() === (exam.slug || '').toLowerCase() ||
+                      m.exam.id === exam.id ||
+                      m.exam.name.toLowerCase() === exam.name.toLowerCase()
+                  ) || { total: 0, completed: 0, percent: 0 };
+                  const color = exam.color || '#5B4FE8';
+
+                  return (
+                    <View key={exam.id || exam.slug} style={styles.enrolledItemRow}>
+                      <View style={styles.enrolledItemLeft}>
+                        <View style={[styles.enrolledItemIcon, { backgroundColor: `${color}15` }]}>
+                          {renderExamIcon(exam.slug || exam.name, 16, color)}
                         </View>
-                      )}
-                    </View>
-                    <Text style={styles.goalOptionSubtitle}>
-                      Combined view of all your subjects and roadmaps
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.goalOptionProgressRow}>
-                  <View style={styles.goalOptionProgressBar}>
-                    <View
-                      style={[
-                        styles.goalOptionProgressFill,
-                        { width: `${overallMetrics.percent}%`, backgroundColor: '#5B4FE8' },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.goalOptionProgressText}>
-                    {`${overallMetrics.completed}/${overallMetrics.total} (${overallMetrics.percent}%)`}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Empty state if user has no specific exams enrolled */}
-              {userSelectedExams.length === 0 && (
-                <View style={styles.goalEmptyWrap}>
-                  <Text style={styles.goalEmptyTitle}>No Target Goals Enrolled</Text>
-                  <Text style={styles.goalEmptySubtitle}>
-                    Tap Manage Target Goals below to select a curriculum.
-                  </Text>
-                </View>
-              )}
-
-              {/* Individual Target Exams */}
-              {userSelectedExams.map((exam) => {
-                const isSelected = activeExamFilter === (exam.slug || exam.id || exam.name);
-                const metric = examMetrics.find(
-                  (m) =>
-                    (m.exam.slug || '').toLowerCase() === (exam.slug || '').toLowerCase() ||
-                    m.exam.id === exam.id ||
-                    m.exam.name.toLowerCase() === exam.name.toLowerCase()
-                ) || { total: 0, completed: 0, percent: 0 };
-                const hasCurriculum = metric.total > 0;
-                const color = exam.color || '#5B4FE8';
-
-                return (
-                  <TouchableOpacity
-                    key={exam.id || exam.slug}
-                    style={[
-                      styles.goalOptionCard,
-                      isSelected && styles.goalOptionCardActive,
-                      isSelected && { borderColor: color },
-                    ]}
-                    onPress={() => {
-                      setActiveExamFilter(exam.slug || exam.id || exam.name);
-                      setIsGoalModalOpen(false);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.goalOptionTopRow}>
-                      <View style={[styles.goalOptionIconBadge, { backgroundColor: `${color}18` }]}>
-                        {renderExamIcon(exam.slug || exam.name, 20, color)}
-                      </View>
-                      <View style={styles.goalOptionTextWrap}>
-                        <View style={styles.goalOptionTitleRow}>
-                          <Text style={styles.goalOptionTitle} numberOfLines={1}>{exam.name}</Text>
-                          {isSelected && (
-                            <View style={[styles.goalActiveIndicator, { backgroundColor: color }]}>
-                              <Check size={12} color="#FFFFFF" />
-                            </View>
-                          )}
+                        <View style={styles.enrolledItemTextWrap}>
+                          <Text style={styles.enrolledItemName} numberOfLines={1}>{exam.name}</Text>
+                          <Text style={styles.enrolledItemProgress}>
+                            {metric.total > 0
+                              ? `${metric.completed}/${metric.total} topics completed (${metric.percent}%)`
+                              : 'Curriculum imported'}
+                          </Text>
                         </View>
-                        <Text style={styles.goalOptionSubtitle} numberOfLines={1}>
-                          {hasCurriculum
-                            ? `${metric.completed} of ${metric.total} topics completed`
-                            : 'Curriculum not imported yet'}
-                        </Text>
                       </View>
 
-                      {/* Remove / Unenroll Syllabus Button */}
+                      {/* Remove Button */}
                       <TouchableOpacity
-                        style={styles.goalRemoveBtn}
-                        onPress={(e) => {
-                          e.stopPropagation();
+                        style={styles.enrolledRemoveBtn}
+                        onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                           setExamToDelete({ id: exam.id, slug: exam.slug, name: exam.name });
                         }}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        activeOpacity={0.7}
-                        accessibilityLabel={`Remove ${exam.name} syllabus`}
                       >
-                        <Trash2 size={15} color="#9B9BAF" />
+                        <Trash2 size={16} color="#E05666" />
                       </TouchableOpacity>
                     </View>
+                  );
+                })
+              )}
 
-                    {hasCurriculum ? (
-                      <View style={styles.goalOptionProgressRow}>
-                        <View style={styles.goalOptionProgressBar}>
-                          <View
-                            style={[
-                              styles.goalOptionProgressFill,
-                              { width: `${metric.percent}%`, backgroundColor: color },
-                            ]}
-                          />
-                        </View>
-                        <Text style={[styles.goalOptionProgressText, { color }]}>
-                          {`${metric.percent}%`}
+              {/* SECTION 2: Add New Exam / Curriculum */}
+              <View style={styles.manageAddSectionHeader}>
+                <Text style={styles.manageSectionTitle}>ADD NEW CURRICULUM</Text>
+              </View>
+
+              {/* Search Available Exams */}
+              <View style={styles.manageSearchWrapper}>
+                <Search size={14} color="#9B9BAF" />
+                <TextInput
+                  style={styles.manageSearchInput}
+                  value={manageSearchQuery}
+                  onChangeText={setManageSearchQuery}
+                  placeholder="Search 28+ government, engineering & board exams..."
+                  placeholderTextColor="#9B9BAF"
+                />
+                {manageSearchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setManageSearchQuery('')}>
+                    <X size={14} color="#9B9BAF" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* List of Available Seed Exams */}
+              {availableExamsFiltered.map((exam) => {
+                const isEnrolled = userSelectedExams.some(
+                  (e) =>
+                    (e.slug || '').toLowerCase() === (exam.slug || '').toLowerCase() ||
+                    e.id === exam.id ||
+                    (e.name || '').toLowerCase() === (exam.name || '').toLowerCase()
+                );
+                const isLoadingThis = loadingExamKey === (exam.slug || exam.id);
+                const color = exam.color || '#5B4FE8';
+
+                return (
+                  <View key={exam.id || exam.slug} style={styles.availableExamCard}>
+                    <View style={styles.availableExamLeft}>
+                      <View style={[styles.enrolledItemIcon, { backgroundColor: `${color}15` }]}>
+                        {renderExamIcon(exam.slug || exam.name, 16, color)}
+                      </View>
+                      <View style={styles.availableExamTextWrap}>
+                        <Text style={styles.availableExamName} numberOfLines={1}>{exam.name}</Text>
+                        <Text style={styles.availableExamSubjects} numberOfLines={1}>
+                          {exam.description || (exam.subjects ? `${exam.subjects.length} subjects` : 'Complete Curriculum')}
                         </Text>
                       </View>
-                    ) : (
-                      <View style={styles.goalOptionActionRow}>
-                        <TouchableOpacity
-                          style={[
-                            styles.goalLoadInlineBtn,
-                            { backgroundColor: color },
-                            loadingExamKey === (exam.slug || exam.id || exam.name) ? { opacity: 0.7 } : null,
-                          ]}
-                          disabled={!!loadingExamKey || setupSyllabusMutation.isPending}
-                          onPress={() =>
-                            handleLoadSyllabusTemplate(exam.slug || exam.id || exam.name)
-                          }
-                          activeOpacity={0.8}
-                        >
-                          {loadingExamKey === (exam.slug || exam.id || exam.name) ||
-                          setupSyllabusMutation.isPending ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
-                          ) : (
-                            <Plus size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-                          )}
-                          <Text style={styles.goalLoadInlineBtnText}>
-                            {loadingExamKey === (exam.slug || exam.id || exam.name)
-                              ? 'Importing...'
-                              : 'Load Curriculum'}
-                          </Text>
-                        </TouchableOpacity>
+                    </View>
+
+                    {isEnrolled ? (
+                      <View style={styles.enrolledBadgePill}>
+                        <Check size={11} color="#00B894" strokeWidth={2.5} style={{ marginRight: 3 }} />
+                        <Text style={styles.enrolledBadgeText}>Enrolled</Text>
                       </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.addCurriculumBtn, isLoadingThis && { opacity: 0.7 }]}
+                        disabled={isLoadingThis || setupSyllabusMutation.isPending}
+                        onPress={async () => {
+                          try {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                            await handleLoadSyllabusTemplate(exam.slug || exam.id);
+                            setActiveExamFilter(exam.slug || exam.id);
+                            useUiStore.getState().showToast(`${exam.name} added to syllabus!`, 'success');
+                          } catch (err: any) {
+                            Alert.alert('Error', err?.message || 'Failed to add curriculum');
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        {isLoadingThis ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 4 }} />
+                        ) : (
+                          <Plus size={13} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 4 }} />
+                        )}
+                        <Text style={styles.addCurriculumBtnText}>
+                          {isLoadingThis ? 'Adding...' : 'Add'}
+                        </Text>
+                      </TouchableOpacity>
                     )}
-                  </TouchableOpacity>
+                  </View>
                 );
               })}
             </ScrollView>
-
-            {/* Footer to Manage Goals */}
-            <View style={styles.goalModalFooter}>
-              <TouchableOpacity
-                style={styles.goalManageBtn}
-                onPress={() => {
-                  setIsGoalModalOpen(false);
-                  router.push('/profile');
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.goalManageBtnText}>+ Manage Target Goals & Exams</Text>
-                <ChevronRight size={16} color="#5B4FE8" />
-              </TouchableOpacity>
-            </View>
           </View>
 
-          {/* Confirmation Pop-up for Removing Syllabus */}
+          {/* Delete Confirmation Modal */}
           {examToDelete && (
             <View style={styles.deleteConfirmOverlay}>
               <View style={styles.deleteConfirmCard}>
@@ -2249,550 +2199,384 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
-  // Inline 1-Line Curriculum Dropdown Filter Bar
-  inlineFilterSection: {
+  // Standard Form Select Field (State / District style dropdown)
+  selectFieldContainer: {
     marginHorizontal: 16,
     marginBottom: 12,
     zIndex: 10,
   },
-  filterHeaderRow: {
+  selectLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 6,
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
   },
-  filterHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  filterHeaderLabel: {
+  selectFieldLabel: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 11,
-    color: '#717188',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
+    fontSize: 12,
+    color: '#5C5C70',
     fontWeight: '700',
   },
-  filterHeaderActionHint: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11.5,
+  manageGoalsLinkText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12,
     color: '#5B4FE8',
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  inlineDropdownBar: {
+  selectBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#ECEBE6',
-    paddingVertical: 10,
+    borderColor: '#E2E1DA',
+    height: 48,
     paddingHorizontal: 12,
-    position: 'relative',
-    overflow: 'hidden',
-    shadowColor: '#17172A',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 5,
-    elevation: 1,
   },
-  inlineDropdownBarExpanded: {
+  selectBoxOpen: {
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
-    borderBottomWidth: 1,
+    borderColor: '#5B4FE8',
+    borderBottomColor: '#ECEBE6',
   },
-  inlineDropdownLeft: {
+  selectBoxLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    marginRight: 8,
+    marginRight: 10,
   },
-  inlineDropdownIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  selectIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
   },
-  inlineDropdownMiddle: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  inlineDropdownMicroLabel: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 10.5,
-    color: '#8E8EA0',
-    marginBottom: 1.5,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  inlineDropdownNameText: {
+  selectBoxValueText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 14,
+    fontSize: 13.5,
     color: '#17172A',
     fontWeight: '700',
-    letterSpacing: -0.2,
+    flexShrink: 1,
   },
-  inlineDropdownRight: {
+  selectBoxRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  inlineProgressPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    gap: 4,
+  selectPercentPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  inlineProgressPillPercent: {
+  selectPercentText: {
     fontFamily: 'DMMono-Medium',
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '700',
   },
-  inlineProgressPillFraction: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 11,
-    color: '#717188',
+  selectChevron: {
+    transform: [{ rotate: '0deg' }],
   },
-  inlineDropdownChevronCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#F0EFEA',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  inlineDropdownChevronCircleRotated: {
+  selectChevronRotated: {
     transform: [{ rotate: '180deg' }],
-    backgroundColor: '#EEEDFA',
   },
-  inlineHairlineProgressTrack: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 2.5,
-    backgroundColor: '#F0EFEA',
-  },
-  inlineHairlineProgressFill: {
-    height: '100%',
-  },
-  inlineDropdownMenu: {
+  selectDropdownList: {
     backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
     borderWidth: 1.5,
     borderTopWidth: 0,
-    borderColor: '#ECEBE6',
-    paddingVertical: 4,
+    borderColor: '#5B4FE8',
     shadowColor: '#17172A',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 4,
   },
-  inlineMenuItem: {
+  selectOptionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F7F6F3',
   },
-  inlineMenuItemActive: {
-    backgroundColor: '#FAF9F6',
+  selectOptionRowActive: {
+    backgroundColor: '#F7F6FF',
   },
-  inlineMenuItemLeft: {
+  selectOptionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
     marginRight: 8,
   },
-  inlineMenuIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  selectOptionIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
   },
-  inlineMenuText: {
+  selectOptionText: {
     fontFamily: 'DMSans-Medium',
-    fontSize: 13.5,
+    fontSize: 13,
     color: '#3C3C4E',
     flexShrink: 1,
   },
-  inlineMenuTextActive: {
+  selectOptionTextActive: {
     fontFamily: 'DMSans-Bold',
     fontWeight: '700',
     color: '#17172A',
   },
-  inlineMenuItemRight: {
+  selectOptionRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  inlineMenuMetric: {
+  selectOptionMetric: {
     fontFamily: 'DMMono-Medium',
-    fontSize: 11.5,
+    fontSize: 11,
     color: '#9B9BAF',
   },
-  inlineMenuFooterBtn: {
+  selectActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     gap: 6,
     backgroundColor: '#FAF9F6',
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
   },
-  inlineMenuFooterText: {
+  selectActionText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 12.5,
     color: '#5B4FE8',
     fontWeight: '700',
   },
-  goalActiveMainCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#ECEBE6',
-    padding: 16,
-    shadowColor: '#17172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  goalActiveTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  goalDropdownTrigger: {
+
+  // Manage Target Goals Modal
+  manageModalBackdrop: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  goalEmojiBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  goalDropdownTextContainer: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  goalDropdownSmallLabel: {
-    fontFamily: 'DMMono-Medium',
-    fontSize: 9.5,
-    fontWeight: '700',
-    color: '#9B9BAF',
-    letterSpacing: 0.8,
-  },
-  goalDropdownNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  goalDropdownNameText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#17172A',
-    maxWidth: '85%',
-  },
-  goalProgressBadge: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    backgroundColor: '#FAFAF8',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#ECEBE6',
-  },
-  goalProgressBadgePercent: {
-    fontFamily: 'DMMono-Medium',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  goalProgressBadgeSub: {
-    fontFamily: 'DMSans',
-    fontSize: 10.5,
-    color: '#9B9BAF',
-    marginTop: 1,
-  },
-  goalLinearProgressBarTrack: {
-    height: 5,
-    backgroundColor: '#F0EFEA',
-    borderRadius: 2.5,
-    overflow: 'hidden',
-    marginTop: 14,
-    marginBottom: 4,
-  },
-  goalLinearProgressBarFill: {
-    height: '100%',
-    borderRadius: 2.5,
-  },
-  goalQuickChipsScroll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
-    paddingTop: 2,
-  },
-  goalQuickChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F7F6F3',
-    borderWidth: 1,
-    borderColor: '#ECEBE6',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    gap: 6,
-  },
-  goalQuickChipActive: {
-    backgroundColor: '#5B4FE8',
-    borderColor: '#5B4FE8',
-  },
-  goalQuickChipActiveAll: {
-    backgroundColor: '#17172A',
-    borderColor: '#17172A',
-  },
-  goalQuickChipEmoji: {
-    fontSize: 13,
-  },
-  goalQuickChipText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    color: '#5C5C70',
-    fontWeight: '600',
-  },
-  goalQuickChipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  goalQuickChipTextActiveAll: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  // Goal Modal Styles
-  goalModalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 14, 23, 0.55)',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'flex-end',
   },
-  goalModalBackdropPressable: {
+  manageModalBackdropPressable: {
     flex: 1,
   },
-  goalModalContent: {
+  manageModalContent: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-    maxHeight: '80%',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 20,
+    maxHeight: '85%',
+    paddingBottom: 24,
   },
-  goalModalHeader: {
+  manageModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F1ED',
+    borderBottomColor: '#F0EFEA',
   },
-  goalModalHeaderLeft: {
+  manageModalHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
   },
-  goalModalIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+  manageModalIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#EEEDFA',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  goalModalTitle: {
+  manageModalTitle: {
     fontFamily: 'DMSans-Bold',
     fontSize: 16,
-    fontWeight: '700',
     color: '#17172A',
-  },
-  goalModalSubtitle: {
-    fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#9B9BAF',
-    marginTop: 1,
-  },
-  goalModalCloseBtn: {
-    padding: 6,
-    borderRadius: 18,
-    backgroundColor: '#F7F6F3',
-  },
-  goalModalList: {
-    marginTop: 14,
-    marginBottom: 10,
-  },
-  goalOptionCard: {
-    backgroundColor: '#FAFAF8',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#ECEBE6',
-    padding: 14,
-    marginBottom: 10,
-  },
-  goalOptionCardActive: {
-    backgroundColor: '#FDFCFA',
-    borderColor: '#5B4FE8',
-    borderWidth: 2,
-    shadowColor: '#5B4FE8',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  goalOptionTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  goalOptionIconBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#EAE8FD',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  goalOptionTextWrap: {
-    flex: 1,
-  },
-  goalOptionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  goalOptionTitle: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 15,
     fontWeight: '700',
-    color: '#17172A',
   },
-  goalActiveIndicator: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#5B4FE8',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  goalOptionSubtitle: {
+  manageModalSubtitle: {
     fontFamily: 'DMSans',
     fontSize: 12,
     color: '#717188',
-    marginTop: 2,
+    marginTop: 1,
   },
-  goalOptionProgressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 10,
-  },
-  goalOptionProgressBar: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#EAE9E4',
-    overflow: 'hidden',
-  },
-  goalOptionProgressFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  goalOptionProgressText: {
-    fontFamily: 'DMMono-Medium',
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#5C5C70',
-  },
-  goalOptionActionRow: {
-    marginTop: 10,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  goalLoadInlineBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#5B4FE8',
-  },
-  goalLoadInlineBtnText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  goalModalFooter: {
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#F2F1ED',
-  },
-  goalManageBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: '#F5F4FE',
-    borderWidth: 1,
-    borderColor: '#E6E4FA',
-  },
-  goalManageBtnText: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 13,
-    color: '#5B4FE8',
-    fontWeight: '700',
-  },
-  goalRemoveBtn: {
+  manageModalCloseBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3F3EE',
+    backgroundColor: '#F3F2EB',
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 6,
   },
-  goalEmptyWrap: {
-    paddingVertical: 24,
+  manageModalBody: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+  },
+  manageSectionTitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#8E8EA0',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  manageEmptyBox: {
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#FAF9F6',
+    borderWidth: 1,
+    borderColor: '#ECEBE6',
     alignItems: 'center',
+    marginBottom: 16,
+  },
+  manageEmptyText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#8E8EA0',
+  },
+  enrolledItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#ECEBE5',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  enrolledItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  enrolledItemIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  enrolledItemTextWrap: {
+    flex: 1,
+  },
+  enrolledItemName: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
+    color: '#17172A',
+    fontWeight: '700',
+  },
+  enrolledItemProgress: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11.5,
+    color: '#717188',
+    marginTop: 2,
+  },
+  enrolledRemoveBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FDF0F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  manageAddSectionHeader: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  manageSearchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF9F6',
+    borderWidth: 1,
+    borderColor: '#ECEBE5',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 42,
+    gap: 8,
+    marginBottom: 12,
+  },
+  manageSearchInput: {
+    flex: 1,
+    fontFamily: 'DMSans',
+    fontSize: 13,
+    color: '#17172A',
+  },
+  availableExamCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F0EFEA',
+    marginBottom: 8,
+  },
+  availableExamLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  availableExamTextWrap: {
+    flex: 1,
+  },
+  availableExamName: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 13.5,
+    color: '#17172A',
+    fontWeight: '700',
+  },
+  availableExamSubjects: {
+    fontFamily: 'DMSans',
+    fontSize: 11.5,
+    color: '#8E8EA0',
+    marginTop: 1,
+  },
+  enrolledBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E2F9F3',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  enrolledBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    color: '#00B894',
+    fontWeight: '700',
+  },
+  addCurriculumBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#5B4FE8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  addCurriculumBtnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   goalEmptyTitle: {
     fontFamily: 'DMSans-Bold',
