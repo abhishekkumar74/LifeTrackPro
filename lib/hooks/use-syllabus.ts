@@ -485,6 +485,16 @@ export function useUpdateTopicStatus() {
                 .update({ status: newStatus })
                 .eq('id', existingTopic.id);
             }
+          } else if (!isChapterUuid && newStatus !== 'not_started') {
+            await supabase.from('syllabus_topics').insert({
+              user_id: currentUserId,
+              subject: matchedTopic.subject,
+              chapter: matchedTopic.chapter,
+              topic: matchedTopic.topic,
+              status: newStatus,
+              order_index: matchedTopic.order_index ?? 0,
+              exam_slug: matchedTopic.exam_slug ?? null,
+            });
           }
         } catch (e) {
           console.warn('syllabus_topics sync error:', e);

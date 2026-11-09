@@ -291,39 +291,46 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
                 key={topic.id}
                 style={[styles.topicRow, isSelected && styles.topicRowSelected]}
               >
-                {/* Checkbox button (1-tap toggle done/not started) */}
+                {/* Checkbox button (1-tap toggle done/not started or selection) */}
                 <TouchableOpacity
                   style={[
                     styles.checkboxCircle,
-                    isDone && styles.checkboxCircleDone,
-                    isInProgress && styles.checkboxCircleProgress,
-                    isRevision && styles.checkboxCircleRevision,
-                    isSelected && styles.checkboxCircleSelected,
+                    isMultiSelectMode
+                      ? isSelected
+                        ? styles.checkboxCircleSelected
+                        : styles.checkboxCircleSelectModeUnselected
+                      : isDone
+                      ? styles.checkboxCircleDone
+                      : isInProgress
+                      ? styles.checkboxCircleProgress
+                      : isRevision
+                      ? styles.checkboxCircleRevision
+                      : null,
                   ]}
-                  onPress={() => handleToggleDone(topic)}
+                  onPress={() => (isMultiSelectMode ? onToggleSelectTopic(topic.id) : handleToggleDone(topic))}
                   onLongPress={() => onLongPressTopic(topic.id)}
-                  delayLongPress={450}
+                  delayLongPress={800}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   activeOpacity={0.7}
                   accessibilityLabel={`Mark ${topic.topic} ${isDone ? 'incomplete' : 'complete'}`}
                 >
-                  {isDone && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
-                  {isInProgress && <Clock size={11} color="#5B4FE8" strokeWidth={2.5} />}
-                  {isRevision && <RotateCcw size={10} color="#E8A020" strokeWidth={2.5} />}
+                  {isMultiSelectMode ? (
+                    isSelected && <Check size={12} color="#FFFFFF" strokeWidth={3} />
+                  ) : (
+                    <>
+                      {isDone && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+                      {isInProgress && <Clock size={11} color="#5B4FE8" strokeWidth={2.5} />}
+                      {isRevision && <RotateCcw size={10} color="#E8A020" strokeWidth={2.5} />}
+                    </>
+                  )}
                 </TouchableOpacity>
 
                 {/* Topic Title */}
                 <TouchableOpacity
                   style={styles.topicCenter}
-                  onPress={() => {
-                    if (isMultiSelectMode) {
-                      onToggleSelectTopic(topic.id);
-                    } else {
-                      handleStatusSelectorPress(topic);
-                    }
-                  }}
+                  onPress={() => (isMultiSelectMode ? onToggleSelectTopic(topic.id) : handleToggleDone(topic))}
                   onLongPress={() => onLongPressTopic(topic.id)}
-                  delayLongPress={450}
+                  delayLongPress={800}
                   activeOpacity={0.7}
                 >
                   <HighlightText
@@ -601,6 +608,11 @@ const styles = StyleSheet.create({
   checkboxCircleSelected: {
     backgroundColor: '#5B4FE8',
     borderColor: '#5B4FE8',
+  },
+  checkboxCircleSelectModeUnselected: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#5B4FE8',
+    borderWidth: 2,
   },
   topicCenter: {
     flex: 1,

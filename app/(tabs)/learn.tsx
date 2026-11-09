@@ -121,6 +121,7 @@ export default function SyllabusScreen(): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeExamFilter, setActiveExamFilter] = useState<string>('all');
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
+  const [isDropdownMenuOpen, setIsDropdownMenuOpen] = useState(false);
   const [examToDelete, setExamToDelete] = useState<{ id?: string; slug?: string; name: string } | null>(null);
   const [isAddTopicOpen, setIsAddTopicOpen] = useState(false);
 
@@ -148,6 +149,10 @@ export default function SyllabusScreen(): React.JSX.Element {
   useAndroidBackHandler(() => {
     if (examToDelete) {
       setExamToDelete(null);
+      return true;
+    }
+    if (isDropdownMenuOpen) {
+      setIsDropdownMenuOpen(false);
       return true;
     }
     if (isGoalModalOpen) {
@@ -1156,6 +1161,13 @@ export default function SyllabusScreen(): React.JSX.Element {
             <SectionList
               ref={syllabusListRef}
               sections={sections}
+              extraData={{
+                expandedSubjects,
+                expandedChapters,
+                selectedTopicIds,
+                isMultiSelectMode,
+                activeExamFilter,
+              }}
               keyExtractor={(item: any) => (typeof item === 'string' ? item : `${item}`)}
               stickySectionHeadersEnabled={false}
               keyboardDismissMode="on-drag"
@@ -1174,78 +1186,143 @@ export default function SyllabusScreen(): React.JSX.Element {
               ListHeaderComponent={() => {
                 if (!syllabusExists) return null;
                 return (
-                  <View style={styles.goalSelectorHeaderContainer}>
-                    {/* Modern Curriculum Dropdown Filter Bar */}
+                  <View style={styles.inlineFilterSection}>
                     <TouchableOpacity
                       style={[
-                        styles.curriculumDropdownCard,
+                        styles.inlineDropdownBar,
+                        isDropdownMenuOpen && styles.inlineDropdownBarExpanded,
                         activeExamObj && { borderColor: `${activeGoalColor}40` },
                       ]}
-                      onPress={() => setIsGoalModalOpen(true)}
-                      activeOpacity={0.75}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                        setIsDropdownMenuOpen((prev) => !prev);
+                      }}
+                      activeOpacity={0.8}
                     >
-                      <View style={styles.curriculumDropdownLeft}>
-                        <View style={[styles.curriculumIconBadge, { backgroundColor: `${activeGoalColor}16` }]}>
-                          {renderExamIcon(activeExamObj ? activeExamObj.slug || activeExamObj.name : 'all', 20, activeGoalColor)}
+                      {/* Left: Icon + Exam Name */}
+                      <View style={styles.inlineDropdownLeft}>
+                        <View style={[styles.inlineDropdownIconCircle, { backgroundColor: `${activeGoalColor}14` }]}>
+                          {renderExamIcon(activeExamObj ? activeExamObj.slug || activeExamObj.name : 'all', 15, activeGoalColor)}
                         </View>
-                        <View style={styles.curriculumTextColumn}>
-                          <View style={styles.curriculumLabelRow}>
-                            <Text style={styles.curriculumSmallLabel}>CURRICULUM FILTER</Text>
-                            <View style={[styles.curriculumFilterStatusPill, { backgroundColor: `${activeGoalColor}16` }]}>
-                              <Text style={[styles.curriculumFilterStatusText, { color: activeGoalColor }]}>
-                                {activeExamObj ? 'TARGET EXAM' : 'ALL SUBJECTS'}
-                              </Text>
-                            </View>
-                          </View>
-                          <Text style={styles.curriculumSelectedTitle} numberOfLines={1}>
-                            {activeExamObj ? activeExamObj.name : 'All Goals & Subjects'}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.curriculumDropdownRight}>
-                        <View style={[styles.curriculumChangeBtn, { backgroundColor: `${activeGoalColor}14` }]}>
-                          <Text style={[styles.curriculumChangeBtnText, { color: activeGoalColor }]}>
-                            Filter
-                          </Text>
-                          <ChevronDown size={14} color={activeGoalColor} style={{ marginLeft: 3 }} />
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-
-                    {/* Progress Card below Dropdown */}
-                    <View style={styles.curriculumProgressCard}>
-                      <View style={styles.curriculumProgressTopRow}>
-                        <View style={styles.curriculumProgressCountWrap}>
-                          <Text style={styles.curriculumProgressCountText}>
-                            {activeGoalMetrics.completed} of {activeGoalMetrics.total} topics done
-                          </Text>
-                          <Text style={styles.curriculumProgressSubText}>
-                            {activeExamObj
-                              ? `${sections.length} subjects in ${activeExamObj.name}`
-                              : `Combined progress across ${userSelectedExams.length} curricula`}
-                          </Text>
-                        </View>
-                        <View style={styles.curriculumProgressPercentWrap}>
-                          <Text style={[styles.curriculumProgressPercentText, { color: activeGoalColor }]}>
-                            {activeGoalMetrics.percent}%
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Smooth Progress Bar */}
-                      <View style={styles.curriculumProgressBarTrack}>
-                        <View
+                        <Text style={styles.inlineDropdownNameText} numberOfLines={1}>
+                          {activeExamObj ? activeExamObj.name : 'All Enrolled Curricula'}
+                        </Text>
+                        <ChevronDown
+                          size={14}
+                          color="#717188"
                           style={[
-                            styles.curriculumProgressBarFill,
-                            {
-                              width: `${activeGoalMetrics.percent}%`,
-                              backgroundColor: activeGoalColor,
-                            },
+                            styles.inlineDropdownChevron,
+                            isDropdownMenuOpen && styles.inlineDropdownChevronRotated,
                           ]}
                         />
                       </View>
-                    </View>
+
+                      {/* Right: Clean minimal completion pill */}
+                      <View style={styles.inlineDropdownRight}>
+                        <View style={[styles.inlineProgressPill, { backgroundColor: `${activeGoalColor}12` }]}>
+                          <Text style={[styles.inlineProgressPillPercent, { color: activeGoalColor }]}>
+                            {activeGoalMetrics.percent}%
+                          </Text>
+                          <Text style={styles.inlineProgressPillFraction}>
+                            ({activeGoalMetrics.completed}/{activeGoalMetrics.total})
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Thin 2.5px hairline progress indicator directly on bottom border */}
+                      <View style={styles.inlineHairlineProgressTrack}>
+                        <View
+                          style={[
+                            styles.inlineHairlineProgressFill,
+                            { width: `${activeGoalMetrics.percent}%`, backgroundColor: activeGoalColor },
+                          ]}
+                        />
+                      </View>
+                    </TouchableOpacity>
+
+                    {/* Inline Dropdown Popover Menu */}
+                    {isDropdownMenuOpen && (
+                      <View style={styles.inlineDropdownMenu}>
+                        {/* Option: All Curricula */}
+                        <TouchableOpacity
+                          style={[
+                            styles.inlineMenuItem,
+                            activeExamFilter === 'all' && styles.inlineMenuItemActive,
+                          ]}
+                          onPress={() => {
+                            setActiveExamFilter('all');
+                            setIsDropdownMenuOpen(false);
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.inlineMenuItemLeft}>
+                            <View style={[styles.inlineMenuIconWrap, { backgroundColor: '#F1F0FA' }]}>
+                              <Globe size={14} color="#5B4FE8" />
+                            </View>
+                            <Text style={[styles.inlineMenuText, activeExamFilter === 'all' && styles.inlineMenuTextActive]}>
+                              All Enrolled Curricula
+                            </Text>
+                          </View>
+                          <View style={styles.inlineMenuItemRight}>
+                            <Text style={styles.inlineMenuMetric}>
+                              {overallMetrics.completed}/{overallMetrics.total} ({overallMetrics.percent}%)
+                            </Text>
+                            {activeExamFilter === 'all' && <Check size={14} color="#5B4FE8" strokeWidth={2.5} />}
+                          </View>
+                        </TouchableOpacity>
+
+                        {/* Individual Enrolled Exams */}
+                        {userSelectedExams.map((exam) => {
+                          const isSelected = activeExamFilter === (exam.slug || exam.id || exam.name);
+                          const metric = examMetrics.find(
+                            (m) =>
+                              (m.exam.slug || '').toLowerCase() === (exam.slug || '').toLowerCase() ||
+                              m.exam.id === exam.id ||
+                              m.exam.name.toLowerCase() === exam.name.toLowerCase()
+                          ) || { total: 0, completed: 0, percent: 0 };
+                          const color = exam.color || '#5B4FE8';
+
+                          return (
+                            <TouchableOpacity
+                              key={exam.id || exam.slug}
+                              style={[
+                                styles.inlineMenuItem,
+                                isSelected && styles.inlineMenuItemActive,
+                              ]}
+                              onPress={() => {
+                                setActiveExamFilter(exam.slug || exam.id || exam.name);
+                                setIsDropdownMenuOpen(false);
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <View style={styles.inlineMenuItemLeft}>
+                                <View style={[styles.inlineMenuIconWrap, { backgroundColor: `${color}14` }]}>
+                                  {renderExamIcon(exam.slug || exam.name, 14, color)}
+                                </View>
+                                <Text
+                                  style={[
+                                    styles.inlineMenuText,
+                                    isSelected && styles.inlineMenuTextActive,
+                                    isSelected && { color },
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {exam.name}
+                                </Text>
+                              </View>
+                              <View style={styles.inlineMenuItemRight}>
+                                <Text style={styles.inlineMenuMetric}>
+                                  {metric.completed}/{metric.total} ({metric.percent}%)
+                                </Text>
+                                {isSelected && <Check size={14} color={color} strokeWidth={2.5} />}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
                 );
               }}
@@ -1271,28 +1348,35 @@ export default function SyllabusScreen(): React.JSX.Element {
                     )}
 
                     <View
+                      key={`subject-card-${section.key}-${isExpandedWithChapters ? 'exp' : 'col'}`}
                       style={[
-                        styles.subjectHeaderStickyContainer,
-                        isExpandedWithChapters ? styles.subjectHeaderExpanded : styles.subjectHeaderCollapsed,
+                        styles.subjectCardContainer,
+                        isExpandedWithChapters ? styles.subjectCardExpanded : styles.subjectCardCollapsed,
                       ]}
                     >
                       <TouchableOpacity
                         onPress={() => toggleSubjectExpanded(section.key)}
-                        style={styles.subjectHeaderClickable}
-                        activeOpacity={0.7}
+                        style={styles.subjectCardClickable}
+                        activeOpacity={0.75}
                       >
-                        <View style={styles.leftRow}>
-                          <View style={[styles.subjectIconBox, { backgroundColor: `${accentColor}14` }]}>
-                            <BookOpen size={18} color={accentColor} />
+                        <View style={styles.subjectCardLeft}>
+                          <View style={[styles.subjectIconBox, { backgroundColor: `${accentColor}12` }]}>
+                            <BookOpen size={18} color={accentColor} strokeWidth={2.2} />
                           </View>
-                          <View style={styles.textContainer}>
-                            <View style={styles.subjectTitleRow}>
-                              <Text style={styles.subjectText} numberOfLines={2}>{section.title}</Text>
-                            </View>
-                            <View style={styles.subjectMetaLine}>
-                              <Text style={styles.chaptersCountText}>
+                          <View style={styles.subjectTitleContainer}>
+                            <Text style={styles.subjectTitleText} numberOfLines={2}>
+                              {section.title}
+                            </Text>
+                            <View style={styles.subjectSubtitleRow}>
+                              <Text style={styles.subjectChaptersCount}>
                                 {`${section.completeChaptersCount}/${section.chapterCount} chapters`}
                               </Text>
+                              {section.completeChaptersCount === section.chapterCount && section.chapterCount > 0 && (
+                                <View style={styles.subjectCompletedBadge}>
+                                  <Check size={9} color="#00B894" strokeWidth={3} style={{ marginRight: 2 }} />
+                                  <Text style={styles.subjectCompletedBadgeText}>Completed</Text>
+                                </View>
+                              )}
                               {section.exams && section.exams.length > 0 && activeExamFilter === 'all' && (
                                 <View style={styles.subjectTagsRow}>
                                   {section.exams.map((exam: any) => {
@@ -1328,21 +1412,27 @@ export default function SyllabusScreen(): React.JSX.Element {
                             </View>
                           </View>
                         </View>
-                        <View style={styles.rightRow}>
-                          <View style={[styles.percentBadgePill, { backgroundColor: `${accentColor}14` }]}>
-                            <Text style={[styles.percentText, { color: accentColor }]}>{`${section.completionPercent}%`}</Text>
+
+                        <View style={styles.subjectCardRight}>
+                          <View style={[styles.subjectPercentPill, { backgroundColor: `${accentColor}12` }]}>
+                            <Text style={[styles.subjectPercentText, { color: accentColor }]}>
+                              {`${section.completionPercent}%`}
+                            </Text>
                           </View>
-                          <View style={[styles.chevronWrapper, section.isExpanded && styles.chevronRotated]}>
-                            <ChevronRight size={15} color="#717188" />
+                          <View style={[styles.subjectChevronCircle, section.isExpanded && styles.subjectChevronCircleRotated]}>
+                            <ChevronRight size={13} color="#686882" />
                           </View>
                         </View>
                       </TouchableOpacity>
 
-                      <View style={styles.progressContainer}>
+                      <View style={styles.subjectProgressTrack}>
                         <View
                           style={[
-                            styles.progressBarFill,
-                            { backgroundColor: accentColor, width: `${section.completionPercent}%` },
+                            styles.subjectProgressFill,
+                            {
+                              backgroundColor: accentColor,
+                              width: `${section.completionPercent}%`,
+                            },
                           ]}
                         />
                       </View>
@@ -2121,141 +2211,150 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
-  // Goal Selector Card
-  goalSelectorHeaderContainer: {
-    marginBottom: 14,
+  // Inline 1-Line Curriculum Dropdown Filter Bar
+  inlineFilterSection: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    zIndex: 10,
   },
-  curriculumDropdownCard: {
+  inlineDropdownBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1.5,
     borderColor: '#ECEBE6',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    shadowColor: '#17172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-    marginBottom: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  curriculumDropdownLeft: {
+  inlineDropdownBarExpanded: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderBottomWidth: 1,
+  },
+  inlineDropdownLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    marginRight: 10,
+    marginRight: 8,
   },
-  curriculumIconBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+  inlineDropdownIconCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 8,
   },
-  curriculumTextColumn: {
-    flex: 1,
-  },
-  curriculumLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  curriculumSmallLabel: {
-    fontFamily: 'DMMono-Medium',
-    fontSize: 9.5,
-    fontWeight: '700',
-    color: '#9B9BAF',
-    letterSpacing: 0.6,
-  },
-  curriculumFilterStatusPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: 6,
-  },
-  curriculumFilterStatusText: {
-    fontFamily: 'DMMono-Medium',
-    fontSize: 8.5,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  curriculumSelectedTitle: {
+  inlineDropdownNameText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 13.5,
     color: '#17172A',
-    marginTop: 2,
+    fontWeight: '700',
+    flexShrink: 1,
   },
-  curriculumDropdownRight: {
+  inlineDropdownChevron: {
+    marginLeft: 6,
+  },
+  inlineDropdownChevronRotated: {
+    transform: [{ rotate: '180deg' }],
+  },
+  inlineDropdownRight: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  curriculumChangeBtn: {
+  inlineProgressPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
     borderRadius: 8,
+    gap: 4,
   },
-  curriculumChangeBtnText: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 12.5,
+  inlineProgressPillPercent: {
+    fontFamily: 'DMMono-Medium',
+    fontSize: 12,
     fontWeight: '700',
   },
-  curriculumProgressCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#ECEBE6',
-    padding: 14,
-    shadowColor: '#17172A',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
-    marginBottom: 6,
+  inlineProgressPillFraction: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11,
+    color: '#717188',
   },
-  curriculumProgressTopRow: {
+  inlineHairlineProgressTrack: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2.5,
+    backgroundColor: '#F0EFEA',
+  },
+  inlineHairlineProgressFill: {
+    height: '100%',
+  },
+  inlineDropdownMenu: {
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    borderWidth: 1.5,
+    borderTopWidth: 0,
+    borderColor: '#ECEBE6',
+    paddingVertical: 4,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  inlineMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F7F6F3',
   },
-  curriculumProgressCountWrap: {
+  inlineMenuItemActive: {
+    backgroundColor: '#FAF9F6',
+  },
+  inlineMenuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
+    marginRight: 8,
   },
-  curriculumProgressCountText: {
+  inlineMenuIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  inlineMenuText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 13,
+    color: '#3C3C4E',
+    flexShrink: 1,
+  },
+  inlineMenuTextActive: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 14,
     fontWeight: '700',
     color: '#17172A',
   },
-  curriculumProgressSubText: {
-    fontFamily: 'DMSans',
-    fontSize: 11.5,
-    color: '#717188',
-    marginTop: 1,
+  inlineMenuItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  curriculumProgressPercentWrap: {
-    paddingLeft: 8,
-  },
-  curriculumProgressPercentText: {
+  inlineMenuMetric: {
     fontFamily: 'DMMono-Medium',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  curriculumProgressBarTrack: {
-    height: 6,
-    backgroundColor: '#F0EFEA',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  curriculumProgressBarFill: {
-    height: '100%',
-    borderRadius: 3,
+    fontSize: 11.5,
+    color: '#9B9BAF',
   },
   goalActiveMainCard: {
     backgroundColor: '#FFFFFF',
@@ -2787,58 +2886,74 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
   },
-  subjectHeaderStickyContainer: {
+  subjectCardContainer: {
     backgroundColor: 'transparent',
   },
-  subjectHeaderCollapsed: {
+  subjectCardCollapsed: {
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#ECEBE6',
-    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#ECEBE5',
+    marginBottom: 10,
     backgroundColor: '#FFFFFF',
     shadowColor: '#17172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-    marginHorizontal: 20,
-    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 5,
+    elevation: 1,
+    marginHorizontal: 16,
   },
-  subjectHeaderExpanded: {
+  subjectCardExpanded: {
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderBottomWidth: 0,
-    borderColor: '#ECEBE6',
+    borderColor: '#ECEBE5',
     backgroundColor: '#FFFFFF',
     shadowColor: '#17172A',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.02,
-    shadowRadius: 4,
+    shadowRadius: 3,
     elevation: 1,
-    marginHorizontal: 20,
-    overflow: 'hidden',
+    marginHorizontal: 16,
   },
-  subjectHeaderClickable: {
+  subjectCardClickable: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
-    minHeight: 64,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    minHeight: 68,
     backgroundColor: '#FFFFFF',
   },
-  subjectIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  subjectMetaLine: {
+  subjectCardLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    flex: 1,
+    marginRight: 10,
+  },
+  subjectIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  subjectTitleContainer: {
+    flex: 1,
+  },
+  subjectTitleText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 15,
+    color: '#13132B',
+    fontWeight: '700',
+    lineHeight: 20,
+    letterSpacing: -0.2,
+  },
+  subjectSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginTop: 3,
     flexWrap: 'wrap',
   },
@@ -2847,86 +2962,80 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  percentBadgePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+  subjectChaptersCount: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: '#87879D',
+    fontWeight: '500',
   },
-  subjectChevronCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#F7F6F3',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 4,
-  },
-  leftRow: {
+  subjectCompletedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    backgroundColor: '#E2F9F3',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
-  accentDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 12,
-  },
-  textContainer: {
-    flex: 1,
-  },
-  subjectText: {
+  subjectCompletedBadgeText: {
     fontFamily: 'DMSans-Bold',
-    fontSize: 15.5,
-    color: '#17172A',
+    fontSize: 10,
+    color: '#00B894',
     fontWeight: '700',
   },
-  chaptersCountText: {
-    fontFamily: 'DMSans',
-    fontSize: 12,
-    color: '#9B9BAF',
-  },
-  rightRow: {
+  subjectCardRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
-  percentText: {
+  subjectPercentPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  subjectPercentText: {
     fontFamily: 'DMMono-Medium',
     fontSize: 12.5,
     fontWeight: '700',
   },
-  chevronWrapper: {
-    transform: [{ rotate: '0deg' }],
+  subjectChevronCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#F5F4EF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  chevronRotated: {
+  subjectChevronCircleRotated: {
     transform: [{ rotate: '90deg' }],
   },
-  progressContainer: {
+  subjectProgressTrack: {
     height: 3,
-    backgroundColor: '#F0EFEA',
+    backgroundColor: '#F3F2EB',
     width: '100%',
+    borderBottomLeftRadius: 15,
+    borderBottomRightRadius: 15,
+    overflow: 'hidden',
   },
-  progressBarFill: {
+  subjectProgressFill: {
     height: '100%',
   },
   chapterRowCardWrapper: {
     backgroundColor: '#FFFFFF',
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: '#ECEBE6',
-    marginHorizontal: 20,
+    borderLeftWidth: 1.5,
+    borderRightWidth: 1.5,
+    borderColor: '#ECEBE5',
+    marginHorizontal: 16,
   },
   chapterRowCardWrapperLast: {
-    borderBottomWidth: 1,
+    borderBottomWidth: 1.5,
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
-    marginBottom: 12,
+    marginBottom: 10,
     shadowColor: '#17172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 1,
   },
   iconText: {
     fontSize: 16,
