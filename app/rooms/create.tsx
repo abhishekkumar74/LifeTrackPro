@@ -12,6 +12,7 @@ import {
   Platform,
   StatusBar,
   Modal,
+  InputAccessoryView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Href } from 'expo-router';
@@ -914,11 +915,17 @@ export default function CreateRoomScreen(): React.JSX.Element {
                       }}
                       keyboardType="number-pad"
                       maxLength={3}
-                      returnKeyType="done"
+                      inputAccessoryViewID={Platform.OS === 'ios' ? 'emptyCustomDurationAccessory' : undefined}
                       onSubmitEditing={handleApplyCustomDuration}
                     />
                     <Text style={styles.minutesSuffix}>min</Text>
                   </View>
+
+                  {Platform.OS === 'ios' && (
+                    <InputAccessoryView nativeID="emptyCustomDurationAccessory">
+                      <View />
+                    </InputAccessoryView>
+                  )}
 
                   <TouchableOpacity
                     style={[
