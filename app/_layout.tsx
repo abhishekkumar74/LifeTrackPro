@@ -38,6 +38,7 @@ import { useNotificationStore } from '@/lib/store/notification.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
 import { AdManager } from '@/components/ads';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 // Ignore non-fatal fetch cancellation/abort, background sync, and network failure redboxes in LogBox
 LogBox.ignoreLogs([
@@ -144,6 +145,12 @@ function InnerApp({ children }: { children: React.ReactNode }) {
 }
 
 function RootLayout() {
+  // By default, lock the entire app to portrait orientation.
+  // Only the Focus section unlocks orientation for Desk Clock / StandBy mode.
+  useEffect(() => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+  }, []);
+
   // Check for OTA updates & initialize AdMob SDK on start
   useEffect(() => {
     AdManager.initialize();

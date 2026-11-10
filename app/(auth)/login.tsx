@@ -9,9 +9,21 @@ import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import * as AuthSession from 'expo-auth-session';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { AppLogo } from '@/components/ui/AppLogo';
 import React, { useEffect, useRef, useState } from 'react';
+
+// Safely require native Google Signin without crashing in Expo Go or non-native environments
+let GoogleSignin: any = null;
+let statusCodes: any = null;
+try {
+  const gSigninModule = require('@react-native-google-signin/google-signin');
+  GoogleSignin = gSigninModule?.GoogleSignin;
+  statusCodes = gSigninModule?.statusCodes;
+} catch (err) {
+  // Native module RNGoogleSignin not linked (e.g. Expo Go)
+  GoogleSignin = null;
+  statusCodes = null;
+}
 import {
   ActivityIndicator,
   Dimensions,
@@ -32,8 +44,8 @@ import Svg, { Circle, Path } from 'react-native-svg';
 // Ensure the browser closes the session correctly on web redirect
 WebBrowser.maybeCompleteAuthSession();
 
-// Configure Native In-App Google Sign-In if client ID is set
-if (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) {
+// Configure Native In-App Google Sign-In if client ID is set and native module is present
+if (GoogleSignin && process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) {
   try {
     GoogleSignin.configure({
       webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
@@ -323,7 +335,7 @@ export default function LoginScreen(): React.JSX.Element {
       const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
       // 1. PURE IN-APP NATIVE LOGIN (No browser opened, native Google bottom sheet)
-      if (Platform.OS !== 'web' && webClientId) {
+      if (Platform.OS !== 'web' && webClientId && GoogleSignin) {
         try {
           await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
           const response = await GoogleSignin.signIn();
@@ -350,10 +362,10 @@ export default function LoginScreen(): React.JSX.Element {
             }
           }
         } catch (nativeErr: any) {
-          if (nativeErr.code === statusCodes.SIGN_IN_CANCELLED) {
+          if (statusCodes && nativeErr.code === statusCodes.SIGN_IN_CANCELLED) {
             console.log('[Google Auth] Native sign-in cancelled by user');
             return;
-          } else if (nativeErr.code === statusCodes.IN_PROGRESS) {
+          } else if (statusCodes && nativeErr.code === statusCodes.IN_PROGRESS) {
             console.log('[Google Auth] Sign in already in progress');
             return;
           }

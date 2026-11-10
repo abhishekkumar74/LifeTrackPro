@@ -10,6 +10,7 @@ import Animated, {
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { Bell, Flame, Users } from 'lucide-react-native';
 import { router, Href } from 'expo-router';
+import { useNotificationStore } from '@/lib/store/notification.store';
 
 // Constants
 const TIME_MORNING = 'Good morning';
@@ -37,6 +38,15 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
   onPressStreak,
   onPressNotification,
 }) => {
+  const notifications = useNotificationStore((state) => state.notifications);
+  const refreshDailyNudges = useNotificationStore((state) => state.refreshDailyNudges);
+
+  useEffect(() => {
+    refreshDailyNudges();
+  }, [refreshDailyNudges]);
+
+  const unreadCount = (notifications || []).filter((n) => !n.isRead).length;
+
   // Reanimated shared value for loading skeleton pulse
   const opacity = useSharedValue(0.4);
 
@@ -170,22 +180,14 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
           style={[styles.notificationButton, { position: 'relative' }]} 
           onPress={onPressNotification}
           activeOpacity={0.7}
-          accessibilityLabel="Notifications"
+          accessibilityLabel={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
           accessibilityRole="button"
           accessibilityHint="View notifications"
         >
           <Bell size={18} color="#17172A" />
-          <View
-            style={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              width: 8,
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: '#5B4FE8',
-            }}
-          />
+          {unreadCount > 0 && (
+            <View style={styles.notificationDot} />
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -281,6 +283,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 2,
     elevation: 2,
+  },
+  notificationDot: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#5B4FE8',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
   },
   roomsButton: {
     width: 40,

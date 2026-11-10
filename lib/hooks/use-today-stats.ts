@@ -574,10 +574,10 @@ export function useTodayStats(): TodayStats {
       const goalData = primaryGoalRes.data;
 
       if (goalData) {
-        // Fetch milestones
+        // Fetch milestones with status
         const { data: milestonesData, error: milestonesError } = await supabase
           .from('milestones')
-          .select('id')
+          .select('id, status, title')
           .eq('goal_id', goalData.id);
 
         if (milestonesError) throw milestonesError;
@@ -602,9 +602,10 @@ export function useTodayStats(): TodayStats {
 
         primaryGoal = {
           ...goalData,
+          milestones: milestonesData || [],
           totalTasks: totalTasksCount,
           doneTasks: doneTasksCount,
-        } as Goal & { totalTasks: number; doneTasks: number };
+        } as Goal & { totalTasks: number; doneTasks: number; milestones?: any[] };
       }
 
       setData({

@@ -112,12 +112,30 @@ export function useActiveRooms(options?: { refetchInterval?: number }) {
 // 2. useRoomPresence
 export function useRoomPresence(roomId: string) {
   const [members, setMembers] = useState<RoomMember[]>([]);
-  const { profile } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const channelRef = useRef<any>(null);
   const currentPresenceData = useRef<Partial<RoomMember>>({});
 
+  const effectiveUserId = profile?.id || user?.id || '';
+  const effectiveName = profile?.name || (user?.user_metadata?.name as string) || 'Member';
+  const effectiveAvatar = profile?.avatar_url || (user?.user_metadata?.avatar_url as string) || null;
+  const effectiveInitials = effectiveName[0] ? effectiveName[0].toUpperCase() : 'M';
+
+  const userMetaRef = useRef({
+    id: effectiveUserId,
+    name: effectiveName,
+    avatarUrl: effectiveAvatar,
+    initials: effectiveInitials,
+  });
+  userMetaRef.current = {
+    id: effectiveUserId,
+    name: effectiveName,
+    avatarUrl: effectiveAvatar,
+    initials: effectiveInitials,
+  };
+
   useEffect(() => {
-    if (!profile) return;
+    if (!roomId || !effectiveUserId) return;
 
     const topic = `room_presence:${roomId}`;
     const existing = supabase.getChannels().find((c) => c.topic === `realtime:${topic}`);
@@ -128,7 +146,7 @@ export function useRoomPresence(roomId: string) {
     const channel = supabase.channel(topic, {
       config: {
         presence: {
-          key: profile.id,
+          key: effectiveUserId,
         },
         broadcast: {
           self: true,
@@ -171,7 +189,7 @@ export function useRoomPresence(roomId: string) {
       .on('presence', { event: 'sync' }, handleSync)
       .on('broadcast', { event: 'kick_member' }, async (eventPayload) => {
         const targetUserId = eventPayload?.payload?.targetUserId;
-        if (targetUserId === profile.id) {
+        if (targetUserId === effectiveUserId) {
           try {
             await AsyncStorage.setItem(`@lifetrack_banned_room_${roomId}`, 'true');
             channel.untrack().catch(() => {});
@@ -181,11 +199,12 @@ export function useRoomPresence(roomId: string) {
       })
       .subscribe(async (status, err) => {
         if (status === 'SUBSCRIBED') {
+          const meta = userMetaRef.current;
           const initialPayload = {
-            userId: profile.id,
-            name: profile.name,
-            avatarUrl: profile.avatar_url || null,
-            initials: profile.name[0] ? profile.name[0].toUpperCase() : 'U',
+            userId: meta.id,
+            name: meta.name,
+            avatarUrl: meta.avatarUrl,
+            initials: meta.initials,
             joinedAt: new Date().toISOString(),
             currentSubject: null,
             isFocusing: false,
@@ -211,23 +230,24 @@ export function useRoomPresence(roomId: string) {
       });
       channelRef.current = null;
     };
-  }, [roomId, profile]);
+  }, [roomId, effectiveUserId]);
 
   const updatePresenceStatus = useCallback(
     async (updates: Partial<RoomMember>) => {
-      if (!profile || !channelRef.current) return;
+      if (!channelRef.current) return;
+      const meta = userMetaRef.current;
       const newPayload = {
         ...currentPresenceData.current,
         ...updates,
-        userId: profile.id,
-        name: profile.name,
-        avatarUrl: profile.avatar_url || null,
-        initials: profile.name[0] ? profile.name[0].toUpperCase() : 'U',
+        userId: meta.id,
+        name: meta.name,
+        avatarUrl: meta.avatarUrl,
+        initials: meta.initials,
       };
       currentPresenceData.current = newPayload;
       await channelRef.current.track(newPayload);
     },
-    [profile]
+    []
   );
 
   const leaveRoom = useCallback(async () => {
@@ -563,8 +583,26 @@ export function useRoomChat(roomId: string) {
   const [bannedUserIds, setBannedUserIds] = useState<string[]>([]);
   const [coHostIds, setCoHostIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const { profile } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const lastMessageTime = useRef<number>(0);
+
+  const currentUserId = profile?.id || user?.id || '';
+  const currentUserName = profile?.name || (user?.user_metadata?.name as string) || 'Member';
+  const currentUserAvatar = profile?.avatar_url || (user?.user_metadata?.avatar_url as string) || null;
+  const userInitials = currentUserName.charAt(0).toUpperCase() || 'U';
+
+  const userMetaRef = useRef({
+    id: currentUserId,
+    name: currentUserName,
+    avatarUrl: currentUserAvatar,
+    initials: userInitials,
+  });
+  userMetaRef.current = {
+    id: currentUserId,
+    name: currentUserName,
+    avatarUrl: currentUserAvatar,
+    initials: userInitials,
+  };
 
   // 1. Fetch initial message history from Database & subscribe to Realtime changes
   useEffect(() => {
@@ -727,11 +765,12 @@ export function useRoomChat(roomId: string) {
 
   const sendSystemEvent = useCallback(
     async (systemText: string) => {
-      if (!profile?.id || !roomId) return;
+      const meta = userMetaRef.current;
+      if (!meta.id || !roomId) return;
       try {
         await supabase.from('room_messages').insert({
           room_id: roomId,
-          user_id: profile.id,
+          user_id: meta.id,
           user_name: 'SYSTEM',
           user_initials: 'SY',
           user_avatar: null,
@@ -741,11 +780,12 @@ export function useRoomChat(roomId: string) {
         if (__DEV__) console.warn('Failed to insert system event:', e);
       }
     },
-    [roomId, profile?.id]
+    [roomId]
   );
 
   const sendMessage = useCallback(async (text: string) => {
-    if (!profile?.id) return;
+    const meta = userMetaRef.current;
+    if (!meta.id) return;
 
     // 1. Trim and validate not empty
     const trimmed = text.trim();
@@ -771,16 +811,18 @@ export function useRoomChat(roomId: string) {
     const sanitized = trimmed.replace(/[<>]/g, '').trim();
     if (!sanitized) return;
 
-    const currentUserId = profile.id;
-    const userInitials = profile.name ? profile.name.charAt(0).toUpperCase() : 'U';
+    const senderId = meta.id;
+    const senderName = meta.name;
+    const senderAvatar = meta.avatarUrl;
+    const senderInitials = meta.initials;
 
     const optimisticId = 'temp_' + Math.random().toString(36).substring(2, 9);
     const optimisticMsg: ChatMessage = {
       id: optimisticId,
-      userId: currentUserId,
-      userName: profile.name || 'Anonymous User',
-      userInitials,
-      userAvatar: profile.avatar_url || null,
+      userId: senderId,
+      userName: senderName,
+      userInitials: senderInitials,
+      userAvatar: senderAvatar,
       text: sanitized,
       sentAt: new Date().toISOString(),
     };
@@ -794,10 +836,10 @@ export function useRoomChat(roomId: string) {
         .from('room_messages')
         .insert({
           room_id: roomId,
-          user_id: currentUserId,
-          user_name: profile.name || 'Anonymous User',
-          user_initials: userInitials,
-          user_avatar: profile.avatar_url || null,
+          user_id: senderId,
+          user_name: senderName,
+          user_initials: senderInitials,
+          user_avatar: senderAvatar,
           text: sanitized,
         })
         .select()
@@ -819,7 +861,7 @@ export function useRoomChat(roomId: string) {
     } catch (e) {
       if (__DEV__) console.warn('Failed to send room message:', e);
     }
-  }, [roomId, profile]);
+  }, [roomId]);
 
   return {
     messages,

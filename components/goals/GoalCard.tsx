@@ -4,7 +4,7 @@ import { Goal, Milestone } from '@/types/app.types';
 import { ProgressRing } from './ProgressRing';
 import { calculateOnTrackStatus } from '@/lib/utils/on-track';
 import { formatDeadline } from '@/lib/utils/date';
-import { MoreVertical, Plus, Check } from 'lucide-react-native';
+import { MoreVertical, Plus, Check, ChevronDown, ChevronUp } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 // Constants
@@ -122,7 +122,7 @@ export const GoalCard = React.memo<GoalCardProps>(({
   onToggleStatus,
   onDeleteGoal,
 }) => {
-  const [isExpanded, setIsExpanded] = React.useState(true);
+  const [isExpanded, setIsExpanded] = React.useState(false);
   const deadlineFormatted = formatDeadline(goal.deadline);
 
   // Raw Days Left Calculation
@@ -552,7 +552,7 @@ export const GoalCard = React.memo<GoalCardProps>(({
         </View>
       )}
 
-      {/* Bottom Status Badge Row */}
+      {/* Bottom Status Badge Row with Expand/Collapse indicator */}
       <View style={styles.statusActionRow}>
         <View
           style={[
@@ -575,6 +575,29 @@ export const GoalCard = React.memo<GoalCardProps>(({
             {statusTheme.label}
           </Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.expandToggleIndicator}
+          onPress={(e) => {
+            e.stopPropagation();
+            setIsExpanded(!isExpanded);
+          }}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={[styles.expandToggleText, isPrimary && styles.expandToggleTextPrimary]}>
+            {isExpanded
+              ? 'Hide Milestones'
+              : totalMilestones > 0
+              ? `View Milestones (${doneMilestones}/${totalMilestones})`
+              : 'Add Milestones'}
+          </Text>
+          {isExpanded ? (
+            <ChevronUp size={14} color={isPrimary ? '#9D9AA8' : '#7E8098'} strokeWidth={2.4} />
+          ) : (
+            <ChevronDown size={14} color={isPrimary ? '#9D9AA8' : '#7E8098'} strokeWidth={2.4} />
+          )}
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -723,10 +746,25 @@ const styles = StyleSheet.create({
   },
   statusActionRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 14,
     zIndex: 2,
+  },
+  expandToggleIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  expandToggleText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 11.5,
+    color: '#7E8098',
+  },
+  expandToggleTextPrimary: {
+    color: '#9D9AA8',
   },
   statusBadge: {
     borderRadius: 12,

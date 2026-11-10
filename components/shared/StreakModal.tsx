@@ -33,6 +33,7 @@ import {
   MAX_STREAK_SHIELDS,
 } from '@/lib/utils/focus-rewards';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { useNotificationStore } from '@/lib/store/notification.store';
 
 interface StreakModalProps {
   isVisible: boolean;
@@ -142,6 +143,15 @@ export const StreakModal: React.FC<StreakModalProps> = ({
     queryClient.invalidateQueries({ queryKey: ['profileHabitStreak'] });
     queryClient.invalidateQueries({ queryKey: ['stats'] });
     queryClient.invalidateQueries({ queryKey: ['habits'] });
+
+    useNotificationStore.getState().addNotification({
+      type: 'streak',
+      title: 'Streak Restored!',
+      body: 'Your streak shield successfully revived your activity. Keep your momentum going today!',
+      time: 'Just now',
+      targetScreen: '/habits',
+      actionText: 'View Habits',
+    });
 
     return true;
   };
@@ -268,6 +278,14 @@ export const StreakModal: React.FC<StreakModalProps> = ({
       await setStreakShieldCount(nextCount);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setIsClaimingShield(false);
+      useNotificationStore.getState().addNotification({
+        type: 'streak',
+        title: 'Streak Shield Active',
+        body: `You claimed a streak shield (${nextCount}/${MAX_STREAK_SHIELDS})! Your streak is protected if you miss a day.`,
+        time: 'Just now',
+        targetScreen: '/habits',
+        actionText: 'View Streak',
+      });
       Alert.alert('Shield Earned!', `You now have ${nextCount} / ${MAX_STREAK_SHIELDS} active shields.`);
     });
   };

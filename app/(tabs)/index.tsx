@@ -27,6 +27,7 @@ import { ScheduleStrip } from '@/components/home/ScheduleStrip';
 import { HabitRow } from '@/components/home/HabitRow';
 import { GoalBar } from '@/components/home/GoalBar';
 import { DailyCheckinCard } from '@/components/home/DailyCheckinCard';
+import { useGoals, AssembledGoal } from '@/lib/hooks/use-goals';
 
 // Quick Add Sheets
 import { QuickAddTaskSheet } from '@/components/home/QuickAddTaskSheet';
@@ -44,6 +45,15 @@ export default function HomeDashboardScreen(): React.JSX.Element {
   const { profile, user } = useAuthStore();
   const stats = useTodayStats();
   const syllabusQuery = useSyllabus();
+  const { data: activeGoals, isLoading: isGoalsLoading } = useGoals('active');
+
+  const primaryGoal = useMemo(() => {
+    return activeGoals?.find((g) => g.is_primary) || activeGoals?.[0] || (stats.primaryGoal as AssembledGoal | null);
+  }, [activeGoals, stats.primaryGoal]);
+
+  const pendingMilestone = useMemo(() => {
+    return primaryGoal?.milestones?.find((m) => m.status !== 'completed')?.title || null;
+  }, [primaryGoal]);
 
   const [taskSheetVisible, setTaskSheetVisible] = useState(false);
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false);
@@ -508,6 +518,8 @@ export default function HomeDashboardScreen(): React.JSX.Element {
           isCse={isCse}
           userGoal={subCategory}
           firstIncompleteTopic={syllabusStats.firstIncompleteTopic}
+          category={profile?.category}
+          primaryGoalMilestone={pendingMilestone}
         />
 
         {/* Zone C — Quick Stats Row (Animated count-up with 7-day sparklines) */}
@@ -644,8 +656,8 @@ export default function HomeDashboardScreen(): React.JSX.Element {
         {/* Zone F — Goal Bar */}
         <View style={styles.goalWrapper}>
           <GoalBar
-            goal={stats.primaryGoal}
-            isLoading={stats.isLoading}
+            goal={primaryGoal}
+            isLoading={stats.isLoading || isGoalsLoading}
             isCse={isCse}
             subCategory={subCategory}
             totalTopics={syllabusStats.totalTopics}

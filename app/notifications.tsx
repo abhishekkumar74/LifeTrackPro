@@ -71,14 +71,16 @@ export default function NotificationsScreen() {
     return false;
   });
 
-  // Sync notification schedules on mount without injecting fake notifications
+  // Sync and refresh notifications on mount
   useEffect(() => {
+    refreshDailyNudges();
     syncNotificationSchedules().catch(() => {});
-  }, []);
+  }, [refreshDailyNudges]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    refreshDailyNudges();
     await syncNotificationSchedules().catch(() => {});
     setTimeout(() => {
       setRefreshing(false);
@@ -94,6 +96,7 @@ export default function NotificationsScreen() {
 
   const filteredNotifications = notifications.filter((item) => {
     if (activeFilter === 'all') return true;
+    if (activeFilter === 'streak') return item.type === 'streak' || item.type === 'habit';
     return item.type === activeFilter;
   });
 
@@ -136,6 +139,7 @@ export default function NotificationsScreen() {
       case 'brief':
         return <Sparkles size={18} color={COLORS.violet} />;
       case 'streak':
+      case 'habit':
         return <Flame size={18} color={COLORS.amber} fill={COLORS.amber} />;
       case 'revision':
         return <Brain size={18} color={COLORS.violet} />;
@@ -282,7 +286,7 @@ export default function NotificationsScreen() {
             {[
               { id: 'all', label: 'All', count: notifications.length },
               { id: 'brief', label: 'Briefs', count: notifications.filter((n) => n.type === 'brief').length },
-              { id: 'streak', label: 'Streaks', count: notifications.filter((n) => n.type === 'streak').length },
+              { id: 'streak', label: 'Streaks & Habits', count: notifications.filter((n) => n.type === 'streak' || n.type === 'habit').length },
               { id: 'revision', label: 'Revision', count: notifications.filter((n) => n.type === 'revision').length },
               { id: 'milestone', label: 'Milestones', count: notifications.filter((n) => n.type === 'milestone').length },
             ].map((cat) => {

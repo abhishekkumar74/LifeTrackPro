@@ -7,7 +7,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { Play } from 'lucide-react-native';
+import { Play, BookOpen, Code, Video, Briefcase, Target } from 'lucide-react-native';
 import { Task, ScheduleBlock } from '@/types/app.types';
 
 const BTN_START = "Start";
@@ -30,6 +30,8 @@ interface TodayFocusCardProps {
   isCse?: boolean;
   userGoal?: string;
   firstIncompleteTopic?: { subject: string; topic: string; chapter?: string } | null;
+  category?: string;
+  primaryGoalMilestone?: string | null;
 }
 
 const formatTimeString = (timeStr: string) => {
@@ -44,14 +46,21 @@ const formatTimeString = (timeStr: string) => {
   return `${hours}:${minutes} ${ampm}`;
 };
 
-const getSubjectEmoji = (subject: string): string => {
+const getSubjectIcon = (subject: string, cat?: string) => {
   const s = subject.toLowerCase();
-  if (s.includes('physic')) return '🥼';
-  if (s.includes('chem')) return '🧪';
-  if (s.includes('math')) return '📐';
-  if (s.includes('bio') || s.includes('botan') || s.includes('zool')) return '🧬';
-  if (s.includes('comp') || s.includes('code') || s.includes('data') || s.includes('algo') || s.includes('cse') || s.includes('dsa')) return '💻';
-  return '📚';
+  if (cat === 'creator' || s.includes('video') || s.includes('content') || s.includes('script')) {
+    return <Video size={13} color="#A78BFA" />;
+  }
+  if (cat === 'entrepreneur' || s.includes('strategy') || s.includes('product') || s.includes('business')) {
+    return <Target size={13} color="#FBBF24" />;
+  }
+  if (cat === 'employee' || s.includes('project') || s.includes('work') || s.includes('deliverable')) {
+    return <Briefcase size={13} color="#60A5FA" />;
+  }
+  if (s.includes('code') || s.includes('data') || s.includes('algo') || s.includes('cse') || s.includes('dsa') || s.includes('java')) {
+    return <Code size={13} color="#34D399" />;
+  }
+  return <BookOpen size={13} color="#A78BFA" />;
 };
 
 export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
@@ -64,6 +73,8 @@ export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
   isCse,
   userGoal,
   firstIncompleteTopic,
+  category,
+  primaryGoalMilestone,
 }) => {
   const opacity = useSharedValue(0.4);
 
@@ -125,24 +136,52 @@ export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
     displayTitle = task.title;
     displaySubject = task.subject || 'General';
     displayEstimate = 'Due today';
+  } else if (primaryGoalMilestone) {
+    displayBadge = "RECOMMENDED FOCUS";
+    displayTitle = primaryGoalMilestone;
+    displaySubject = userGoal || (isCse ? 'Interview Prep' : 'Primary Goal');
+    displayEstimate = 'Estimated 1h 30m';
   } else if (firstIncompleteTopic) {
     displayBadge = "RECOMMENDED FOCUS";
     displayTitle = `${firstIncompleteTopic.chapter ? `${firstIncompleteTopic.chapter} — ` : ''}${firstIncompleteTopic.topic}`;
-    displaySubject = firstIncompleteTopic.subject || (isCse ? 'Computer Science' : 'Physics');
+    displaySubject = firstIncompleteTopic.subject || (isCse ? 'Computer Science' : 'Core Study');
     displayEstimate = 'Estimated 1h 45m';
-  } else if (isCse) {
-    displayBadge = "RECOMMENDED FOCUS";
-    displayTitle = 'Data Structures — Trees, Graphs & BFS/DFS';
-    displaySubject = 'Computer Science';
-    displayEstimate = 'Estimated 2h 00m';
   } else {
     displayBadge = "RECOMMENDED FOCUS";
-    displayTitle = 'Thermodynamics — Laws 1, 2 & numericals';
-    displaySubject = 'Physics';
-    displayEstimate = 'Estimated 2h 30m';
+    switch (category) {
+      case 'creator':
+        displayTitle = 'Script Writing & Video Editing — Next Upload';
+        displaySubject = 'Content Creation';
+        displayEstimate = 'Estimated 2h 00m';
+        break;
+      case 'entrepreneur':
+        displayTitle = 'Product Development & Core Roadmap Sprint';
+        displaySubject = 'Strategy & Growth';
+        displayEstimate = 'Estimated 2h 00m';
+        break;
+      case 'employee':
+        displayTitle = 'Deep Work Sprint — High Impact Deliverable';
+        displaySubject = 'Project Execution';
+        displayEstimate = 'Estimated 2h 00m';
+        break;
+      case 'aspirant':
+        displayTitle = 'Comprehensive Revision & Practice Mock';
+        displaySubject = 'General Studies';
+        displayEstimate = 'Estimated 2h 30m';
+        break;
+      case 'cse_student':
+        displayTitle = 'Data Structures — Trees, Graphs & BFS/DFS';
+        displaySubject = 'Computer Science';
+        displayEstimate = 'Estimated 2h 00m';
+        break;
+      case 'student':
+      default:
+        displayTitle = userGoal ? `${userGoal} — Core Revision` : 'Deep Focus Session — Active Recall & Practice';
+        displaySubject = isCse ? 'Computer Science' : 'Core Study';
+        displayEstimate = 'Estimated 2h 00m';
+        break;
+    }
   }
-
-  const subjectEmoji = getSubjectEmoji(displaySubject);
 
   const handleStartPress = () => {
     if (activeBlock) {
@@ -210,7 +249,7 @@ export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
         <View style={styles.bottomRow}>
           {/* Subject Badge Pill */}
           <View style={styles.subjectPill}>
-            <Text style={styles.subjectEmoji}>{subjectEmoji}</Text>
+            {getSubjectIcon(displaySubject, category)}
             <Text style={styles.subjectText}>{displaySubject}</Text>
           </View>
 

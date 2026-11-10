@@ -171,13 +171,27 @@ const FloatingEmoji = React.memo<{ emoji: string; randomX: number; onComplete: (
 });
 
 export default function ActiveRoomScreen(): React.JSX.Element {
-  useAndroidBackHandler();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const shortCode = typeof id === 'string' ? id.replace(/-/g, '').slice(0, 6).toUpperCase() : '';
-  const { profile } = useAuthStore();
-  const currentUserId = profile?.id || '';
+  const { user, profile } = useAuthStore();
+  const [authUserId, setAuthUserId] = useState<string>(() => profile?.id || user?.id || '');
+
+  useEffect(() => {
+    const uid = profile?.id || user?.id;
+    if (uid) {
+      setAuthUserId(uid);
+    } else {
+      supabase.auth.getSession().then(({ data }) => {
+        if (data?.session?.user?.id) {
+          setAuthUserId(data.session.user.id);
+        }
+      }).catch(() => {});
+    }
+  }, [profile?.id, user?.id]);
+
+  const currentUserId = profile?.id || user?.id || authUserId;
 
   // Fetch Room Info
   const { data: room, isLoading: isRoomLoading, error: roomError } = useQuery<StudyRoom>({
@@ -283,9 +297,16 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     return members.filter((m) => !allBannedIds.includes(m.userId));
   }, [members, allBannedIds]);
 
-  // Role Resolution
-  const isHost = !!room && room.host_id === currentUserId;
-  const isCoHost = allCoHostIds.includes(currentUserId);
+  // Role Resolution (Case-insensitive matching to ensure 100% reliable Admin detection)
+  const isHost = Boolean(
+    room?.host_id &&
+    currentUserId &&
+    room.host_id.toLowerCase() === currentUserId.toLowerCase()
+  );
+  const isCoHost = Boolean(
+    currentUserId &&
+    allCoHostIds.some((id) => id.toLowerCase() === currentUserId.toLowerCase())
+  );
   const canManageRoom = isHost || isCoHost;
 
   // Selected Member for Moderation Sheet
@@ -309,26 +330,38 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   // Memoized reversed message history to prevent re-reversing on every render
   const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
 
+  const activeMembersRef = useRef(activeMembers);
+  activeMembersRef.current = activeMembers;
+
   const handleMemberPress = useCallback((member: RoomMember) => {
     setSelectedMember(member);
   }, []);
 
+  const handleMemberPressByUserId = useCallback((userId: string) => {
+    const found = activeMembersRef.current.find((m) => m.userId === userId);
+    if (found) {
+      setSelectedMember(found);
+    }
+  }, []);
+
+  const coHostSet = useMemo(() => new Set(allCoHostIds.map((id) => id.toLowerCase())), [allCoHostIds]);
+  const roomHostId = room?.host_id || '';
+
   const renderMessageItem = useCallback(
     ({ item }: { item: ChatMessage }) => {
-      const isHostUser = item.userId === room?.host_id;
-      const isCoHostUser = allCoHostIds.includes(item.userId);
-      const memberObj = activeMembers.find((m) => m.userId === item.userId);
+      const isHostUser = Boolean(roomHostId && item.userId && roomHostId.toLowerCase() === item.userId.toLowerCase());
+      const isCoHostUser = Boolean(item.userId && coHostSet.has(item.userId.toLowerCase()));
       return (
         <MessageRow
           message={item}
-          isMe={item.userId === currentUserId}
+          isMe={Boolean(currentUserId && item.userId && currentUserId.toLowerCase() === item.userId.toLowerCase())}
           isHostUser={isHostUser}
           isCoHostUser={isCoHostUser}
-          onPressAvatar={memberObj ? () => handleMemberPress(memberObj) : undefined}
+          onPressAvatar={handleMemberPressByUserId}
         />
       );
     },
-    [currentUserId, room?.host_id, allCoHostIds, activeMembers, handleMemberPress]
+    [roomHostId, coHostSet, currentUserId, handleMemberPressByUserId]
   );
 
   // Session tracking in room
@@ -387,6 +420,23 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       router.replace('/rooms' as Href);
     }
   }, [recordRoomStudySession]);
+
+  useAndroidBackHandler(() => {
+    if (showSoundModal) {
+      setShowSoundModal(false);
+      return true;
+    }
+    if (showCheckinModal) {
+      setShowCheckinModal(false);
+      return true;
+    }
+    if (showMoreModal) {
+      setShowMoreModal(false);
+      return true;
+    }
+    safeGoBack();
+    return true;
+  });
 
   const playStation = useCallback(async (station: MusicStation, volume: number) => {
     const loadId = Math.random().toString();
@@ -797,6 +847,22 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           // Skip echo of own broadcast to prevent duplicate audio reload race
           return;
         }
+
+        // STRICT SECURITY: Only accept room audio changes from Host or Co-Host!
+        const isSenderHost = Boolean(
+          room?.host_id &&
+          payload?.senderId &&
+          room.host_id.toLowerCase() === payload.senderId.toLowerCase()
+        );
+        const isSenderCoHost = Boolean(
+          payload?.senderId &&
+          allCoHostIds.some((id) => id.toLowerCase() === payload.senderId.toLowerCase())
+        );
+        if (!isSenderHost && !isSenderCoHost) {
+          if (__DEV__) console.warn('Ignored unauthorized music change broadcast from user:', payload?.senderId);
+          return;
+        }
+
         const station = STATIONS.find((s) => s.id === payload.stationId) || STATIONS[0];
         setCurrentStation(station);
         setIsPlayingMusic(payload.isPlaying);
@@ -1486,11 +1552,15 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                     return (
                       <TouchableOpacity
                         key={station.id}
-                        style={[styles.soundChipBtn, isCurrent && styles.soundChipBtnActive]}
+                        style={[
+                          styles.soundChipBtn,
+                          isCurrent && styles.soundChipBtnActive,
+                          !canManageRoom && !isCurrent && { opacity: 0.4 },
+                        ]}
                         onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                           if (!canManageRoom) {
-                            useUiStore.getState().showToast('Only host or co-host can broadcast room soundscapes.', 'info');
+                            useUiStore.getState().showToast('Only room admin can change room music.', 'info');
                             return;
                           }
                           if (isCurrent) {
@@ -1499,11 +1569,11 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                             handleHostSelectStation(station);
                           }
                         }}
-                        activeOpacity={canManageRoom ? 0.7 : 0.9}
+                        activeOpacity={canManageRoom ? 0.7 : 1}
                       >
                         <IconComp
                           size={14}
-                          color={isCurrent ? '#FFFFFF' : '#9D9AA8'}
+                          color={isCurrent ? '#FFFFFF' : canManageRoom ? '#9D9AA8' : '#64748B'}
                         />
                       </TouchableOpacity>
                     );
@@ -1660,7 +1730,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           /* CHAT & FEED TAB */
           <KeyboardAvoidingView
             style={{ flex: 1, backgroundColor: '#0D0C1D' }}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 112 : 0}
           >
             {/* Sticky Mini Bar */}
@@ -1670,8 +1740,14 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               </View>
               <TouchableOpacity
                 style={styles.stickyMiniItem}
-                onPress={handleTogglePlay}
-                activeOpacity={0.7}
+                onPress={() => {
+                  if (!canManageRoom) {
+                    useUiStore.getState().showToast('Room audio is controlled by Admin.', 'info');
+                    return;
+                  }
+                  handleTogglePlay();
+                }}
+                activeOpacity={canManageRoom ? 0.7 : 1}
               >
                 <Music size={13} color="#A78BFA" />
                 <Text style={styles.stickyMiniMusicText} numberOfLines={1}>
@@ -1693,6 +1769,9 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               data={reversedMessages}
               keyExtractor={(item) => item.id}
               inverted
+              initialNumToRender={15}
+              maxToRenderPerBatch={10}
+              windowSize={5}
               removeClippedSubviews={Platform.OS === 'android'}
               renderItem={renderMessageItem}
               contentContainerStyle={styles.chatListContent}
@@ -1792,7 +1871,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
 
               <TextInput
                 style={styles.checkinInput}
-                placeholder="e.g. Chapter 4 Thermodynamics, Solving Mock 2..."
+                placeholder="e.g. Chapter Revision, Mock Test, Video Editing, Sprint..."
                 placeholderTextColor="#64748B"
                 value={checkinNoteInput}
                 onChangeText={setCheckinNoteInput}
@@ -1895,11 +1974,15 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                   return (
                     <TouchableOpacity
                       key={station.id}
-                      style={[styles.soundStationCard, isSelected && styles.soundStationCardActive]}
+                      style={[
+                        styles.soundStationCard,
+                        isSelected && styles.soundStationCardActive,
+                        !canManageRoom && !isSelected && { opacity: 0.45 },
+                      ]}
                       onPress={() => {
                         if (!canManageRoom) {
                           useUiStore.getState().showToast(
-                            'Station selection is controlled by the room host/admin.',
+                            'Room audio is controlled by Admin. Use volume controls below.',
                             'info'
                           );
                           return;
@@ -2263,7 +2346,7 @@ const MessageRow = React.memo<{
   isMe: boolean;
   isHostUser?: boolean;
   isCoHostUser?: boolean;
-  onPressAvatar?: () => void;
+  onPressAvatar?: (userId: string) => void;
 }>(({ message, isMe, isHostUser, isCoHostUser, onPressAvatar }) => {
   const avatarColor = useMemo(() => getColorForUser(message.userId), [message.userId]);
 
@@ -2276,12 +2359,16 @@ const MessageRow = React.memo<{
     }
   }, [message.sentAt]);
 
+  const handleAvatarPress = useCallback(() => {
+    onPressAvatar?.(message.userId);
+  }, [onPressAvatar, message.userId]);
+
   return (
     <View style={[styles.messageRow, isMe && styles.messageRowOwn]}>
       {!isMe && (
         <TouchableOpacity
           style={[styles.msgAvatar, { backgroundColor: avatarColor }]}
-          onPress={onPressAvatar}
+          onPress={handleAvatarPress}
           activeOpacity={0.8}
         >
           {message.userAvatar ? (

@@ -253,25 +253,39 @@ export async function triggerLocalFocusCompleteNotification(
   durationMin: number,
   xpEarned: number
 ): Promise<void> {
-  if (!Notifications) return;
-  try {
-    await Notifications.scheduleNotificationAsync({
-      identifier: `focus_complete_${Date.now()}`,
-      content: {
-        title: 'Focus Session Complete',
-        body: `Phenomenal work! You completed ${durationMin}m of deep work (+${xpEarned} XP earned).`,
-        data: { screen: '/(tabs)/focus', type: 'milestone', actionText: 'View Focus Stats' },
-        sound: 'default',
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        channelId: 'focus_channel',
-        seconds: 1,
-      },
-    }).catch(() => {});
-  } catch (err) {
-    if (__DEV__) console.warn('triggerLocalFocusCompleteNotification failed:', err);
+  const title = 'Focus Session Complete';
+  const body = `Phenomenal work! You completed ${durationMin}m of deep work (+${xpEarned} XP earned).`;
+
+  if (Notifications) {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `focus_complete_${Date.now()}`,
+        content: {
+          title,
+          body,
+          data: { screen: '/(tabs)/focus', type: 'milestone', actionText: 'View Focus Stats' },
+          sound: 'default',
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          channelId: 'focus_channel',
+          seconds: 1,
+        },
+      }).catch(() => {});
+    } catch (err) {
+      if (__DEV__) console.warn('triggerLocalFocusCompleteNotification failed:', err);
+    }
   }
+
+  // Record in in-app notification center immediately (like Instagram activity feed)
+  useNotificationStore.getState().addNotification({
+    type: 'milestone',
+    title,
+    body,
+    time: 'Just now',
+    targetScreen: '/(tabs)/focus',
+    actionText: 'View Focus Stats',
+  });
 }
 
 // 3.8.1 showActiveFocusNotification (Ongoing system notification for Android notification shade & Foreground Service)
@@ -447,6 +461,9 @@ export async function sendTestNotification(): Promise<boolean> {
 
 // 3.10 syncNotificationSchedules (Centralized scheduler synced with user settings)
 export async function syncNotificationSchedules(): Promise<void> {
+  // Sync in-app notification center activity feed
+  useNotificationStore.getState().refreshDailyNudges();
+
   if (!Notifications) return;
 
   try {
@@ -510,11 +527,36 @@ export async function cancelAllNotifications(): Promise<void> {
 // 5. useNotificationResponse custom hook
 export function useNotificationResponse() {
   useEffect(() => {
+    // Refresh in-app activity nudges on mount
+    useNotificationStore.getState().refreshDailyNudges();
+
     if (!Notifications) return;
     let responseSubscription: any = null;
     let receivedSubscription: any = null;
 
     try {
+      // Check for notification response on cold start (when app launched from notification tap)
+      Notifications.getLastNotificationResponseAsync().then((response) => {
+        if (response) {
+          const content = response.notification.request.content;
+          const data = content.data;
+          const screen = data?.screen;
+          if (content.title && data?.type !== 'focus_active') {
+            useNotificationStore.getState().addNotification({
+              type: (data?.type as any) || 'brief',
+              title: content.title,
+              body: content.body || '',
+              time: 'Just now',
+              targetScreen: (screen as string) || '/',
+              actionText: (data?.actionText as string) || 'View Details',
+            });
+          }
+          if (screen) {
+            router.push(screen === 'home' ? '/' : (screen as Href));
+          }
+        }
+      }).catch(() => {});
+
       // Listener 1: When a notification arrives (foreground or background trigger)
       receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
         const { title, body, data } = notification.request.content;

@@ -23,8 +23,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ArrowLeft, Plus, Moon, Users } from 'lucide-react-native';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { parseRoomSubject } from '@/lib/utils/room-visibility';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 export default function RoomsScreen(): React.JSX.Element {
+  useAndroidBackHandler();
   const { profile } = useAuthStore();
   const currentUserId = profile?.id || '';
   const { tab } = useLocalSearchParams<{ tab?: string }>();

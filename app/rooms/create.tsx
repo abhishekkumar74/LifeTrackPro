@@ -38,6 +38,7 @@ import {
 } from 'lucide-react-native';
 import { useCreateRoom } from '@/lib/hooks/use-study-rooms';
 import { useSubjects } from '@/lib/hooks/use-subjects';
+import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import { getSubjectColor } from '@/lib/utils/subject-colors';
 import { encodeRoomSubject } from '@/lib/utils/room-visibility';
 
@@ -45,11 +46,11 @@ type RoomType = 'silent' | 'music' | 'discussion';
 type VisibilityOption = 'public' | 'friends' | 'private';
 
 const QUICK_TOPICS = [
-  'DSA Revision',
+  'Deep Focus',
+  'Content Sprint',
   'Mock Test',
   'Exam Prep',
-  'Quick Revision',
-  'Late Night Revision',
+  'Project Sprint',
   'Silent Grind',
 ];
 
@@ -91,6 +92,19 @@ export default function CreateRoomScreen(): React.JSX.Element {
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const subjectScrollRef = useRef<ScrollView>(null);
   const durationScrollRef = useRef<ScrollView>(null);
+
+  useAndroidBackHandler(() => {
+    if (isSubjectModalOpen) {
+      setIsSubjectModalOpen(false);
+      return true;
+    }
+    if (isDurationModalOpen) {
+      setIsDurationModalOpen(false);
+      return true;
+    }
+    router.back();
+    return true;
+  });
 
   useEffect(() => {
     const showSub = Keyboard.addListener(

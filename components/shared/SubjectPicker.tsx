@@ -47,15 +47,14 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
 
   const isCse = profile?.category === 'cse_student';
 
-  const quickChips = useMemo(() => [
-    { label: 'DSA', value: 'Data Structures & Algorithms' },
-    { label: 'System Design', value: 'System Design' },
-    { label: 'Java', value: 'Java Programming' },
-    { label: 'Backend', value: 'Backend Development' },
-    { label: 'OS', value: 'Operating Systems' },
-    { label: 'CN', value: 'Computer Networks' },
-    { label: 'Other', value: null },
-  ], []);
+  const quickChips = useMemo(() => {
+    const available = (subjects || []).filter(Boolean);
+    const top = available.slice(0, 6).map((s) => ({
+      label: s.length > 16 ? s.substring(0, 14) + '…' : s,
+      value: s,
+    }));
+    return [...top, { label: 'Other', value: null }];
+  }, [subjects]);
 
   const handleOpen = () => {
     Keyboard.dismiss();

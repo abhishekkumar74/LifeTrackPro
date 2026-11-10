@@ -36,7 +36,10 @@ interface NotificationState {
   markAllAsRead: () => void;
   deleteNotification: (id: string) => void;
   clearAll: () => void;
-  addNotification: (notification: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'>) => void;
+  addNotification: (
+    notification: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'> &
+      Partial<Pick<AppNotification, 'id' | 'timestamp' | 'isRead'>>
+  ) => void;
   updateSetting: <K extends keyof NotificationSettings>(key: K, value: NotificationSettings[K]) => void;
   refreshDailyNudges: () => void;
   resetDefaults: () => void;
@@ -109,12 +112,17 @@ export const useNotificationStore = create<NotificationState>()(
         const now = Date.now();
         const currentNotifications = get().notifications || [];
 
-        // Deduplication: Avoid duplicate notifications with identical title & type within 5 minutes
+        const targetTimestamp = item.timestamp ?? now;
+        const targetId = item.id ?? `notif_${now}_${Math.random().toString(36).substring(2, 7)}`;
+        const targetIsRead = item.isRead ?? false;
+
+        // Deduplication: Avoid duplicate notifications with identical title & type within 4 hours, or matching id
         const isDuplicate = currentNotifications.some(
           (n) =>
-            n.title === item.title &&
-            n.type === item.type &&
-            Math.abs(now - n.timestamp) < 1000 * 60 * 5
+            n.id === targetId ||
+            (n.title === item.title &&
+              n.type === item.type &&
+              Math.abs(targetTimestamp - n.timestamp) < 1000 * 60 * 60 * 4)
         );
 
         if (isDuplicate) {
@@ -123,10 +131,10 @@ export const useNotificationStore = create<NotificationState>()(
 
         const newNotif: AppNotification = {
           ...item,
-          id: `notif_${now}_${Math.random().toString(36).substring(2, 7)}`,
-          timestamp: now,
-          time: 'Just now',
-          isRead: false,
+          id: targetId,
+          timestamp: targetTimestamp,
+          time: formatNotificationTime(targetTimestamp),
+          isRead: targetIsRead,
         };
 
         // Prepend and cap at maximum 50 notifications to prevent unbounded memory growth
@@ -140,56 +148,140 @@ export const useNotificationStore = create<NotificationState>()(
         const now = Date.now();
         const currentNotifications = state.notifications || [];
 
-        // If user explicitly cleared notifications recently (within last 12 hours), respect user intent
-        if (state.lastClearedAt && now - state.lastClearedAt < 1000 * 60 * 60 * 12) {
-          return;
-        }
-
         if (state.settings.doNotDisturb) {
           return;
         }
 
-        const currentHour = new Date(now).getHours();
-        const hasRecentType = (type: NotificationType) =>
-          currentNotifications.some(
-            (n) => n.type === type && Math.abs(now - n.timestamp) < 1000 * 60 * 60 * 18
-          );
+        const nowDate = new Date(now);
+        const currentHour = nowDate.getHours();
+        const currentMinute = nowDate.getMinutes();
+
+        // Local date string YYYY-MM-DD
+        const yyyy = nowDate.getFullYear();
+        const mm = String(nowDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(nowDate.getDate()).padStart(2, '0');
+        const dateStr = `${yyyy}-${mm}-${dd}`;
 
         const newItems: AppNotification[] = [];
 
-        // Morning Brief (6:00 AM - 11:59 AM)
-        if (currentHour >= 6 && currentHour < 12 && !hasRecentType('brief') && state.settings.morningBriefEnabled) {
+        const hasNotif = (id: string, title?: string) =>
+          currentNotifications.some(
+            (n) =>
+              n.id === id ||
+              (title && n.title === title && Math.abs(now - n.timestamp) < 1000 * 60 * 60 * 12)
+          );
+
+        // Helper: check if timestamp is strictly after user last cleared notifications
+        const isAfterCleared = (ts: number) => {
+          if (!state.lastClearedAt) return true;
+          return ts > state.lastClearedAt;
+        };
+
+        // 1. Morning Brief (scheduled at 8:00 AM)
+        const morningBriefTs = new Date(nowDate).setHours(8, 0, 0, 0);
+        const effectiveBriefTs = currentHour < 8 ? now : morningBriefTs;
+
+        if (
+          currentHour >= 6 &&
+          state.settings.morningBriefEnabled &&
+          isAfterCleared(effectiveBriefTs) &&
+          !hasNotif(`notif_brief_${dateStr}`, 'Daily Morning Brief')
+        ) {
           newItems.push({
-            id: `notif_brief_${now}`,
+            id: `notif_brief_${dateStr}`,
             type: 'brief',
             title: 'Daily Morning Brief',
-            body: 'Your focus goals are ready. Plan your deep work sessions and maintain peak momentum today.',
-            time: 'Just now',
-            timestamp: now,
+            body: 'Your focus goals and habits are ready. Start strong and maintain peak consistency today.',
+            time: formatNotificationTime(effectiveBriefTs),
+            timestamp: effectiveBriefTs,
             isRead: false,
             targetScreen: '/',
             actionText: "View Today's Plan",
           });
         }
 
-        // Streak saver (7:00 PM - 11:59 PM)
-        if (currentHour >= 19 && !hasRecentType('streak') && state.settings.streakAlertsEnabled) {
+        // 2. Afternoon Habit Check-in (scheduled at 2:30 PM / 14:30)
+        const habitCheckinTs = new Date(nowDate).setHours(14, 30, 0, 0);
+        if (
+          (currentHour > 14 || (currentHour === 14 && currentMinute >= 30)) &&
+          state.settings.habitRemindersEnabled &&
+          isAfterCleared(habitCheckinTs) &&
+          !hasNotif(`notif_habit_${dateStr}`, 'Habit Check-in')
+        ) {
           newItems.push({
-            id: `notif_streak_${now}`,
-            type: 'streak',
-            title: 'Keep Your Streak Active',
-            body: 'Check in on your daily habits today to keep your streak shield intact.',
-            time: 'Just now',
-            timestamp: now,
+            id: `notif_habit_${dateStr}`,
+            type: 'habit',
+            title: 'Habit Check-in',
+            body: 'Keep your momentum high! Check off your daily habits before the evening rush.',
+            time: formatNotificationTime(habitCheckinTs),
+            timestamp: habitCheckinTs,
             isRead: false,
             targetScreen: '/habits',
             actionText: 'Log Habits Now',
           });
         }
 
+        // 3. Evening Streak Saver Alert (scheduled at 9:00 PM / 21:00)
+        const streakAlertTs = new Date(nowDate).setHours(21, 0, 0, 0);
+        if (
+          currentHour >= 21 &&
+          state.settings.streakAlertsEnabled &&
+          isAfterCleared(streakAlertTs) &&
+          !hasNotif(`notif_streak_${dateStr}`, "Don't break your streak!") &&
+          !hasNotif(`notif_streak_${dateStr}`, 'Keep Your Streak Active')
+        ) {
+          newItems.push({
+            id: `notif_streak_${dateStr}`,
+            type: 'streak',
+            title: 'Keep Your Streak Active',
+            body: 'Don\'t break your streak! Complete at least 1 habit before midnight to protect your active streak shield.',
+            time: formatNotificationTime(streakAlertTs),
+            timestamp: streakAlertTs,
+            isRead: false,
+            targetScreen: '/habits',
+            actionText: 'Save Streak',
+          });
+        }
+
+        // 4. Daily Wrap-up / Evening Review (scheduled at 10:00 PM / 22:00)
+        const eveningReviewTs = new Date(nowDate).setHours(22, 0, 0, 0);
+        if (
+          currentHour >= 22 &&
+          isAfterCleared(eveningReviewTs) &&
+          !hasNotif(`notif_review_${dateStr}`, 'Daily Wrap-up')
+        ) {
+          newItems.push({
+            id: `notif_review_${dateStr}`,
+            type: 'brief',
+            title: 'Daily Wrap-up',
+            body: 'Take 1 minute to reflect on today’s focus achievements and review your stats.',
+            time: formatNotificationTime(eveningReviewTs),
+            timestamp: eveningReviewTs,
+            isRead: false,
+            targetScreen: '/(tabs)/stats',
+            actionText: 'View Stats',
+          });
+        }
+
+        // Welcome card if user has completely fresh inbox and never cleared
+        if (currentNotifications.length === 0 && newItems.length === 0 && state.lastClearedAt === null) {
+          newItems.push({
+            id: 'notif_welcome_init',
+            type: 'system',
+            title: 'Welcome to LifeTrack Pro',
+            body: 'Your consistency hub is active. Check off daily habits, run deep work Pomodoros, and build streaks.',
+            time: 'Just now',
+            timestamp: now,
+            isRead: false,
+            targetScreen: '/',
+            actionText: 'Explore Dashboard',
+          });
+        }
+
         if (newItems.length > 0) {
+          const combined = [...newItems, ...currentNotifications].sort((a, b) => b.timestamp - a.timestamp);
           set({
-            notifications: [...newItems, ...currentNotifications].slice(0, 50),
+            notifications: combined.slice(0, 50),
           });
         }
       },
@@ -224,17 +316,14 @@ export const useNotificationStore = create<NotificationState>()(
             lastClearedAt: null,
           };
         }
-        // Purge legacy hardcoded mock notification IDs and emoji mocks
+        // Purge legacy hardcoded mock notification IDs
         const legacyDummyIds = new Set(['notif-1', 'notif-2', 'notif-3', 'notif-4']);
         const cleanedNotifications = Array.isArray(persistedState.notifications)
           ? persistedState.notifications.filter(
               (n: any) =>
                 n &&
                 !legacyDummyIds.has(n.id) &&
-                !n.title?.includes('☀️') &&
-                !n.title?.includes('🔥') &&
-                !n.title?.includes('🧠') &&
-                !n.title?.includes('🏆')
+                !/[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(n.title || '')
             )
           : [];
 

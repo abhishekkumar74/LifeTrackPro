@@ -28,8 +28,14 @@ const STATUS_LABELS = {
   behind: 'Behind',
 };
 
+export interface AssembledGoalForBar extends Goal {
+  totalTasks: number;
+  doneTasks: number;
+  milestones?: { id: string; status: string; title: string }[];
+}
+
 interface GoalBarProps {
-  goal: (Goal & { totalTasks: number; doneTasks: number }) | null;
+  goal: AssembledGoalForBar | null;
   isLoading: boolean;
   isCse?: boolean;
   subCategory?: string;
@@ -49,12 +55,27 @@ export const GoalBar = React.memo<GoalBarProps>(({
   const opacity = useSharedValue(0.4);
   const animatedProgress = useSharedValue(0);
 
-  // Compute progress ratio (0 to 1)
-  const targetProgress = isCse
-    ? (totalTopics && totalTopics > 0 ? (completedTopics || 0) / totalTopics : 0.38)
-    : goal && goal.totalTasks > 0
-    ? goal.doneTasks / goal.totalTasks
-    : 0.38;
+  // Combined items count (tasks + milestones) matching GoalCard in Goal Vault
+  const totalMilestones = goal?.milestones?.length || 0;
+  const doneMilestones = goal?.milestones?.filter((m) => m.status === 'completed').length || 0;
+  const totalGoalItems = (goal?.totalTasks || 0) + totalMilestones;
+  const doneGoalItems = (goal?.doneTasks || 0) + doneMilestones;
+
+  // Compute progress ratio (0 to 1) dynamically from goal data
+  let targetProgress = 0;
+  if (goal) {
+    if (goal.status === 'achieved') {
+      targetProgress = 1;
+    } else if (totalGoalItems > 0) {
+      targetProgress = doneGoalItems / totalGoalItems;
+    } else if (goal.totalTasks > 0) {
+      targetProgress = goal.doneTasks / goal.totalTasks;
+    } else {
+      targetProgress = 0;
+    }
+  } else if (totalTopics && totalTopics > 0) {
+    targetProgress = (completedTopics || 0) / totalTopics;
+  }
 
   const progressPercent = Math.round(targetProgress * 100);
 
@@ -108,9 +129,9 @@ export const GoalBar = React.memo<GoalBarProps>(({
     );
   }
 
-  // Calculate days left
-  let daysDiff = 487; // default high-urgency exam countdown as requested by user
-  let goalTitle = goal?.title || (isCse ? 'B.Tech Placement & Core Exam' : 'Target Exam 2027 (JEE / NEET)');
+  // Calculate dynamic days left
+  let daysDiff = 65;
+  let goalTitle = goal?.title || (isCse ? 'B.Tech Placement & Core Exam' : 'Target Goal');
 
   if (goal?.deadline) {
     const todayStr = getTodayLocal();
@@ -122,18 +143,32 @@ export const GoalBar = React.memo<GoalBarProps>(({
 
     const timeDiff = deadline.getTime() - today.getTime();
     const calculatedDays = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-    if (calculatedDays > 0) {
-      daysDiff = calculatedDays;
-    }
+    daysDiff = calculatedDays;
   }
 
-  // Track status
-  const status = calculateOnTrackStatus(
-    goal?.created_at || new Date().toISOString(),
-    goal?.deadline || new Date(Date.now() + 487 * 86400000).toISOString(),
-    isCse ? (completedTopics || 0) : (goal?.doneTasks || 5),
-    isCse ? (totalTopics || 0) : (goal?.totalTasks || 12)
-  );
+  // Track status matching GoalCard in Goal Vault
+  let status: 'on_track' | 'at_risk' | 'behind' = 'on_track';
+  if (goal) {
+    if (goal.status === 'achieved') {
+      status = 'on_track';
+    } else {
+      status = calculateOnTrackStatus(
+        goal.created_at || new Date().toISOString(),
+        goal.deadline || new Date(Date.now() + 65 * 86400000).toISOString(),
+        doneGoalItems,
+        totalGoalItems
+      );
+    }
+  } else if (totalTopics && totalTopics > 0) {
+    status = calculateOnTrackStatus(
+      new Date().toISOString(),
+      new Date(Date.now() + 65 * 86400000).toISOString(),
+      completedTopics || 0,
+      totalTopics
+    );
+  }
+
+  const countdownSub = goal?.title?.toLowerCase()?.includes('exam') ? 'Exam countdown' : 'Goal countdown';
 
   const getStatusStyles = (statusType: 'on_track' | 'at_risk' | 'behind') => {
     switch (statusType) {
@@ -206,7 +241,7 @@ export const GoalBar = React.memo<GoalBarProps>(({
             <Text style={styles.daysLeftText}>{`${daysDiff} days left`}</Text>
           </View>
           <View style={styles.urgencyDot} />
-          <Text style={styles.countdownSub}>Exam countdown</Text>
+          <Text style={styles.countdownSub}>{countdownSub}</Text>
         </View>
       </View>
 

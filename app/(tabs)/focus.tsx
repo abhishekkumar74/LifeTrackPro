@@ -195,20 +195,23 @@ export default function FocusScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const androidTopExtra = Platform.OS === 'android' && insets.top === 0 ? (StatusBar.currentHeight || 28) : 0;
   const isPhysicalLandscape = width > height;
+  const [isScreenFocused, setIsScreenFocused] = useState(false);
   const [isManualLandscape, setIsManualLandscape] = useState(false);
   const [isDismissedInLandscape, setIsDismissedInLandscape] = useState(false);
 
-  // When device returns to physical portrait, reset dismissed flag, manual lock, and unlock orientation
+  // When device returns to physical portrait, reset dismissed flag, manual lock, and unlock orientation (if Focus tab is focused)
   useEffect(() => {
     if (!isPhysicalLandscape) {
       setIsDismissedInLandscape(false);
       setIsManualLandscape(false);
-      ScreenOrientation.unlockAsync().catch(() => {});
+      if (isScreenFocused) {
+        ScreenOrientation.unlockAsync().catch(() => {});
+      }
     }
-  }, [isPhysicalLandscape]);
+  }, [isPhysicalLandscape, isScreenFocused]);
 
-  // StandBy is visible if physically horizontal (unless dismissed), or forced manually
-  const isLandscape = (isPhysicalLandscape && !isDismissedInLandscape) || isManualLandscape;
+  // StandBy is visible ONLY when Focus tab is active AND (physically horizontal unless dismissed, or forced manually)
+  const isLandscape = isScreenFocused && ((isPhysicalLandscape && !isDismissedInLandscape) || isManualLandscape);
 
   const handleOpenStandBy = useCallback(async () => {
     try {
@@ -234,9 +237,6 @@ export default function FocusScreen(): React.JSX.Element {
       try {
         await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       } catch {}
-      try {
-        await ScreenOrientation.unlockAsync();
-      } catch {}
     } catch {
       setIsManualLandscape(false);
       setIsDismissedInLandscape(true);
@@ -245,7 +245,7 @@ export default function FocusScreen(): React.JSX.Element {
         StatusBar.setBackgroundColor('#111013', true);
         StatusBar.setTranslucent(false);
       }
-      ScreenOrientation.unlockAsync().catch(() => {});
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     }
   }, []);
 
@@ -315,23 +315,21 @@ export default function FocusScreen(): React.JSX.Element {
     }
   }, [params.standby, handleOpenStandBy]);
 
-  // Keep screen orientation unlocked so sensor auto-rotate works naturally and freely
-  useEffect(() => {
-    ScreenOrientation.unlockAsync().catch(() => {});
-    return () => {
-      ScreenOrientation.unlockAsync().catch(() => {});
-    };
-  }, []);
-
-  // Ensure status bar is ALWAYS light-content (crisp white icons & text) when Focus tab is active, and restores smoothly on exit
+  // When Focus tab is focused: unlock orientation for Desk Clock / StandBy and set dark theme status bar.
+  // When leaving Focus tab: lock orientation back to portrait and reset landscape state.
   useFocusEffect(
     useCallback(() => {
+      setIsScreenFocused(true);
+      ScreenOrientation.unlockAsync().catch(() => {});
       StatusBar.setBarStyle('light-content', true);
       if (Platform.OS === 'android') {
         StatusBar.setBackgroundColor('#111013', true);
         StatusBar.setTranslucent(false);
       }
       return () => {
+        setIsScreenFocused(false);
+        setIsManualLandscape(false);
+        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
         StatusBar.setBarStyle('dark-content', true);
         if (Platform.OS === 'android') {
           StatusBar.setBackgroundColor('#F7F6F3', true);

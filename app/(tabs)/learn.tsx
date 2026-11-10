@@ -2220,7 +2220,7 @@ export default function SyllabusScreen(): React.JSX.Element {
               style={styles.sheetInput}
               value={newChapter}
               onChangeText={setNewChapter}
-              placeholder="e.g. Kinematics"
+              placeholder="e.g. Chapter name"
               placeholderTextColor="#9B9BAF"
               maxLength={50}
             />
@@ -2230,7 +2230,7 @@ export default function SyllabusScreen(): React.JSX.Element {
               style={styles.sheetInput}
               value={newTopic}
               onChangeText={setNewTopic}
-              placeholder="e.g. Projectile Motion"
+              placeholder="e.g. Topic title"
               placeholderTextColor="#9B9BAF"
               maxLength={60}
             />

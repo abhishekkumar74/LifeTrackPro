@@ -5,6 +5,7 @@ import { supabase } from '../supabase/client';
 import { useFocusStore, resyncFocusTimer } from '../store/focus.store';
 import { showActiveFocusNotification } from '../notifications';
 import { FocusLiveActivity } from '../native/live-activity';
+import { useNotificationStore } from '../store/notification.store';
 
 export function useAppLifecycle() {
   const queryClient = useQueryClient();
@@ -50,6 +51,9 @@ export function useAppLifecycle() {
           nextState === 'active'
         ) {
           const bgDuration = Date.now() - backgroundTime.current;
+
+          // Refresh daily notification nudges on return to foreground
+          useNotificationStore.getState().refreshDailyNudges();
 
           // Resync running focus timer seamlessly without discarding session
           const focus = useFocusStore.getState();

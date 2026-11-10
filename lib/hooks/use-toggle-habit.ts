@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase/client';
 import { getTodayLocal } from '@/lib/utils/date';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
 import { trackEvent } from '@/lib/posthog';
+import { useNotificationStore } from '@/lib/store/notification.store';
 
 export async function toggleHabit(
   habitId: string,
@@ -55,6 +56,17 @@ export async function toggleHabit(
       done: newDone,
       date: targetDate,
     });
+
+    if (newDone) {
+      useNotificationStore.getState().addNotification({
+        type: 'habit',
+        title: 'Habit Completed!',
+        body: 'Great job maintaining consistency today. Keep up your momentum!',
+        time: 'Just now',
+        targetScreen: '/habits',
+        actionText: 'View Habit Streaks',
+      });
+    }
   }
 }
 

@@ -72,6 +72,7 @@ export const NotificationSheet: React.FC<NotificationSheetProps> = ({
           icon: <Sparkles size={18} color="#5B4FE8" />,
         };
       case 'streak':
+      case 'habit':
         return {
           bg: '#FEF3C7',
           color: '#D97706',
