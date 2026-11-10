@@ -197,17 +197,8 @@ export default function LoginScreen(): React.JSX.Element {
           setErrorMessage(error.message);
         } else if (data.session) {
           router.replace('/(tabs)');
-        } else if (data.user) {
-          // Navigate to in-app OTP entry so user never gets stuck on external browser redirects
-          router.push({
-            pathname: '/verify-otp',
-            params: {
-              email: email.trim(),
-              type: 'signup',
-            },
-          });
         } else {
-          setErrorMessage('Registration successful! Please check your email inbox to confirm your account, then log in here.');
+          setSuccessMessage('Registration successful! Please check your email inbox to confirm your account, then log in here.');
           setIsSignUp(false);
         }
       } else {
@@ -217,11 +208,7 @@ export default function LoginScreen(): React.JSX.Element {
         });
 
         if (error) {
-          if (error.message.toLowerCase().includes('email not confirmed')) {
-            setErrorMessage('Email not confirmed. Please enter your 6-digit confirmation code below or check your email.');
-          } else {
-            setErrorMessage(error.message);
-          }
+          setErrorMessage(error.message);
         } else if (data.session) {
           router.replace('/(tabs)');
         }
@@ -662,24 +649,6 @@ export default function LoginScreen(): React.JSX.Element {
             <Text style={styles.errorText}>
               {validationError || errorMessage}
             </Text>
-          )}
-          {Boolean(errorMessage?.toLowerCase().includes('not confirmed')) && (
-            <Pressable
-              style={{ marginTop: 8, alignSelf: 'flex-start', paddingVertical: 4 }}
-              onPress={() => {
-                router.push({
-                  pathname: '/verify-otp',
-                  params: {
-                    email: email.trim(),
-                    type: 'signup',
-                  },
-                });
-              }}
-            >
-              <Text style={{ color: '#7C5CFC', fontSize: 13, fontWeight: '600' }}>
-                Enter 6-digit confirmation code
-              </Text>
-            </Pressable>
           )}
         </View>
 

@@ -31,9 +31,7 @@ const screenWidth = Dimensions.get('window').width;
 
 export default function VerifyOtpScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
-  const { phone, email, type } = useLocalSearchParams<{ phone?: string; email?: string; type?: string }>();
-  const isEmailMode = Boolean(email);
-  const targetRecipient = email || phone || '';
+  const { phone } = useLocalSearchParams<{ phone: string }>();
 
   // State hooks
   const [code, setCode] = useState<string[]>(['', '', '', '', '', '']);
@@ -108,27 +106,12 @@ export default function VerifyOtpScreen(): React.JSX.Element {
     setCode(['', '', '', '', '', '']);
 
     try {
-      if (isEmailMode) {
-        const otpType = (type as any) === 'email_change' ? 'email_change' : 'signup';
-        const { error } = await supabase.auth.resend({
-          type: otpType,
-          email: email as string,
-          options: {
-            emailRedirectTo: 'lifetrackpro://login',
-          },
-        });
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: phone as string,
+      });
 
-        if (error) {
-          setErrorMessage(error.message);
-        }
-      } else {
-        const { error } = await supabase.auth.signInWithOtp({
-          phone: phone as string,
-        });
-
-        if (error) {
-          setErrorMessage(error.message);
-        }
+      if (error) {
+        setErrorMessage(error.message);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to resend authentication code.';
@@ -146,29 +129,17 @@ export default function VerifyOtpScreen(): React.JSX.Element {
     setIsError(false);
 
     try {
-      let authResponse;
-      if (isEmailMode) {
-        const verifyType = (type as any) || 'signup';
-        authResponse = await supabase.auth.verifyOtp({
-          email: email as string,
-          token: finalCode,
-          type: verifyType,
-        });
-      } else {
-        authResponse = await supabase.auth.verifyOtp({
-          phone: phone as string,
-          token: finalCode,
-          type: 'sms',
-        });
-      }
+      const { data: { user }, error } = await supabase.auth.verifyOtp({
+        phone: phone as string,
+        token: finalCode,
+        type: 'sms',
+      });
 
-      const { data, error } = authResponse;
       if (error) {
         await handleFailure(error.message);
         return;
       }
 
-      const user = data?.user;
       if (user) {
         // Check if profile details already exist in public profiles table
         const { data: profile, error: profileError } = await supabase
@@ -284,10 +255,8 @@ export default function VerifyOtpScreen(): React.JSX.Element {
         </Pressable>
 
         <Text style={styles.heading}>Enter the code</Text>
-        <Text style={styles.subtext}>
-          {isEmailMode ? 'We sent a 6-digit confirmation code to' : 'We sent a 6-digit code to'}
-        </Text>
-        <Text style={styles.phoneLabel}>{targetRecipient}</Text>
+        <Text style={styles.subtext}>We sent a 6-digit code to</Text>
+        <Text style={styles.phoneLabel}>{phone}</Text>
       </View>
 
       {/* MID SECTION: 6 OTP CELLS */}
