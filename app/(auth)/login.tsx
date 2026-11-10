@@ -63,9 +63,11 @@ export default function LoginScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const phoneInputRef = useRef<TextInput>(null);
   const emailInputRef = useRef<TextInput>(null);
+  const passwordInputRef = useRef<TextInput>(null);
 
   // Keyboard state to adjust branding section height dynamically
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener(
@@ -474,17 +476,31 @@ export default function LoginScreen(): React.JSX.Element {
     >
       <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isKeyboardOpen && styles.scrollContentKeyboard,
+          { paddingBottom: Math.max(insets.bottom, 20) + (isKeyboardOpen ? 16 : 0) },
+        ]}
         keyboardShouldPersistTaps="handled"
-        bounces={true}
+        bounces={false}
+        showsVerticalScrollIndicator={false}
       >
         {/* SECTION 1: Top Branding Area */}
-        <View style={[styles.brandingSection, isKeyboardOpen && { height: screenHeight * 0.14, justifyContent: 'center', paddingVertical: 6 }]}>
-          <View style={[styles.logoContainer, isKeyboardOpen && { width: 44, height: 44, borderRadius: RADIUS.md }]}>
-            <AppLogo size={isKeyboardOpen ? 28 : 44} variant="dark" />
-          </View>
-          <Text style={[styles.appName, isKeyboardOpen && { fontSize: 22, marginTop: SPACING.xs }]}>{STRINGS.common.appName}</Text>
-          {!isKeyboardOpen && <Text style={styles.tagline}>Your life. One app.</Text>}
+        <View style={[styles.brandingSection, isKeyboardOpen && styles.brandingSectionCompact]}>
+          {isKeyboardOpen ? (
+            <View style={styles.compactBrandingRow}>
+              <AppLogo size={24} variant="dark" />
+              <Text style={styles.compactAppName}>{STRINGS.common.appName}</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.logoContainer}>
+                <AppLogo size={44} variant="dark" />
+              </View>
+              <Text style={styles.appName}>{STRINGS.common.appName}</Text>
+              <Text style={styles.tagline}>Your life. One app.</Text>
+            </>
+          )}
         </View>
 
         {/* SECTION 2: Input Area */}
@@ -499,7 +515,7 @@ export default function LoginScreen(): React.JSX.Element {
                 <View
                   style={[
                     styles.inputRowContainer,
-                    isFocused && styles.inputRowContainerFocused,
+                    focusedField === 'email' && styles.inputRowContainerFocused,
                     (validationError || errorMessage) && styles.inputRowContainerError,
                   ]}
                 >
@@ -518,27 +534,22 @@ export default function LoginScreen(): React.JSX.Element {
                       if (errorMessage) setErrorMessage(null);
                       if (successMessage) setSuccessMessage(null);
                     }}
+                    onFocus={() => {
+                      setFocusedField('email');
+                      setIsFocused(true);
+                    }}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      setIsFocused(false);
+                    }}
+                    returnKeyType="done"
+                    onSubmitEditing={() => {
+                      if (!isSubmitDisabled) handleForgotPassword();
+                    }}
                     editable={!isLoading}
                   />
                 </View>
               </View>
-
-              <Pressable
-                onPress={() => {
-                  setIsForgotState(false);
-                  setErrorMessage(null);
-                  setValidationError(null);
-                  setSuccessMessage(null);
-                }}
-                style={({ pressed }) => [
-                  { marginTop: 12, alignSelf: 'center', padding: 8 },
-                  pressed && { opacity: 0.7 }
-                ]}
-              >
-                <Text style={{ color: COLORS.violet, fontSize: 14, fontFamily: TYPOGRAPHY.fonts.sans, fontWeight: '600' }}>
-                  Back to Sign In
-                </Text>
-              </Pressable>
             </View>
           ) : (
             <View style={{ gap: SPACING.md }}>
@@ -547,7 +558,7 @@ export default function LoginScreen(): React.JSX.Element {
                 <View
                   style={[
                     styles.inputRowContainer,
-                    isFocused && styles.inputRowContainerFocused,
+                    focusedField === 'email' && styles.inputRowContainerFocused,
                     (validationError || errorMessage) && styles.inputRowContainerError,
                   ]}
                 >
@@ -565,6 +576,17 @@ export default function LoginScreen(): React.JSX.Element {
                       if (validationError) setValidationError(null);
                       if (errorMessage) setErrorMessage(null);
                     }}
+                    onFocus={() => {
+                      setFocusedField('email');
+                      setIsFocused(true);
+                    }}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      setIsFocused(false);
+                    }}
+                    returnKeyType="next"
+                    onSubmitEditing={() => passwordInputRef.current?.focus()}
+                    blurOnSubmit={false}
                     editable={!isLoading}
                   />
                 </View>
@@ -575,11 +597,12 @@ export default function LoginScreen(): React.JSX.Element {
                 <View
                   style={[
                     styles.inputRowContainer,
-                    isFocused && styles.inputRowContainerFocused,
+                    focusedField === 'password' && styles.inputRowContainerFocused,
                     (validationError || errorMessage) && styles.inputRowContainerError,
                   ]}
                 >
                   <TextInput
+                    ref={passwordInputRef}
                     style={styles.textInput}
                     secureTextEntry
                     autoCapitalize="none"
@@ -591,6 +614,18 @@ export default function LoginScreen(): React.JSX.Element {
                       setPassword(text);
                       if (validationError) setValidationError(null);
                       if (errorMessage) setErrorMessage(null);
+                    }}
+                    onFocus={() => {
+                      setFocusedField('password');
+                      setIsFocused(true);
+                    }}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      setIsFocused(false);
+                    }}
+                    returnKeyType={isSignUp ? 'done' : 'go'}
+                    onSubmitEditing={() => {
+                      if (!isSubmitDisabled) handleEmailAuth();
                     }}
                     editable={!isLoading}
                   />
@@ -605,7 +640,7 @@ export default function LoginScreen(): React.JSX.Element {
                     }}
                     style={({ pressed }) => [
                       { alignSelf: 'flex-end', marginTop: 8 },
-                      pressed && { opacity: 0.7 }
+                      pressed && { opacity: 0.7 },
                     ]}
                   >
                     <Text style={{ color: COLORS.violet, fontSize: 13, fontFamily: TYPOGRAPHY.fonts.sans, fontWeight: '500' }}>
@@ -614,22 +649,6 @@ export default function LoginScreen(): React.JSX.Element {
                   </Pressable>
                 )}
               </View>
-
-              <Pressable
-                onPress={() => {
-                  setIsSignUp(!isSignUp);
-                  setErrorMessage(null);
-                  setValidationError(null);
-                }}
-                style={({ pressed }) => [
-                  { marginTop: 4, alignSelf: 'center', padding: 8 },
-                  pressed && { opacity: 0.7 }
-                ]}
-              >
-                <Text style={{ color: COLORS.violet, fontSize: 14, fontFamily: TYPOGRAPHY.fonts.sans, fontWeight: '600' }}>
-                  {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
-                </Text>
-              </Pressable>
             </View>
           )}
 
@@ -665,7 +684,7 @@ export default function LoginScreen(): React.JSX.Element {
         </View>
 
         {/* SECTION 3: CTA buttons area */}
-        <View style={[styles.ctaSection, { paddingBottom: insets.bottom + SPACING.lg }]}>
+        <View style={styles.ctaSection}>
           <Pressable
             style={({ pressed }) => [
               styles.submitBtn,
@@ -685,6 +704,35 @@ export default function LoginScreen(): React.JSX.Element {
               </Text>
             )}
           </Pressable>
+
+          {isForgotState ? (
+            <Pressable
+              onPress={() => {
+                setIsForgotState(false);
+                setErrorMessage(null);
+                setValidationError(null);
+                setSuccessMessage(null);
+              }}
+              style={({ pressed }) => [styles.switchModeBtn, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.switchModeText}>
+                Back to Sign In
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => {
+                setIsSignUp(!isSignUp);
+                setErrorMessage(null);
+                setValidationError(null);
+              }}
+              style={({ pressed }) => [styles.switchModeBtn, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.switchModeText}>
+                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+              </Text>
+            </Pressable>
+          )}
 
           {/* Google sign-in backup */}
           {!isForgotState && (
@@ -722,9 +770,11 @@ export default function LoginScreen(): React.JSX.Element {
             </Pressable>
           )}
 
-          <Text style={styles.bottomLegalText}>
-            By continuing, you agree to our Terms and Privacy Policy
-          </Text>
+          {!isKeyboardOpen && (
+            <Text style={styles.bottomLegalText}>
+              By continuing, you agree to our Terms and Privacy Policy
+            </Text>
+          )}
         </View>
       </ScrollView>
 
@@ -743,11 +793,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
+  },
+  scrollContentKeyboard: {
+    justifyContent: 'flex-start',
+  },
   brandingSection: {
-    height: screenHeight * 0.4,
+    height: screenHeight * 0.32,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: SPACING.xxl,
+  },
+  brandingSectionCompact: {
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 4,
+    marginBottom: 8,
+  },
+  compactBrandingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  compactAppName: {
+    fontFamily: TYPOGRAPHY.fonts.display,
+    fontSize: 22,
+    color: COLORS.t1,
+    letterSpacing: -0.5,
   },
   logoContainer: {
     width: 72,
@@ -777,7 +852,6 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
   inputSection: {
-    flex: 1,
     paddingHorizontal: SPACING.xxl,
     justifyContent: 'flex-start',
   },
@@ -848,7 +922,19 @@ const styles = StyleSheet.create({
   },
   ctaSection: {
     paddingHorizontal: SPACING.xxl,
-    justifyContent: 'flex-end',
+    marginTop: 14,
+  },
+  switchModeBtn: {
+    alignSelf: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  switchModeText: {
+    color: COLORS.violet,
+    fontSize: 14,
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontWeight: '600',
   },
   submitBtn: {
     backgroundColor: COLORS.violet,
