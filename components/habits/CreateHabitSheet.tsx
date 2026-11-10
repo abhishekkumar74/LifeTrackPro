@@ -58,7 +58,9 @@ export const CreateHabitSheet: React.FC<CreateHabitSheetProps> = ({
   // Open/close based on isVisible prop
   useEffect(() => {
     if (isVisible) {
-      sheetRef.current?.expand();
+      const timer = setTimeout(() => {
+        sheetRef.current?.expand();
+      }, 100);
       // Auto-populate edit details if editing
       if (editHabit) {
         setTitle(editHabit.title);

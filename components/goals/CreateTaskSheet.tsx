@@ -74,6 +74,14 @@ export const CreateTaskSheet = React.forwardRef<BottomSheet, CreateTaskSheetProp
 
     useImperativeHandle(ref, () => sheetRef.current as BottomSheet);
 
+    useEffect(() => {
+      if (isVisible) {
+        sheetRef.current?.expand();
+      } else {
+        sheetRef.current?.close();
+      }
+    }, [isVisible]);
+
     const handleSheetChange = useCallback((index: number) => {
       if (index >= 0) {
         setTimeout(() => {

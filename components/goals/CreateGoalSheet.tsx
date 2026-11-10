@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useImperativeHandle, useRef } from 'react';
+import React, { useState, useCallback, useImperativeHandle, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,14 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
     const inputRef = useRef<any>(null);
 
     useImperativeHandle(ref, () => sheetRef.current as BottomSheet);
+
+    useEffect(() => {
+      if (isVisible) {
+        sheetRef.current?.expand();
+      } else {
+        sheetRef.current?.close();
+      }
+    }, [isVisible]);
  
     const handleSheetChange = useCallback((index: number) => {
       if (index >= 0) {
