@@ -59,7 +59,7 @@ const HighlightText = ({ text, query, style }: { text: string; query: string; st
 export const getStatusLabel = (status: SyllabusStatus): string => {
   switch (status) {
     case 'not_started':
-      return 'To Do';
+      return 'Status: NA';
     case 'in_progress':
       return 'Studying';
     case 'done':
@@ -67,7 +67,7 @@ export const getStatusLabel = (status: SyllabusStatus): string => {
     case 'needs_revision':
       return 'Revise';
     default:
-      return 'To Do';
+      return 'Status: NA';
   }
 };
 
@@ -75,7 +75,7 @@ export const getStatusLabel = (status: SyllabusStatus): string => {
 export const getStatusSymbol = (status: SyllabusStatus): string => {
   switch (status) {
     case 'not_started':
-      return 'To Do';
+      return 'Status: NA';
     case 'in_progress':
       return 'Studying';
     case 'done':
@@ -83,7 +83,7 @@ export const getStatusSymbol = (status: SyllabusStatus): string => {
     case 'needs_revision':
       return 'Revise';
     default:
-      return 'To Do';
+      return 'Status: NA';
   }
 };
 
@@ -370,6 +370,20 @@ export const ChapterRow: React.FC<ChapterRowProps> = ({
                     >
                       {getStatusLabel(topic.status as SyllabusStatus)}
                     </Text>
+                    <ChevronDown
+                      size={10}
+                      color={
+                        isDone
+                          ? '#00B894'
+                          : isInProgress
+                          ? '#5B4FE8'
+                          : isRevision
+                          ? '#E8A020'
+                          : '#8E8E9E'
+                      }
+                      style={{ marginLeft: 3 }}
+                      strokeWidth={2.2}
+                    />
                   </TouchableOpacity>
                 )}
               </View>
@@ -635,24 +649,35 @@ const styles = StyleSheet.create({
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F3EE',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#ECEBE6',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,
+    shadowColor: '#17172A',
+    shadowOffset: { width: 0, height: 1.5 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1.5,
   },
   statusPillDone: {
     backgroundColor: '#E2F9F3',
     borderColor: '#B3F2E3',
+    shadowColor: '#00B894',
+    shadowOpacity: 0.08,
   },
   statusPillProgress: {
     backgroundColor: '#EEEDFA',
     borderColor: '#D6D1F9',
+    shadowColor: '#5B4FE8',
+    shadowOpacity: 0.08,
   },
   statusPillRevision: {
     backgroundColor: '#FEF3DC',
     borderColor: '#FCE8C3',
+    shadowColor: '#E8A020',
+    shadowOpacity: 0.08,
   },
   statusPillText: {
     fontFamily: 'DMSans-Medium',

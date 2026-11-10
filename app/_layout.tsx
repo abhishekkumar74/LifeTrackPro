@@ -246,58 +246,73 @@ function RootLayout() {
       }
       
       if (__DEV__) {
-        console.log('Incoming deep link captured');
+        console.log('Incoming deep link captured:', url);
       }
       
-      const extractTokens = (urlStr: string) => {
-        let tokenPart = '';
-        const hashIdx = urlStr.indexOf('#');
-        if (hashIdx !== -1) {
-          tokenPart = urlStr.slice(hashIdx + 1);
-        } else {
-          const queryIdx = urlStr.indexOf('?');
-          if (queryIdx !== -1) {
-            tokenPart = urlStr.slice(queryIdx + 1);
-          }
-        }
-        if (!tokenPart) return null;
+      const params = new Map<string, string>();
+      const queryString = url.includes('?') ? url.split('?')[1]?.split('#')[0] : '';
+      const hashString = url.includes('#') ? url.split('#')[1]?.split('?')[0] : '';
 
-        const parts = tokenPart.split('&');
-        let accessToken = '';
-        let refreshToken = '';
-        for (const part of parts) {
-          const [key, val] = part.split('=');
-          if (key === 'access_token') accessToken = decodeURIComponent(val);
-          if (key === 'refresh_token') refreshToken = decodeURIComponent(val);
+      [queryString, hashString].forEach((str) => {
+        if (str) {
+          const sp = new URLSearchParams(str);
+          sp.forEach((val, key) => {
+            params.set(key, val);
+          });
         }
-        return accessToken ? { accessToken, refreshToken } : null;
-      };
+      });
 
-      const tokens = extractTokens(url);
-      if (tokens) {
+      const errorDescription = params.get('error_description') || params.get('error');
+      if (errorDescription) {
+        if (__DEV__) console.warn('Deep link auth error:', errorDescription);
+        Alert.alert('Authentication Notice', decodeURIComponent(errorDescription.replace(/\+/g, ' ')));
+        return;
+      }
+
+      const code = params.get('code');
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token') || '';
+
+      if (code) {
         setLoading(true);
         try {
-          const { data, error } = await supabase.auth.setSession({
-            access_token: tokens.accessToken,
-            refresh_token: tokens.refreshToken || '',
-          });
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
-            if (__DEV__) {
-              console.error('Failed to set session from deep link:', error.message);
-            }
+            if (__DEV__) console.error('PKCE exchange error:', error.message);
           } else if (data.session) {
-            if (__DEV__) {
-              console.log('Successfully established session from deep link');
-            }
             setSession(data.session);
             setSentryUser(data.session.user.id);
             identifyUser(data.session.user.id, { email: data.session.user.email });
             await fetchProfile(data.session.user.id);
+            if (url.includes('reset-password')) {
+              router.replace('/reset-password');
+            }
           }
         } catch (err) {
-          if (__DEV__) {
-            console.error('Unexpected error setting session from deep link:', err);
+          if (__DEV__) console.error('Unexpected error exchanging PKCE code:', err);
+        } finally {
+          setLoading(false);
+        }
+      } else if (accessToken) {
+        setLoading(true);
+        try {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error) {
+            if (__DEV__) console.error('Failed to set session from deep link:', error.message);
+          } else if (data.session) {
+            setSession(data.session);
+            setSentryUser(data.session.user.id);
+            identifyUser(data.session.user.id, { email: data.session.user.email });
+            await fetchProfile(data.session.user.id);
+            if (url.includes('reset-password')) {
+              router.replace('/reset-password');
+            }
           }
+        } catch (err) {
+          if (__DEV__) console.error('Unexpected error setting session from deep link:', err);
         } finally {
           setLoading(false);
         }
