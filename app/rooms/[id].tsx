@@ -1660,7 +1660,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           /* CHAT & FEED TAB */
           <KeyboardAvoidingView
             style={{ flex: 1, backgroundColor: '#0D0C1D' }}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 112 : 0}
           >
             {/* Sticky Mini Bar */}
@@ -1760,7 +1760,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <TouchableOpacity
             style={styles.modalOverlay}

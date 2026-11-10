@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   StatusBar,
   Modal,
   InputAccessoryView,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Href } from 'expo-router';
@@ -85,6 +86,26 @@ export default function CreateRoomScreen(): React.JSX.Element {
   // Duration Modal State
   const [isDurationModalOpen, setIsDurationModalOpen] = useState(false);
   const [customDurationInput, setCustomDurationInput] = useState('');
+
+  // Keyboard avoidance and auto-scroll state
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const subjectScrollRef = useRef<ScrollView>(null);
+  const durationScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardOpen(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardOpen(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const subjectsToDisplay = useMemo(() => {
     const list = ['General', 'General Skills', ...profileSubjects];
@@ -188,7 +209,7 @@ export default function CreateRoomScreen(): React.JSX.Element {
 
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           style={styles.scrollView}
@@ -735,114 +756,134 @@ export default function CreateRoomScreen(): React.JSX.Element {
         transparent={true}
         onRequestClose={() => setIsSubjectModalOpen(false)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setIsSubjectModalOpen(false)}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <View
-            style={[styles.modalSheet, { paddingBottom: insets.bottom + 20 }]}
-            onStartShouldSetResponder={() => true}
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setIsSubjectModalOpen(false)}
           >
-            <View style={styles.modalSheetTopRow}>
-              <Text style={styles.modalSheetTitle}>Select Subject</Text>
-              <TouchableOpacity
-                style={styles.modalCloseCircle}
-                onPress={() => setIsSubjectModalOpen(false)}
-                activeOpacity={0.7}
+            <View
+              style={[styles.modalSheet, { paddingBottom: isKeyboardOpen ? 12 : insets.bottom + 20 }]}
+              onStartShouldSetResponder={() => true}
+            >
+              <View style={styles.modalSheetTopRow}>
+                <Text style={styles.modalSheetTitle}>Select Subject</Text>
+                <TouchableOpacity
+                  style={styles.modalCloseCircle}
+                  onPress={() => setIsSubjectModalOpen(false)}
+                  activeOpacity={0.7}
+                >
+                  <X size={15} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                ref={subjectScrollRef}
+                style={styles.modalListScroll}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
               >
-                <X size={15} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalListScroll} showsVerticalScrollIndicator={false}>
-              {subjectsToDisplay.map((sub) => {
-                const isSelected = selectedSubject === sub && !isCustomSubjectActive;
-                const dotColor = getSubjectColor(sub);
-                return (
-                  <TouchableOpacity
-                    key={sub}
-                    style={[styles.modalOptionRow, isSelected && styles.modalOptionRowSelected]}
-                    onPress={() => handleSelectSubject(sub)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.subjectRowLeft}>
-                      <View style={[styles.subjectDotIndicator, { backgroundColor: dotColor }]} />
-                      <Text
-                        style={[
-                          styles.modalOptionText,
-                          isSelected && styles.modalOptionTextSelected,
-                        ]}
-                      >
-                        {sub}
-                      </Text>
-                    </View>
-                    {isSelected && <Check size={16} color="#5B4FE8" strokeWidth={2.5} />}
-                  </TouchableOpacity>
-                );
-              })}
-
-              {/* OTHER / CUSTOM SUBJECT OPTION */}
-              <TouchableOpacity
-                style={[
-                  styles.modalOptionRow,
-                  isCustomSubjectActive && styles.modalOptionRowSelected,
-                ]}
-                onPress={() => setIsCustomSubjectActive(true)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.otherOptionTitleRow}>
-                  <Plus size={16} color="#5B4FE8" style={{ marginRight: 8 }} />
-                  <Text
-                    style={[
-                      styles.modalOptionText,
-                      isCustomSubjectActive && styles.modalOptionTextSelected,
-                    ]}
-                  >
-                    Other (Custom Subject)
-                  </Text>
-                </View>
-                {isCustomSubjectActive && <Check size={16} color="#5B4FE8" strokeWidth={2.5} />}
-              </TouchableOpacity>
-
-              {/* INLINE CUSTOM SUBJECT INPUT WITH CHARACTER LIMIT */}
-              {isCustomSubjectActive && (
-                <View style={styles.customBoxWrapper}>
-                  <View style={styles.customInputContainer}>
-                    <TextInput
-                      style={styles.customInputField}
-                      placeholder="e.g. Inorganic Chemistry"
-                      placeholderTextColor="#94A3B8"
-                      value={customSubjectInput}
-                      onChangeText={(val) => {
-                        const cleaned = val.replace(/[<>"';&]/g, '');
-                        setCustomSubjectInput(cleaned.slice(0, 30));
-                      }}
-                      maxLength={30}
-                      autoFocus={true}
-                      returnKeyType="done"
-                      onSubmitEditing={handleApplyCustomSubject}
-                    />
+                {subjectsToDisplay.map((sub) => {
+                  const isSelected = selectedSubject === sub && !isCustomSubjectActive;
+                  const dotColor = getSubjectColor(sub);
+                  return (
                     <TouchableOpacity
-                      style={[
-                        styles.customApplyBtn,
-                        !customSubjectInput.trim() && styles.customApplyBtnDisabled,
-                      ]}
-                      onPress={handleApplyCustomSubject}
-                      disabled={!customSubjectInput.trim()}
-                      activeOpacity={0.8}
+                      key={sub}
+                      style={[styles.modalOptionRow, isSelected && styles.modalOptionRowSelected]}
+                      onPress={() => handleSelectSubject(sub)}
+                      activeOpacity={0.7}
                     >
-                      <Text style={styles.customApplyBtnText}>Apply</Text>
+                      <View style={styles.subjectRowLeft}>
+                        <View style={[styles.subjectDotIndicator, { backgroundColor: dotColor }]} />
+                        <Text
+                          style={[
+                            styles.modalOptionText,
+                            isSelected && styles.modalOptionTextSelected,
+                          ]}
+                        >
+                          {sub}
+                        </Text>
+                      </View>
+                      {isSelected && <Check size={16} color="#5B4FE8" strokeWidth={2.5} />}
                     </TouchableOpacity>
+                  );
+                })}
+
+                {/* OTHER / CUSTOM SUBJECT OPTION */}
+                <TouchableOpacity
+                  style={[
+                    styles.modalOptionRow,
+                    isCustomSubjectActive && styles.modalOptionRowSelected,
+                  ]}
+                  onPress={() => {
+                    setIsCustomSubjectActive(true);
+                    setTimeout(() => {
+                      subjectScrollRef.current?.scrollToEnd({ animated: true });
+                    }, 120);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.otherOptionTitleRow}>
+                    <Plus size={16} color="#5B4FE8" style={{ marginRight: 8 }} />
+                    <Text
+                      style={[
+                        styles.modalOptionText,
+                        isCustomSubjectActive && styles.modalOptionTextSelected,
+                      ]}
+                    >
+                      Other (Custom Subject)
+                    </Text>
                   </View>
-                  <Text style={styles.customInputCharCount}>
-                    {customSubjectInput.length}/30 characters
-                  </Text>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
+                  {isCustomSubjectActive && <Check size={16} color="#5B4FE8" strokeWidth={2.5} />}
+                </TouchableOpacity>
+
+                {/* INLINE CUSTOM SUBJECT INPUT WITH CHARACTER LIMIT */}
+                {isCustomSubjectActive && (
+                  <View style={styles.customBoxWrapper}>
+                    <View style={styles.customInputContainer}>
+                      <TextInput
+                        style={styles.customInputField}
+                        placeholder="e.g. Inorganic Chemistry"
+                        placeholderTextColor="#94A3B8"
+                        value={customSubjectInput}
+                        onChangeText={(val) => {
+                          const cleaned = val.replace(/[<>"';&]/g, '');
+                          setCustomSubjectInput(cleaned.slice(0, 30));
+                        }}
+                        maxLength={30}
+                        autoFocus={true}
+                        returnKeyType="done"
+                        onFocus={() => {
+                          setTimeout(() => {
+                            subjectScrollRef.current?.scrollToEnd({ animated: true });
+                          }, 120);
+                        }}
+                        onSubmitEditing={handleApplyCustomSubject}
+                      />
+                      <TouchableOpacity
+                        style={[
+                          styles.customApplyBtn,
+                          !customSubjectInput.trim() && styles.customApplyBtnDisabled,
+                        ]}
+                        onPress={handleApplyCustomSubject}
+                        disabled={!customSubjectInput.trim()}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.customApplyBtnText}>Apply</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.customInputCharCount}>
+                      {customSubjectInput.length}/30 characters
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* MODAL 2: DURATION SELECTOR (STRICT NUMBERS IN MINUTES ONLY) */}
@@ -852,104 +893,119 @@ export default function CreateRoomScreen(): React.JSX.Element {
         transparent={true}
         onRequestClose={() => setIsDurationModalOpen(false)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setIsDurationModalOpen(false)}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <View
-            style={[styles.modalSheet, { paddingBottom: insets.bottom + 20 }]}
-            onStartShouldSetResponder={() => true}
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setIsDurationModalOpen(false)}
           >
-            <View style={styles.modalSheetTopRow}>
-              <Text style={styles.modalSheetTitle}>Focus Duration</Text>
-              <TouchableOpacity
-                style={styles.modalCloseCircle}
-                onPress={() => setIsDurationModalOpen(false)}
-                activeOpacity={0.7}
-              >
-                <X size={15} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalListScroll} showsVerticalScrollIndicator={false}>
-              {PRESET_DURATIONS.map((item) => {
-                const isSelected = timerMinutes === item.duration;
-                return (
-                  <TouchableOpacity
-                    key={item.duration}
-                    style={[styles.modalOptionRow, isSelected && styles.modalOptionRowSelected]}
-                    onPress={() => handleSelectDuration(item.duration)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.durationOptionInfo}>
-                      <Text
-                        style={[
-                          styles.modalOptionText,
-                          isSelected && styles.modalOptionTextSelected,
-                        ]}
-                      >
-                        {item.duration} min
-                      </Text>
-                      <Text style={styles.durationOptionBadge}>{item.badge}</Text>
-                    </View>
-                    {isSelected && <Check size={16} color="#5B4FE8" strokeWidth={2.5} />}
-                  </TouchableOpacity>
-                );
-              })}
-
-              {/* STRICT NUMERIC CUSTOM DURATION SECTION */}
-              <View style={styles.customDurationSection}>
-                <Text style={styles.customDurationSectionLabel}>OR SET CUSTOM MINUTES (5 - 300)</Text>
-                <View style={styles.customDurationInputRow}>
-                  <View style={styles.numericInputBox}>
-                    <TextInput
-                      style={styles.numericInputField}
-                      placeholder="e.g. 45"
-                      placeholderTextColor="#94A3B8"
-                      value={customDurationInput}
-                      onChangeText={(val) => {
-                        // STRICTLY NUMBERS ONLY (NO LETTERS OR SPECIAL CHARACTERS)
-                        const numericOnly = val.replace(/[^0-9]/g, '');
-                        setCustomDurationInput(numericOnly.slice(0, 3));
-                      }}
-                      keyboardType="number-pad"
-                      maxLength={3}
-                      inputAccessoryViewID={Platform.OS === 'ios' ? 'emptyCustomDurationAccessory' : undefined}
-                      onSubmitEditing={handleApplyCustomDuration}
-                    />
-                    <Text style={styles.minutesSuffix}>min</Text>
-                  </View>
-
-                  {Platform.OS === 'ios' && (
-                    <InputAccessoryView nativeID="emptyCustomDurationAccessory">
-                      <View />
-                    </InputAccessoryView>
-                  )}
-
-                  <TouchableOpacity
-                    style={[
-                      styles.customApplyBtn,
-                      (!customDurationInput.trim() ||
-                        parseInt(customDurationInput, 10) < 5 ||
-                        parseInt(customDurationInput, 10) > 300) &&
-                        styles.customApplyBtnDisabled,
-                    ]}
-                    onPress={handleApplyCustomDuration}
-                    disabled={
-                      !customDurationInput.trim() ||
-                      parseInt(customDurationInput, 10) < 5 ||
-                      parseInt(customDurationInput, 10) > 300
-                    }
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.customApplyBtnText}>Set</Text>
-                  </TouchableOpacity>
-                </View>
+            <View
+              style={[styles.modalSheet, { paddingBottom: isKeyboardOpen ? 12 : insets.bottom + 20 }]}
+              onStartShouldSetResponder={() => true}
+            >
+              <View style={styles.modalSheetTopRow}>
+                <Text style={styles.modalSheetTitle}>Focus Duration</Text>
+                <TouchableOpacity
+                  style={styles.modalCloseCircle}
+                  onPress={() => setIsDurationModalOpen(false)}
+                  activeOpacity={0.7}
+                >
+                  <X size={15} color="#64748B" />
+                </TouchableOpacity>
               </View>
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
+
+              <ScrollView
+                ref={durationScrollRef}
+                style={styles.modalListScroll}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {PRESET_DURATIONS.map((item) => {
+                  const isSelected = timerMinutes === item.duration;
+                  return (
+                    <TouchableOpacity
+                      key={item.duration}
+                      style={[styles.modalOptionRow, isSelected && styles.modalOptionRowSelected]}
+                      onPress={() => handleSelectDuration(item.duration)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.durationOptionInfo}>
+                        <Text
+                          style={[
+                            styles.modalOptionText,
+                            isSelected && styles.modalOptionTextSelected,
+                          ]}
+                        >
+                          {item.duration} min
+                        </Text>
+                        <Text style={styles.durationOptionBadge}>{item.badge}</Text>
+                      </View>
+                      {isSelected && <Check size={16} color="#5B4FE8" strokeWidth={2.5} />}
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {/* STRICT NUMERIC CUSTOM DURATION SECTION */}
+                <View style={styles.customDurationSection}>
+                  <Text style={styles.customDurationSectionLabel}>OR SET CUSTOM MINUTES (5 - 300)</Text>
+                  <View style={styles.customDurationInputRow}>
+                    <View style={styles.numericInputBox}>
+                      <TextInput
+                        style={styles.numericInputField}
+                        placeholder="e.g. 45"
+                        placeholderTextColor="#94A3B8"
+                        value={customDurationInput}
+                        onChangeText={(val) => {
+                          // STRICTLY NUMBERS ONLY (NO LETTERS OR SPECIAL CHARACTERS)
+                          const numericOnly = val.replace(/[^0-9]/g, '');
+                          setCustomDurationInput(numericOnly.slice(0, 3));
+                        }}
+                        keyboardType="number-pad"
+                        maxLength={3}
+                        onFocus={() => {
+                          setTimeout(() => {
+                            durationScrollRef.current?.scrollToEnd({ animated: true });
+                          }, 120);
+                        }}
+                        inputAccessoryViewID={Platform.OS === 'ios' ? 'emptyCustomDurationAccessory' : undefined}
+                        onSubmitEditing={handleApplyCustomDuration}
+                      />
+                      <Text style={styles.minutesSuffix}>min</Text>
+                    </View>
+
+                    {Platform.OS === 'ios' && (
+                      <InputAccessoryView nativeID="emptyCustomDurationAccessory">
+                        <View />
+                      </InputAccessoryView>
+                    )}
+
+                    <TouchableOpacity
+                      style={[
+                        styles.customApplyBtn,
+                        (!customDurationInput.trim() ||
+                          parseInt(customDurationInput, 10) < 5 ||
+                          parseInt(customDurationInput, 10) > 300) &&
+                          styles.customApplyBtnDisabled,
+                      ]}
+                      onPress={handleApplyCustomDuration}
+                      disabled={
+                        !customDurationInput.trim() ||
+                        parseInt(customDurationInput, 10) < 5 ||
+                        parseInt(customDurationInput, 10) > 300
+                      }
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.customApplyBtnText}>Set</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -1466,7 +1522,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingTop: 14,
     paddingHorizontal: 18,
-    maxHeight: '65%',
+    maxHeight: '82%',
   },
   modalSheetTopRow: {
     flexDirection: 'row',
