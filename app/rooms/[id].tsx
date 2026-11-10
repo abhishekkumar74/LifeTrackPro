@@ -508,25 +508,39 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   }, [musicVolume, isPlayingMusic, currentStation, playStation]);
 
   const handleHostSelectStation = useCallback((station: MusicStation) => {
+    if (!canManageRoom) {
+      useUiStore.getState().showToast('Only room host or co-host can broadcast music for the room.', 'info');
+      return;
+    }
     setCurrentStation(station);
     setIsPlayingMusic(true);
     setIsLocallyMuted(false);
     isLocallyMutedRef.current = false;
     playStation(station, musicVolume);
 
-    if (canManageRoom && reactionChannelRef.current) {
+    updatePresenceStatus({
+      musicStationId: station.id,
+      isPlayingMusic: true,
+    });
+
+    if (reactionChannelRef.current) {
       reactionChannelRef.current.send({
         type: 'broadcast',
         event: 'music',
         payload: {
           stationId: station.id,
           isPlaying: true,
+          senderId: currentUserId,
         },
       });
     }
-  }, [canManageRoom, musicVolume, playStation]);
+  }, [canManageRoom, musicVolume, playStation, currentUserId, updatePresenceStatus]);
 
   const handleTogglePlay = useCallback(() => {
+    if (!canManageRoom) {
+      useUiStore.getState().showToast('Only room host or co-host can control room audio. Adjust device volume below.', 'info');
+      return;
+    }
     const nextPlaying = !isPlayingMusic;
     setIsPlayingMusic(nextPlaying);
     if (nextPlaying) {
@@ -537,31 +551,54 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       stopMusic();
     }
 
-    if (canManageRoom && reactionChannelRef.current) {
+    updatePresenceStatus({
+      musicStationId: currentStation.id,
+      isPlayingMusic: nextPlaying,
+    });
+
+    if (reactionChannelRef.current) {
       reactionChannelRef.current.send({
         type: 'broadcast',
         event: 'music',
         payload: {
           stationId: currentStation.id,
           isPlaying: nextPlaying,
+          senderId: currentUserId,
         },
       });
     }
-  }, [canManageRoom, isPlayingMusic, currentStation, musicVolume, playStation, stopMusic]);
+  }, [canManageRoom, isPlayingMusic, currentStation, musicVolume, playStation, stopMusic, currentUserId, updatePresenceStatus]);
 
   const handleHostTogglePlay = handleTogglePlay;
   const handleMemberTogglePlay = handleTogglePlay;
 
-  // Auto-start ambient station if room type is 'music'
+  // Auto-start ambient station if room type is 'music' (host only broadcasts initial music)
   const hasAutoStartedRef = useRef(false);
   useEffect(() => {
     if (!room || hasAutoStartedRef.current) return;
     if (room.room_type === 'music') {
       hasAutoStartedRef.current = true;
-      setIsPlayingMusic(true);
-      playStation(currentStation, musicVolume);
+      if (isHost) {
+        setIsPlayingMusic(true);
+        playStation(currentStation, musicVolume);
+        updatePresenceStatus({
+          musicStationId: currentStation.id,
+          isPlayingMusic: true,
+        });
+        if (reactionChannelRef.current) {
+          reactionChannelRef.current.send({
+            type: 'broadcast',
+            event: 'music',
+            payload: {
+              stationId: currentStation.id,
+              isPlaying: true,
+              senderId: currentUserId,
+            },
+          });
+        }
+      }
     }
-  }, [room, currentStation, musicVolume, playStation]);
+  }, [room, isHost, currentStation, musicVolume, playStation, currentUserId, updatePresenceStatus]);
 
   // Clean up sound on unmount
   useEffect(() => {
@@ -709,6 +746,12 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   stopMusicRef.current = stopMusic;
   const handleRoomExpiredRef = useRef(handleRoomExpired);
   handleRoomExpiredRef.current = handleRoomExpired;
+  const currentStationRef = useRef(currentStation);
+  currentStationRef.current = currentStation;
+  const isPlayingMusicRef = useRef(isPlayingMusic);
+  isPlayingMusicRef.current = isPlayingMusic;
+  const canManageRoomRef = useRef(canManageRoom);
+  canManageRoomRef.current = canManageRoom;
 
   useEffect(() => {
     if (!id) return;
@@ -750,6 +793,10 @@ export default function ActiveRoomScreen(): React.JSX.Element {
         }
       })
       .on('broadcast', { event: 'music' }, ({ payload }) => {
+        if (payload?.senderId && payload.senderId === currentUserId) {
+          // Skip echo of own broadcast to prevent duplicate audio reload race
+          return;
+        }
         const station = STATIONS.find((s) => s.id === payload.stationId) || STATIONS[0];
         setCurrentStation(station);
         setIsPlayingMusic(payload.isPlaying);
@@ -757,6 +804,19 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           playStationRef.current(station, isLocallyMutedRef.current ? 0 : musicVolumeRef.current);
         } else {
           stopMusicRef.current();
+        }
+      })
+      .on('broadcast', { event: 'request_music_state' }, () => {
+        if (canManageRoomRef.current && reactionChannelRef.current) {
+          reactionChannelRef.current.send({
+            type: 'broadcast',
+            event: 'music',
+            payload: {
+              stationId: currentStationRef.current.id,
+              isPlaying: isPlayingMusicRef.current,
+              senderId: currentUserId,
+            },
+          });
         }
       })
       .on('broadcast', { event: 'kick_member' }, async ({ payload }) => {
@@ -799,7 +859,17 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       .on('broadcast', { event: 'room_ended' }, () => {
         handleRoomExpiredRef.current();
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (!canManageRoomRef.current) {
+            channel.send({
+              type: 'broadcast',
+              event: 'request_music_state',
+              payload: { requesterId: currentUserId },
+            });
+          }
+        }
+      });
 
     reactionChannelRef.current = channel;
 
@@ -808,6 +878,31 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       reactionChannelRef.current = null;
     };
   }, [id, currentUserId]);
+
+  // Presence-based fallback for music synchronization across room members
+  useEffect(() => {
+    if (canManageRoom || !room?.host_id) return;
+    const hostMember = members.find((m) => m.userId === room.host_id);
+    if (!hostMember) return;
+
+    if (hostMember.musicStationId && hostMember.musicStationId !== currentStationRef.current.id) {
+      const station = STATIONS.find((s) => s.id === hostMember.musicStationId) || STATIONS[0];
+      setCurrentStation(station);
+      if (hostMember.isPlayingMusic) {
+        setIsPlayingMusic(true);
+        playStation(station, isLocallyMutedRef.current ? 0 : musicVolume);
+      }
+    }
+
+    if (hostMember.isPlayingMusic !== undefined && hostMember.isPlayingMusic !== isPlayingMusicRef.current) {
+      setIsPlayingMusic(hostMember.isPlayingMusic);
+      if (hostMember.isPlayingMusic) {
+        playStation(currentStationRef.current, isLocallyMutedRef.current ? 0 : musicVolume);
+      } else {
+        stopMusic();
+      }
+    }
+  }, [members, room?.host_id, canManageRoom, musicVolume, playStation, stopMusic]);
 
   const sendCheerOrNudge = (targetUserId: string, type: 'cheer' | 'nudge') => {
     if (reactionChannelRef.current) {
@@ -1374,19 +1469,6 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                       <Text style={styles.timerMinutesSub} numberOfLines={1}>
                         {room.timer_minutes} min • Studying
                       </Text>
-
-                      {/* Play / Pause circular button */}
-                      <TouchableOpacity
-                        style={styles.timerPlayPauseBtn}
-                        onPress={handleTogglePlay}
-                        activeOpacity={0.8}
-                      >
-                        {isPlayingMusic ? (
-                          <Pause size={15} color="#FFFFFF" fill="#FFFFFF" />
-                        ) : (
-                          <Play size={15} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 2 }} />
-                        )}
-                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
@@ -1407,13 +1489,17 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                         style={[styles.soundChipBtn, isCurrent && styles.soundChipBtnActive]}
                         onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                          if (!canManageRoom) {
+                            useUiStore.getState().showToast('Only host or co-host can broadcast room soundscapes.', 'info');
+                            return;
+                          }
                           if (isCurrent) {
                             handleTogglePlay();
                           } else {
                             handleHostSelectStation(station);
                           }
                         }}
-                        activeOpacity={0.7}
+                        activeOpacity={canManageRoom ? 0.7 : 0.9}
                       >
                         <IconComp
                           size={14}
@@ -1765,7 +1851,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                     <Text style={styles.soundModalSubtitle}>
                       {canManageRoom
                         ? 'Admin Broadcast • Plays for all members'
-                        : 'Personal Audio • Select soundscape & volume'}
+                        : 'Room Audio • Controlled by Host'}
                     </Text>
                   </View>
                 </View>
@@ -1774,40 +1860,63 @@ export default function ActiveRoomScreen(): React.JSX.Element {
                 </TouchableOpacity>
               </View>
 
-              {/* Master Play/Pause Button */}
-              <TouchableOpacity
-                style={[
-                  styles.masterPlayBtn,
-                  isPlayingMusic ? styles.masterPlayBtnPlaying : styles.masterPlayBtnPaused,
-                ]}
-                onPress={handleTogglePlay}
-                activeOpacity={0.8}
-              >
-                {isPlayingMusic ? <Pause size={15} color="#FFFFFF" /> : <Play size={15} color="#FFFFFF" />}
-                <Text style={styles.masterPlayBtnText}>
-                  {isPlayingMusic
-                    ? (canManageRoom ? 'Pause Audio for Room' : 'Pause Audio')
-                    : (canManageRoom ? 'Broadcast Audio to Room' : 'Play Soundscape')}
-                </Text>
-              </TouchableOpacity>
+              {/* Master Play/Pause Button / Member Audio Status */}
+              {canManageRoom ? (
+                <TouchableOpacity
+                  style={[
+                    styles.masterPlayBtn,
+                    isPlayingMusic ? styles.masterPlayBtnPlaying : styles.masterPlayBtnPaused,
+                  ]}
+                  onPress={handleTogglePlay}
+                  activeOpacity={0.8}
+                >
+                  {isPlayingMusic ? <Pause size={15} color="#FFFFFF" /> : <Play size={15} color="#FFFFFF" />}
+                  <Text style={styles.masterPlayBtnText}>
+                    {isPlayingMusic ? 'Pause Audio for Room' : 'Broadcast Audio to Room'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.memberSoundStatusBanner}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Shield size={14} color="#A78BFA" />
+                    <Text style={styles.memberSoundStatusText}>
+                      {isPlayingMusic ? `Playing "${currentStation.name}" for room` : 'Room audio paused by Host'}
+                    </Text>
+                  </View>
+                  <Text style={styles.memberSoundStatusSub}>Adjust personal volume or mute below</Text>
+                </View>
+              )}
 
               {/* Stations List */}
               <View style={styles.soundStationsList}>
                 {STATIONS.map((station) => {
                   const isSelected = currentStation.id === station.id;
+                  const IconComp = SOUND_ICONS[station.id] || Music;
                   return (
                     <TouchableOpacity
                       key={station.id}
                       style={[styles.soundStationCard, isSelected && styles.soundStationCardActive]}
                       onPress={() => {
+                        if (!canManageRoom) {
+                          useUiStore.getState().showToast(
+                            'Station selection is controlled by the room host/admin.',
+                            'info'
+                          );
+                          return;
+                        }
                         Haptics.selectionAsync().catch(() => {});
                         handleHostSelectStation(station);
                       }}
-                      activeOpacity={0.8}
+                      activeOpacity={canManageRoom ? 0.8 : 1}
                     >
-                      <View style={styles.stationInfoLeft}>
-                        <Text style={styles.stationNameText}>{station.name}</Text>
-                        <Text style={styles.stationGenreText}>{station.genre}</Text>
+                      <View style={styles.stationInfoRow}>
+                        <IconComp size={15} color={isSelected ? '#A78BFA' : '#9D9AA8'} />
+                        <Text style={styles.stationNameText} numberOfLines={1}>
+                          {station.name}
+                        </Text>
+                        <Text style={styles.stationGenreInlineText} numberOfLines={1}>
+                          • {station.genre}
+                        </Text>
                       </View>
                       {isSelected && (
                         <View style={styles.stationActivePill}>
@@ -3090,16 +3199,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   soundStationsList: {
-    gap: 8,
-    marginVertical: 12,
+    gap: 6,
+    marginVertical: 10,
   },
   soundStationCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#231F44',
-    padding: 12,
-    borderRadius: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.06)',
   },
@@ -3107,30 +3217,54 @@ const styles = StyleSheet.create({
     borderColor: '#7C5CFC',
     backgroundColor: '#2B2456',
   },
-  stationInfoLeft: {
+  stationInfoRow: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginRight: 8,
   },
   stationNameText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 13,
     color: '#FFFFFF',
   },
-  stationGenreText: {
+  stationGenreInlineText: {
     fontFamily: 'DMSans',
     fontSize: 11,
     color: '#9D9AA8',
-    marginTop: 2,
   },
   stationActivePill: {
     backgroundColor: '#7C5CFC',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: 6,
   },
   stationActivePillText: {
     fontFamily: 'DMSans-Bold',
     fontSize: 10,
     color: '#FFFFFF',
+  },
+  memberSoundStatusBanner: {
+    backgroundColor: 'rgba(124, 92, 252, 0.08)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(124, 92, 252, 0.2)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 3,
+    marginBottom: 4,
+  },
+  memberSoundStatusText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 12,
+    color: '#FFFFFF',
+  },
+  memberSoundStatusSub: {
+    fontFamily: 'DMSans',
+    fontSize: 10.5,
+    color: '#9D9AA8',
   },
   inlineVolumeSliderRow: {
     marginTop: 10,

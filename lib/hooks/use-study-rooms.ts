@@ -23,6 +23,8 @@ export interface RoomMember {
   checkinGoal?: string | null;
   lastCheckinNote?: string | null;
   checkinTime?: string | null;
+  musicStationId?: string | null;
+  isPlayingMusic?: boolean;
 }
 
 export interface ChatMessage {
@@ -156,6 +158,8 @@ export function useRoomPresence(roomId: string) {
             checkinGoal: item.checkinGoal || null,
             lastCheckinNote: item.lastCheckinNote || null,
             checkinTime: item.checkinTime || null,
+            musicStationId: item.musicStationId || null,
+            isPlayingMusic: item.isPlayingMusic || false,
           });
         }
       }
@@ -189,6 +193,8 @@ export function useRoomPresence(roomId: string) {
             checkinGoal: null,
             lastCheckinNote: null,
             checkinTime: null,
+            musicStationId: null,
+            isPlayingMusic: false,
             ...currentPresenceData.current,
           };
           currentPresenceData.current = initialPayload;
