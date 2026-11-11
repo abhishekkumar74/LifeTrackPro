@@ -1,9 +1,34 @@
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase/client';
 import { getTodayLocal } from '@/lib/utils/date';
 import { handleSupabaseError } from '@/lib/utils/handle-error';
 import { trackEvent } from '@/lib/posthog';
 import { useNotificationStore } from '@/lib/store/notification.store';
+
+export const OFFLINE_HABIT_QUEUE_KEY = 'offline_habit_mutation_queue';
+
+export interface QueuedHabitMutation {
+  habitId: string;
+  userId: string;
+  date: string;
+  done: boolean;
+  timestamp: number;
+}
+
+export async function queueOfflineHabitToggle(mutation: QueuedHabitMutation): Promise<void> {
+  try {
+    const existing = await AsyncStorage.getItem(OFFLINE_HABIT_QUEUE_KEY);
+    const queue: QueuedHabitMutation[] = existing ? JSON.parse(existing) : [];
+    const filtered = queue.filter(
+      (m) => !(m.habitId === mutation.habitId && m.date === mutation.date)
+    );
+    filtered.push(mutation);
+    await AsyncStorage.setItem(OFFLINE_HABIT_QUEUE_KEY, JSON.stringify(filtered));
+  } catch (err) {
+    if (__DEV__) console.warn('Failed recording offline habit toggle:', err);
+  }
+}
 
 export async function toggleHabit(
   habitId: string,
@@ -33,40 +58,60 @@ export async function toggleHabit(
     Haptics.ImpactFeedbackStyle.Light
   ).catch(() => {});
   
-  // 4. Upsert to database
-  const { error } = await supabase
-    .from('habit_logs')
-    .upsert(
-      {
-        habit_id: habitId,
-        user_id: user.id,
+  // 4. Upsert to database with comprehensive rollback and offline recording
+  try {
+    const { error } = await supabase
+      .from('habit_logs')
+      .upsert(
+        {
+          habit_id: habitId,
+          user_id: user.id,
+          date: targetDate,
+          done: newDone,
+        },
+        { onConflict: 'habit_id,date' }
+      );
+    
+    // 5. Rollback on error
+    if (error) {
+      onOptimisticUpdate(currentlyDone); // revert
+      handleSupabaseError(error, 'habit_toggle');
+      await queueOfflineHabitToggle({
+        habitId,
+        userId: user.id,
         date: targetDate,
         done: newDone,
-      },
-      { onConflict: 'habit_id,date' }
-    );
-  
-  // 5. Rollback on error
-  if (error) {
-    onOptimisticUpdate(currentlyDone); // revert
-    handleSupabaseError(error, 'habit_toggle');
-  } else {
-    trackEvent('habit_toggled', {
-      habit_id: habitId,
-      done: newDone,
-      date: targetDate,
-    });
-
-    if (newDone) {
-      useNotificationStore.getState().addNotification({
-        type: 'habit',
-        title: 'Habit Completed!',
-        body: 'Great job maintaining consistency today. Keep up your momentum!',
-        time: 'Just now',
-        targetScreen: '/habits',
-        actionText: 'View Habit Streaks',
+        timestamp: Date.now(),
       });
+    } else {
+      trackEvent('habit_toggled', {
+        habit_id: habitId,
+        done: newDone,
+        date: targetDate,
+      });
+
+      if (newDone) {
+        useNotificationStore.getState().addNotification({
+          type: 'habit',
+          title: 'Habit Completed!',
+          body: 'Great job maintaining consistency today. Keep up your momentum!',
+          time: 'Just now',
+          targetScreen: '/habits',
+          actionText: 'View Habit Streaks',
+        });
+      }
     }
+  } catch (err: any) {
+    // Clean rollback on unhandled network exceptions
+    onOptimisticUpdate(currentlyDone);
+    handleSupabaseError(err, 'habit_toggle_network');
+    await queueOfflineHabitToggle({
+      habitId,
+      userId: user.id,
+      date: targetDate,
+      done: newDone,
+      timestamp: Date.now(),
+    });
   }
 }
 
@@ -89,4 +134,3 @@ export function useToggleHabit() {
 
   return { toggleHabit: toggle };
 }
-

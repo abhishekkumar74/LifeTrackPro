@@ -18,19 +18,36 @@ import { supabase } from '@/lib/supabase/client';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '@/constants/theme';
 import { STRINGS } from '@/constants/strings';
 import { AppLogo } from '@/components/ui/AppLogo';
+import { Eye, EyeOff } from 'lucide-react-native';
 
 export default function ResetPasswordScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef<ScrollView>(null);
   const passwordInputRef = useRef<TextInput>(null);
+  const confirmPasswordInputRef = useRef<TextInput>(null);
 
   // States
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [isFocused, setIsFocused] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState<'password' | 'confirmPassword' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const handleFieldFocus = (field: 'password' | 'confirmPassword') => {
+    setFocusedField(field);
+    if (field === 'confirmPassword') {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  };
+
+  const isPasswordMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+  const isPasswordMatch = confirmPassword.length > 0 && password === confirmPassword && password.length >= 6;
 
   const handleResetPassword = async (): Promise<void> => {
     if (!password.trim() || !confirmPassword.trim()) {
@@ -87,15 +104,21 @@ export default function ResetPasswordScreen(): React.JSX.Element {
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: Platform.OS === 'android' ? 16 : Math.max(insets.top, 16) }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
     >
       <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
+        ref={scrollViewRef}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 24) + 40 },
+        ]}
         keyboardShouldPersistTaps="handled"
         bounces={true}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Top Branding Section */}
+        <View style={styles.formResponsiveContainer}>
+          {/* Top Branding Section */}
         <View style={styles.brandingSection}>
           <View style={styles.logoContainer}>
             <AppLogo size={40} variant="dark" />
@@ -116,14 +139,14 @@ export default function ResetPasswordScreen(): React.JSX.Element {
               <View
                 style={[
                   styles.inputRowContainer,
-                  isFocused && styles.inputRowContainerFocused,
+                  focusedField === 'password' && styles.inputRowContainerFocused,
                   (validationError || errorMessage) && styles.inputRowContainerError,
                 ]}
               >
                 <TextInput
                   ref={passwordInputRef}
-                  style={styles.textInput}
-                  secureTextEntry
+                  style={[styles.textInput, { flex: 1, paddingRight: 8 }]}
+                  secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
                   placeholder="••••••••"
@@ -134,10 +157,26 @@ export default function ResetPasswordScreen(): React.JSX.Element {
                     if (validationError) setValidationError(null);
                     if (errorMessage) setErrorMessage(null);
                   }}
-                  onFocus={() => setIsFocused(true)}
-                  onBlur={() => setIsFocused(false)}
+                  onFocus={() => handleFieldFocus('password')}
+                  onBlur={() => setFocusedField(null)}
+                  returnKeyType="next"
+                  onSubmitEditing={() => confirmPasswordInputRef.current?.focus()}
+                  blurOnSubmit={false}
                   editable={!isLoading && !successMessage}
                 />
+                <Pressable
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  style={styles.eyeButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff size={20} color={COLORS.t3} />
+                  ) : (
+                    <Eye size={20} color={COLORS.t3} />
+                  )}
+                </Pressable>
               </View>
             </View>
 
@@ -146,13 +185,14 @@ export default function ResetPasswordScreen(): React.JSX.Element {
               <View
                 style={[
                   styles.inputRowContainer,
-                  isFocused && styles.inputRowContainerFocused,
-                  (validationError || errorMessage) && styles.inputRowContainerError,
+                  focusedField === 'confirmPassword' && styles.inputRowContainerFocused,
+                  (isPasswordMismatch || validationError || errorMessage) && styles.inputRowContainerError,
                 ]}
               >
                 <TextInput
-                  style={styles.textInput}
-                  secureTextEntry
+                  ref={confirmPasswordInputRef}
+                  style={[styles.textInput, { flex: 1, paddingRight: 8 }]}
+                  secureTextEntry={!showConfirmPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
                   placeholder="••••••••"
@@ -163,9 +203,34 @@ export default function ResetPasswordScreen(): React.JSX.Element {
                     if (validationError) setValidationError(null);
                     if (errorMessage) setErrorMessage(null);
                   }}
+                  onFocus={() => handleFieldFocus('confirmPassword')}
+                  onBlur={() => setFocusedField(null)}
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    if (!isSubmitDisabled) handleResetPassword();
+                  }}
                   editable={!isLoading && !successMessage}
                 />
+                <Pressable
+                  onPress={() => setShowConfirmPassword((prev) => !prev)}
+                  style={styles.eyeButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff size={20} color={COLORS.t3} />
+                  ) : (
+                    <Eye size={20} color={COLORS.t3} />
+                  )}
+                </Pressable>
               </View>
+              {isPasswordMismatch && (
+                <Text style={styles.errorText}>Passwords do not match.</Text>
+              )}
+              {isPasswordMatch && (
+                <Text style={styles.matchText}>Passwords match.</Text>
+              )}
             </View>
           </View>
 
@@ -213,6 +278,7 @@ export default function ResetPasswordScreen(): React.JSX.Element {
             <Text style={styles.cancelBtnText}>Back to Login</Text>
           </Pressable>
         </View>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -223,12 +289,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
-  brandingSection: {
-    height: 220,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: SPACING.md,
+  },
+  formResponsiveContainer: {
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
+    paddingVertical: SPACING.md,
+  },
+  brandingSection: {
     alignItems: 'center',
-    paddingHorizontal: SPACING.xxl,
-    marginTop: 20,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    marginBottom: SPACING.lg,
   },
   logoContainer: {
     width: 64,
@@ -305,6 +382,19 @@ const styles = StyleSheet.create({
     color: COLORS.coral,
     marginTop: SPACING.sm,
     paddingLeft: SPACING.xs,
+  },
+  matchText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 12,
+    color: '#00B894',
+    marginTop: SPACING.sm,
+    paddingLeft: SPACING.xs,
+    fontWeight: '500',
+  },
+  eyeButton: {
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   successText: {
     fontFamily: TYPOGRAPHY.fonts.sans,

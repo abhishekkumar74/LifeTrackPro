@@ -26,7 +26,7 @@ const LABEL_PRIMARY = "Make this my primary goal";
 const BTN_SUBMIT = "Create Goal";
 const TIMELINES: ('3M' | '6M' | '1Y' | '2Y' | '5Y')[] = ['3M', '6M', '1Y', '2Y', '5Y'];
 const BORDER_COLOR = '#E8E7E3';
-const SNAP_POINTS = ['75%'];
+const SNAP_POINTS = ['75%', '92%'];
  
 interface CreateGoalSheetProps {
   isVisible?: boolean;
@@ -121,6 +121,8 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
         enablePanDownToClose={true}
         backdropComponent={renderBackdrop}
         keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
         onChange={handleSheetChange}
       >
         <BottomSheetScrollView
@@ -140,7 +142,7 @@ export const CreateGoalSheet = React.forwardRef<BottomSheet, CreateGoalSheetProp
             onChangeText={setTitle}
             multiline
             numberOfLines={2}
-            maxLength={120}
+            maxLength={100}
           />
  
           {/* Timeline Selector */}
@@ -210,10 +212,9 @@ CreateGoalSheet.displayName = 'CreateGoalSheet';
 
 const styles = StyleSheet.create({
   contentContainer: {
-    flex: 1,
     paddingHorizontal: 20,
     paddingTop: 10,
-    paddingBottom: 40,
+    paddingBottom: 60,
   },
   sheetHeader: {
     fontFamily: 'Outfit-Bold',

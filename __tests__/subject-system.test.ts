@@ -13,7 +13,7 @@ describe('Profile-Based Subjects', () => {
   test('UPSC student gets GS subjects', () => {
     const subjects = getDefaultSubjectsForProfile('student', ['UPSC CSE']);
     expect(subjects).toContain('General Studies 1');
-    expect(subjects).toContain('Polity');
+    expect(subjects).toContain('General Studies 2');
     expect(subjects).not.toContain('Physics');
     expect(subjects).not.toContain('Biology');
   });

@@ -191,17 +191,17 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
     >
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <Defs>
-          {/* Main Dial Face Gradient with subtle indigo-obsidian tint or StandBy deep night phosphor */}
+          {/* Main Dial Face Gradient with vibrant deep indigo or StandBy crimson glow */}
           <RadialGradient id={dialGradId} cx="50%" cy="50%" rx="50%" ry="50%">
-            <Stop offset="0%" stopColor={isNightMode ? '#1C0407' : '#1E1C2C'} stopOpacity="0.98" />
-            <Stop offset="70%" stopColor={isNightMode ? '#100103' : '#141320'} stopOpacity="0.99" />
-            <Stop offset="100%" stopColor={isNightMode ? '#050002' : '#0C0B12'} stopOpacity="1" />
+            <Stop offset="0%" stopColor={isNightMode ? '#2B060B' : '#1D1A34'} stopOpacity="0.99" />
+            <Stop offset="65%" stopColor={isNightMode ? '#170205' : '#131122'} stopOpacity="0.99" />
+            <Stop offset="100%" stopColor={isNightMode ? '#0B0002' : '#0D0C17'} stopOpacity="1" />
           </RadialGradient>
 
           {/* Ambient Inner Aura in App Color or Night Mode Crimson Red */}
           <RadialGradient id={auraGradId} cx="50%" cy="50%" rx="50%" ry="50%">
-            <Stop offset="0%" stopColor={accentColor} stopOpacity={isNightMode ? 0.35 : 0.22} />
-            <Stop offset="65%" stopColor={accentColor} stopOpacity={isNightMode ? 0.10 : 0.05} />
+            <Stop offset="0%" stopColor={accentColor} stopOpacity={isNightMode ? 0.55 : 0.42} />
+            <Stop offset="55%" stopColor={accentColor} stopOpacity={isNightMode ? 0.24 : 0.18} />
             <Stop offset="100%" stopColor={accentColor} stopOpacity="0" />
           </RadialGradient>
         </Defs>
@@ -218,7 +218,7 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
         <Circle
           cx={center}
           cy={center}
-          r={outerRadius - 22}
+          r={outerRadius - 20}
           fill={`url(#${auraGradId})`}
         />
 
@@ -227,7 +227,7 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           cx={center}
           cy={center}
           r={sectorRadius}
-          stroke={isNightMode ? 'rgba(255, 59, 48, 0.38)' : hexToRgba(accentColor, 0.35)}
+          stroke={isNightMode ? 'rgba(255, 59, 48, 0.52)' : hexToRgba(accentColor, 0.48)}
           strokeWidth={sectorStrokeWidth}
           strokeDasharray={`${sectorCircumference} ${sectorCircumference}`}
           animatedProps={animatedSectorProps}
@@ -236,22 +236,22 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           transform={`translate(${2 * center} 0) scale(-1 1) rotate(-90 ${center} ${center})`}
         />
 
-        {/* Outer Liquid Glass Bezel Ring 1 (Highlight) */}
+        {/* Outer Liquid Glass Bezel Ring 1 (Highlight Rim) */}
         <Circle
           cx={center}
           cy={center}
           r={outerRadius + 14}
-          stroke={isNightMode ? 'rgba(255, 59, 48, 0.22)' : 'rgba(255, 255, 255, 0.09)'}
-          strokeWidth={1.5}
+          stroke={isNightMode ? 'rgba(255, 59, 48, 0.45)' : 'rgba(255, 255, 255, 0.24)'}
+          strokeWidth={1.8}
           fill="transparent"
         />
 
-        {/* Outer Liquid Glass Bezel Ring 2 (Beveled App Accent) */}
+        {/* Outer Liquid Glass Bezel Ring 2 (Vibrant Accent Bevel) */}
         <Circle
           cx={center}
           cy={center}
           r={outerRadius + 8}
-          stroke={hexToRgba(accentColor, isNightMode ? 0.35 : 0.20)}
+          stroke={hexToRgba(accentColor, isNightMode ? 0.65 : 0.55)}
           strokeWidth={2.5}
           fill="transparent"
         />
@@ -261,8 +261,8 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           cx={center}
           cy={center}
           r={outerRadius - 18}
-          stroke={isNightMode ? 'rgba(255, 59, 48, 0.18)' : 'rgba(255, 255, 255, 0.05)'}
-          strokeWidth={1}
+          stroke={isNightMode ? 'rgba(255, 59, 48, 0.40)' : hexToRgba(accentColor, 0.35)}
+          strokeWidth={1.5}
           fill="transparent"
         />
 
@@ -278,16 +278,18 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
           let strokeWidth: number;
 
           if (isResting) {
-            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.42 : 0.22);
-            strokeWidth = tick.isMajor ? 2.4 : 1.4;
+            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.70 : 0.40);
+            strokeWidth = tick.isMajor ? 2.6 : 1.6;
           } else if (isTickSwept) {
             // Illuminated ticks inside the swept color sector
-            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.95 : 0.75);
-            strokeWidth = tick.isMajor ? 2.8 : 1.7;
+            strokeColor = tick.isMajor
+              ? (isNightMode ? '#FF8880' : '#FFFFFF')
+              : hexToRgba(accentColor, 0.95);
+            strokeWidth = tick.isMajor ? 3.2 : 2.0;
           } else {
-            // Faded ticks in the remaining time (dark area)
-            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.18 : 0.08);
-            strokeWidth = tick.isMajor ? 2.0 : 1.2;
+            // Distinct remaining ticks (clearly visible contrast)
+            strokeColor = hexToRgba(accentColor, tick.isMajor ? 0.42 : 0.25);
+            strokeWidth = tick.isMajor ? 2.2 : 1.4;
           }
 
           return (
@@ -308,13 +310,13 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
         <Circle
           cx={center}
           cy={topDotY}
-          r={4}
+          r={4.5}
           fill={accentColor}
         />
         <Circle
           cx={center}
           cy={topDotY}
-          r={2}
+          r={2.5}
           fill={isNightMode ? '#FF8880' : '#FFFFFF'}
         />
       </Svg>
@@ -391,7 +393,7 @@ export const TimerCircle = React.memo<TimerCircleProps>(({
             style={[
               styles.timeDigits,
               isNightMode && { color: '#FF453A' },
-              { fontSize: size < 290 ? 46 : size < 330 ? 56 : 64 },
+              { fontSize: size < 270 ? 46 : size < 310 ? 54 : size < 350 ? 64 : 72 },
             ]}
             numberOfLines={1}
             adjustsFontSizeToFit

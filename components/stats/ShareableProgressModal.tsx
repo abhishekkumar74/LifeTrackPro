@@ -17,6 +17,7 @@ import { X, Share2, Copy, Flame, Clock, CheckSquare, Trophy, Sparkles, Check, Ar
 import { CONFIG } from '@/constants/config';
 import { AppLogo } from '@/components/ui/AppLogo';
 import { Toast } from '@/components/shared/Toast';
+import { getReferralUrl } from '@/lib/utils/referral';
 
 // Safe dynamic loaders for optional native modules
 function getSharingModule() {
@@ -78,7 +79,11 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
   }, [visible]);
 
   const getStoreUrl = () => {
-    return Platform.OS === 'ios' ? CONFIG.storeUrls.ios : CONFIG.storeUrls.android;
+    return getReferralUrl({
+      source: 'progress_card',
+      medium: 'social_share',
+      campaign: 'streak_progress',
+    });
   };
 
   const showToast = (msg: string) => {
@@ -92,7 +97,7 @@ export const ShareableProgressModal: React.FC<ShareableProgressModalProps> = ({
   const periodLabel = selectedPeriod === 'week' ? 'This Week' : selectedPeriod === 'month' ? 'This Month' : 'All-Time';
 
   const getShareText = () => {
-    return `Download LifeTrack Pro:\n${getStoreUrl()}`;
+    return `Track your goals & daily consistency with me on LifeTrack Pro:\n${getStoreUrl()}`;
   };
 
   const handleCopyCaption = async () => {

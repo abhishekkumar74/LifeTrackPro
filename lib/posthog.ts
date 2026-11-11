@@ -27,15 +27,27 @@ if (__DEV__) {
 
 /**
  * Associates an identified user with their PostHog analytics session.
+ * Automatically attaches referral attribution if the user arrived via a referral link.
  */
 export function identifyUser(userId: string, properties?: Record<string, any>) {
   if (!userId) return;
   try {
-    posthog.identify(userId, properties);
-    posthog.flush().catch(() => {});
-    if (__DEV__) {
-      console.log('[PostHog] identify:', userId, properties);
-    }
+    AsyncStorage.getItem('lifetrack_referred_by')
+      .then((referredBy) => {
+        const mergedProps = {
+          ...(properties || {}),
+          ...(referredBy ? { referred_by: referredBy } : {}),
+        };
+        posthog.identify(userId, mergedProps);
+        posthog.flush().catch(() => {});
+        if (__DEV__) {
+          console.log('[PostHog] identify:', userId, mergedProps);
+        }
+      })
+      .catch(() => {
+        posthog.identify(userId, properties);
+        posthog.flush().catch(() => {});
+      });
   } catch (error) {
     if (__DEV__) {
       console.warn('[PostHog] identify error:', error);

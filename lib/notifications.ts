@@ -75,24 +75,20 @@ export async function requestNotificationPermission(): Promise<boolean> {
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#5B4FE8',
-          sound: 'default',
         });
         await Notifications.setNotificationChannelAsync('habit_channel', {
           name: 'Habit Reminders',
           importance: Notifications.AndroidImportance.HIGH,
-          sound: 'default',
         });
         await Notifications.setNotificationChannelAsync('streak_channel', {
           name: 'Streak Alerts',
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#D97706',
-          sound: 'default',
         });
         await Notifications.setNotificationChannelAsync('revision_channel', {
           name: 'Spaced Repetition & Revision',
           importance: Notifications.AndroidImportance.DEFAULT,
-          sound: 'default',
         });
         await Notifications.setNotificationChannelAsync('active_focus_channel', {
           name: 'Active Focus & Soundscapes',
@@ -127,7 +123,7 @@ export async function scheduleMorningBrief(topTaskTitle: string, hour = 8, minut
         title: 'Good morning!',
         body: `Today's priority: ${topTaskTitle || 'Complete your planned focus blocks'}`,
         data: { screen: '/', type: 'brief', actionText: "View Today's Plan" },
-        sound: 'default',
+        sound: true,
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -153,7 +149,7 @@ export async function scheduleHabitReminder(hour = 14, minute = 30): Promise<voi
         title: 'Habit Check-in',
         body: 'Keep your momentum high! Check off your daily habits before the evening rush.',
         data: { screen: '/habits', type: 'streak', actionText: 'Log Habits Now' },
-        sound: 'default',
+        sound: true,
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -179,7 +175,7 @@ export async function scheduleStreakAlert(hour = 21, minute = 0): Promise<void> 
         title: "Don't break your streak!",
         body: 'Complete at least 1 habit before midnight to protect your active streak shield.',
         data: { screen: '/habits', type: 'streak', actionText: 'Save Streak' },
-        sound: 'default',
+        sound: true,
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -205,7 +201,7 @@ export async function scheduleEveningReview(hour = 22, minute = 0): Promise<void
         title: 'Daily Wrap-up',
         body: 'Take 1 minute to reflect on today’s focus achievements and review your stats.',
         data: { screen: '/(tabs)/stats', type: 'brief', actionText: 'View Stats' },
-        sound: 'default',
+        sound: true,
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -234,7 +230,7 @@ export async function scheduleRevisionAlert(topicTitle: string, delayDays: numbe
       content: {
         title: 'Time to Revise!',
         body: `It's time to review "${cleanTitle}" to boost long-term memory retention!`,
-        sound: 'default',
+        sound: true,
         data: { screen: '/(tabs)/learn', type: 'revision', actionText: 'Start Review' },
       },
       trigger: {
@@ -264,7 +260,7 @@ export async function triggerLocalFocusCompleteNotification(
           title,
           body,
           data: { screen: '/(tabs)/focus', type: 'milestone', actionText: 'View Focus Stats' },
-          sound: 'default',
+          sound: true,
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -433,7 +429,7 @@ export async function sendTestNotification(): Promise<boolean> {
           title,
           body,
           data: { screen: '/notifications', type: 'system', actionText: 'View Notification Center' },
-          sound: 'default',
+          sound: true,
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,

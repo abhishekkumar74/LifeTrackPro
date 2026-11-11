@@ -4,7 +4,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import * as Haptics from 'expo-haptics';
 import { Href, router } from 'expo-router';
 import { ArrowLeft, Calendar, ChevronRight, KeyRound, Lock, Plus, ShieldCheck, Sparkles, Trash2, Unlock, Flame, Trophy, Crown } from 'lucide-react-native';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -63,6 +63,28 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
   const [confirmPin, setConfirmPin] = useState<string>('');
   const [isSettingUpPin, setIsSettingUpPin] = useState<boolean>(false);
   const [pinError, setPinError] = useState<string>('');
+  const isVerifyingRef = useRef<boolean>(false);
+
+  // Auto-submit PIN as soon as the 4th digit is entered
+  useEffect(() => {
+    if (inputPin.length === 4 && hasPin && !isUnlocked && !isVerifyingRef.current) {
+      isVerifyingRef.current = true;
+      verifyPin(inputPin)
+        .then((success) => {
+          if (success) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            setInputPin('');
+          } else {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+            setPinError('Incorrect PIN. Try again.');
+            setInputPin('');
+          }
+        })
+        .finally(() => {
+          isVerifyingRef.current = false;
+        });
+    }
+  }, [inputPin, hasPin, isUnlocked, verifyPin]);
 
   // Forgot PIN Recovery Modal State
   const [showForgotModal, setShowForgotModal] = useState<boolean>(false);
@@ -97,38 +119,27 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
   };
 
   const handleKeyPress = (num: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setPinError('');
     if (inputPin.length < 4) {
       const nextPin = inputPin + num;
       setInputPin(nextPin);
 
       if (nextPin.length === 4) {
-        if (hasPin && !isUnlocked) {
-          verifyPin(nextPin).then((success) => {
-            if (success) {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              setInputPin('');
-            } else {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              setPinError('Incorrect PIN. Try again.');
-              setInputPin('');
-            }
-          });
-        } else if (!hasPin && isSettingUpPin) {
+        if (!hasPin && isSettingUpPin) {
           if (!confirmPin) {
             setConfirmPin(nextPin);
             setInputPin('');
           } else if (confirmPin === nextPin) {
             savePin(nextPin).then(() => {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
               Alert.alert('Vault Secured', 'Your 4-Digit PIN has been set successfully!');
               setInputPin('');
               setConfirmPin('');
               setIsSettingUpPin(false);
             });
           } else {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
             setPinError('PINs do not match. Restarting.');
             setInputPin('');
             setConfirmPin('');

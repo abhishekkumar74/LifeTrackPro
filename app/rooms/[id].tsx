@@ -15,6 +15,7 @@ import { useUiStore } from '@/lib/store/ui.store';
 import { supabase } from '@/lib/supabase/client';
 import { StudyRoom } from '@/types/app.types';
 import { CONFIG } from '@/constants/config';
+import { shareReferralLink, getReferralUrl } from '@/lib/utils/referral';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { Href, router, useLocalSearchParams } from 'expo-router';
@@ -60,6 +61,8 @@ import { RoomVolumeSlider } from '@/components/community/RoomVolumeSlider';
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   Alert,
+  AppState,
+  AppStateStatus,
   Dimensions,
   FlatList,
   Image,
@@ -241,6 +244,36 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   // Local real-time role & banned states (syncs via Realtime Broadcast + DB)
   const [liveCoHostIds, setLiveCoHostIds] = useState<string[]>([]);
   const [liveBannedIds, setLiveBannedIds] = useState<string[]>([]);
+
+  // Reconnect Realtime channel when returning from background (NET-02)
+  useEffect(() => {
+    if (!id) return;
+
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        const presenceTopic = `realtime:room_presence:${id}`;
+        const chatTopic = `realtime:room_chat:${id}`;
+        const activeChannels = supabase.getChannels();
+
+        const presenceChannel = activeChannels.find((c) => c.topic === presenceTopic);
+        if (presenceChannel && presenceChannel.state !== 'joined') {
+          presenceChannel.subscribe();
+        }
+
+        const chatChannel = activeChannels.find((c) => c.topic === chatTopic);
+        if (chatChannel && chatChannel.state !== 'joined') {
+          chatChannel.subscribe();
+        }
+
+        // Reconcile room details and participants
+        queryClient.invalidateQueries({ queryKey: ['studyRoom', id] });
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [id, queryClient]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1007,10 +1040,19 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     if (!room) return;
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      const playStoreUrl = Platform.OS === 'ios' ? CONFIG.storeUrls.ios : CONFIG.storeUrls.android;
-      const shareMessage = `Join my live study room on LifeTrack Pro: "${room.name}"\nDuration: ${room.timer_minutes} mins\nRoom Code: #${shortCode}\n\nDownload LifeTrack Pro:\n${playStoreUrl}\n\n(Open the app and enter the Room Code under Study Rooms!)`;
-      await Share.share({
-        message: shareMessage,
+      const shareUrl = getReferralUrl({
+        source: 'study_room',
+        medium: 'room_invite',
+        campaign: 'study_sprint',
+        roomCode: shortCode,
+      });
+      const shareMessage = `Join my live study room on LifeTrack Pro: "${room.name}"\nDuration: ${room.timer_minutes} mins\nRoom Code: #${shortCode}\n\nJoin here:\n${shareUrl}\n\n(Open the app and enter the Room Code under Study Rooms!)`;
+      await shareReferralLink({
+        source: 'study_room',
+        medium: 'room_invite',
+        campaign: 'study_sprint',
+        roomCode: shortCode,
+        customMessage: shareMessage,
         title: `Study with me on LifeTrack Pro: ${room.name}`,
       });
     } catch (error) {
@@ -1731,7 +1773,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           <KeyboardAvoidingView
             style={{ flex: 1, backgroundColor: '#0D0C1D' }}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 112 : 0}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 116 : 0}
           >
             {/* Sticky Mini Bar */}
             <View style={styles.stickyMiniBar}>
@@ -1839,7 +1881,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <TouchableOpacity
             style={styles.modalOverlay}

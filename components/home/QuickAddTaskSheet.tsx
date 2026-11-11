@@ -28,10 +28,10 @@ interface QuickAddTaskSheetProps {
 }
 
 const SUBJECT_OPTIONS = [
-  { label: '📚 Study', value: 'Study' },
-  { label: '💼 Work', value: 'Work' },
-  { label: '🏃 Personal', value: 'Personal' },
-  { label: '🎯 Goal', value: 'Goal' },
+  { label: 'Study', value: 'Study' },
+  { label: 'Work', value: 'Work' },
+  { label: 'Personal', value: 'Personal' },
+  { label: 'Goal', value: 'Goal' },
   { label: 'Other', value: 'Other' },
 ];
 
@@ -41,7 +41,7 @@ const PRIORITY_OPTIONS = [
   { label: 'Normal', value: 'normal' },
 ];
 
-const SNAP_POINTS = ['50%'];
+const SNAP_POINTS = ['65%', '90%'];
 
 export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
   isVisible,
@@ -120,6 +120,8 @@ export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
       backdropComponent={renderBackdrop}
       onChange={handleSheetChange}
       keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
     >
       <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
         <Text style={styles.sheetHeader}>Quick Add Task</Text>
@@ -131,7 +133,7 @@ export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
           placeholderTextColor="#9B9BAF"
           value={title}
           onChangeText={setTitle}
-          maxLength={100}
+          maxLength={80}
           autoFocus={Platform.OS !== 'android' && isVisible}
         />
 
@@ -189,10 +191,10 @@ export const QuickAddTaskSheet: React.FC<QuickAddTaskSheetProps> = ({
 
 const styles = StyleSheet.create({
   sheetContent: {
-    flex: 1,
     backgroundColor: COLORS.surface,
     paddingHorizontal: 20,
     paddingTop: 10,
+    paddingBottom: 48,
   },
   sheetHeader: {
     fontFamily: TYPOGRAPHY.fonts.display,

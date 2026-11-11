@@ -220,8 +220,18 @@ export const useFocusStore = create<FocusState>()(
 
   // Actions
   setPreset: (preset) => {
-    const { customMinutes, isRunning } = get();
-    set({ selectedPreset: preset });
+    let { customMinutes, isRunning } = get();
+    if (preset === 'custom') {
+      // Ensure customMinutes is at least 5 and a multiple of 5
+      if (!customMinutes || customMinutes < 5) {
+        customMinutes = 30;
+      } else if (customMinutes % 5 !== 0) {
+        customMinutes = Math.max(5, Math.round(customMinutes / 5) * 5);
+      }
+      set({ selectedPreset: preset, customMinutes });
+    } else {
+      set({ selectedPreset: preset });
+    }
     if (!isRunning) {
       const duration = getFocusDuration(preset, customMinutes);
       set({
@@ -235,9 +245,11 @@ export const useFocusStore = create<FocusState>()(
 
   setCustomMinutes: (min) => {
     const { selectedPreset, isRunning } = get();
-    set({ customMinutes: min });
+    // Snap to clean 5-minute multiples between 5m and 180m
+    const cleanMin = Math.max(5, Math.min(180, Math.round(min / 5) * 5));
+    set({ customMinutes: cleanMin });
     if (selectedPreset === 'custom' && !isRunning) {
-      const duration = min * 60;
+      const duration = cleanMin * 60;
       set({
         secondsLeft: duration,
         totalSeconds: duration,

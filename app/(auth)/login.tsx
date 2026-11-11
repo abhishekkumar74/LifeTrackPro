@@ -10,6 +10,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import * as AuthSession from 'expo-auth-session';
 import { AppLogo } from '@/components/ui/AppLogo';
+import { Eye, EyeOff } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 
 // Safely require native Google Signin without crashing in Expo Go or non-native environments
@@ -61,28 +62,42 @@ const screenHeight = Dimensions.get('window').height;
 
 export default function LoginScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef<ScrollView>(null);
   const phoneInputRef = useRef<TextInput>(null);
   const emailInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
+  const confirmPasswordInputRef = useRef<TextInput>(null);
+  const isSubmittingRef = useRef<boolean>(false);
 
-  // Keyboard state to adjust branding section height dynamically
-  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
-  const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
+  const [focusedField, setFocusedField] = useState<'email' | 'password' | 'confirmPassword' | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState<number>(0);
+  const isKeyboardVisible = keyboardHeight > 0;
 
   useEffect(() => {
-    const showSubscription = Keyboard.addListener(
+    const showSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      () => setIsKeyboardOpen(true)
+      (e) => {
+        const height = e.endCoordinates?.height || 280;
+        setKeyboardHeight(height);
+      }
     );
-    const hideSubscription = Keyboard.addListener(
+    const hideSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setIsKeyboardOpen(false)
+      () => {
+        setKeyboardHeight(0);
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }
     );
     return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
+      showSub.remove();
+      hideSub.remove();
     };
   }, []);
+
+  const handleFieldFocus = (field: 'email' | 'password' | 'confirmPassword') => {
+    setFocusedField(field);
+    setIsFocused(true);
+  };
 
   // Authentication method state (Phone auth hidden for now, phase 2 feature)
   const [authMethod, setAuthMethod] = useState<'phone' | 'email'>('email');
@@ -93,6 +108,9 @@ export default function LoginScreen(): React.JSX.Element {
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]); // India (+91)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
 
   // UI states
@@ -164,6 +182,8 @@ export default function LoginScreen(): React.JSX.Element {
 
   // Supabase sign-in/up call (Email/Password)
   const handleEmailAuth = async (): Promise<void> => {
+    if (isSubmittingRef.current) return;
+
     if (!email.trim() || !password.trim()) {
       setValidationError('Please enter both email and password.');
       return;
@@ -177,6 +197,18 @@ export default function LoginScreen(): React.JSX.Element {
       return;
     }
 
+    if (isSignUp) {
+      if (!confirmPassword.trim()) {
+        setValidationError('Please confirm your password.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setValidationError('Passwords do not match.');
+        return;
+      }
+    }
+
+    isSubmittingRef.current = true;
     setIsLoading(true);
     setErrorMessage(null);
     setValidationError(null);
@@ -195,11 +227,14 @@ export default function LoginScreen(): React.JSX.Element {
 
         if (error) {
           setErrorMessage(error.message);
+        } else if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+          setErrorMessage('An account with this email already exists. Please sign in or reset your password.');
         } else if (data.session) {
           router.replace('/(tabs)');
         } else {
           setSuccessMessage('Registration successful! Please check your email inbox to confirm your account, then log in here.');
           setIsSignUp(false);
+          setConfirmPassword('');
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -218,6 +253,7 @@ export default function LoginScreen(): React.JSX.Element {
       setErrorMessage(message);
     } finally {
       setIsLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -417,6 +453,7 @@ export default function LoginScreen(): React.JSX.Element {
   };
 
   const handleForgotPassword = async (): Promise<void> => {
+    if (isSubmittingRef.current) return;
     if (!email.trim()) {
       setValidationError('Please enter your email address.');
       return;
@@ -426,6 +463,7 @@ export default function LoginScreen(): React.JSX.Element {
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsLoading(true);
     setErrorMessage(null);
     setValidationError(null);
@@ -448,174 +486,186 @@ export default function LoginScreen(): React.JSX.Element {
       setErrorMessage(message);
     } finally {
       setIsLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 
   const isSubmitDisabled = isForgotState
     ? (!email || isLoading)
-    : (!email || password.length < 6 || isLoading);
+    : isSignUp
+      ? (!email || password.length < 6 || !confirmPassword || password !== confirmPassword || isLoading)
+      : (!email || password.length < 6 || isLoading);
+
+  const topSafeArea = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0
+  );
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: Platform.OS === 'android' ? 16 : Math.max(insets.top, 16) }]}
+      style={[styles.container, { paddingTop: topSafeArea, paddingBottom: keyboardHeight }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? topSafeArea : 0}
     >
       <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" translucent={false} />
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={[
           styles.scrollContent,
-          isKeyboardOpen && styles.scrollContentKeyboard,
-          { paddingBottom: Math.max(insets.bottom, 20) + (isKeyboardOpen ? 16 : 0) },
+          {
+            paddingBottom: Math.max(insets.bottom, 16) + 16,
+          },
         ]}
         keyboardShouldPersistTaps="handled"
-        bounces={false}
+        keyboardDismissMode="on-drag"
+        bounces={true}
         showsVerticalScrollIndicator={false}
       >
-        {/* SECTION 1: Top Branding Area */}
-        <View style={[styles.brandingSection, isKeyboardOpen && styles.brandingSectionCompact]}>
-          {isKeyboardOpen ? (
-            <View style={styles.compactBrandingRow}>
-              <AppLogo size={24} variant="dark" />
-              <Text style={styles.compactAppName}>{STRINGS.common.appName}</Text>
+        <View style={styles.formResponsiveContainer}>
+          {/* SECTION 1: Top Branding Area */}
+          <View style={styles.brandingSection}>
+            <View style={styles.logoContainer}>
+              <AppLogo size={34} variant="dark" />
             </View>
-          ) : (
-            <>
-              <View style={styles.logoContainer}>
-                <AppLogo size={44} variant="dark" />
-              </View>
-              <Text style={styles.appName}>{STRINGS.common.appName}</Text>
-              <Text style={styles.tagline}>Your life. One app.</Text>
-            </>
-          )}
-        </View>
+            <Text style={styles.appName}>{STRINGS.common.appName}</Text>
+            <Text style={styles.tagline}>Your life. One app.</Text>
+          </View>
 
-        {/* SECTION 2: Input Area */}
-        <View style={styles.inputSection}>
-          {isForgotState ? (
-            <View style={{ gap: SPACING.md }}>
-              <Text style={{ fontFamily: TYPOGRAPHY.fonts.sans, fontSize: 14, color: COLORS.t2, marginBottom: 4, lineHeight: 20 }}>
-                Enter the email address associated with your account and we will send you a password recovery link.
-              </Text>
-              <View>
-                <Text style={styles.inputLabel}>Email Address</Text>
-                <View
-                  style={[
-                    styles.inputRowContainer,
-                    focusedField === 'email' && styles.inputRowContainerFocused,
-                    (validationError || errorMessage) && styles.inputRowContainerError,
-                  ]}
-                >
-                  <TextInput
-                    ref={emailInputRef}
-                    style={styles.textInput}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    placeholder="name@example.com"
-                    placeholderTextColor={COLORS.t3}
-                    value={email}
-                    onChangeText={(text) => {
-                      setEmail(text);
-                      if (validationError) setValidationError(null);
-                      if (errorMessage) setErrorMessage(null);
-                      if (successMessage) setSuccessMessage(null);
-                    }}
-                    onFocus={() => {
-                      setFocusedField('email');
-                      setIsFocused(true);
-                    }}
-                    onBlur={() => {
-                      setFocusedField(null);
-                      setIsFocused(false);
-                    }}
-                    returnKeyType="done"
-                    onSubmitEditing={() => {
-                      if (!isSubmitDisabled) handleForgotPassword();
-                    }}
-                    editable={!isLoading}
-                  />
+          {/* SECTION 2: Input Area */}
+          <View style={styles.inputSection}>
+            {isForgotState ? (
+              <View style={{ gap: SPACING.md }}>
+                <Text style={{ fontFamily: TYPOGRAPHY.fonts.sans, fontSize: 14, color: COLORS.t2, marginBottom: 4, lineHeight: 20 }}>
+                  Enter the email address associated with your account and we will send you a password recovery link.
+                </Text>
+                <View>
+                  <Text style={styles.inputLabel}>Email Address</Text>
+                  <View
+                    style={[
+                      styles.inputRowContainer,
+                      focusedField === 'email' && styles.inputRowContainerFocused,
+                      (validationError || errorMessage) && styles.inputRowContainerError,
+                    ]}
+                  >
+                    <TextInput
+                      ref={emailInputRef}
+                      style={styles.textInput}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      placeholder="name@example.com"
+                      placeholderTextColor={COLORS.t3}
+                      value={email}
+                      onChangeText={(text) => {
+                        setEmail(text);
+                        if (validationError) setValidationError(null);
+                        if (errorMessage) setErrorMessage(null);
+                        if (successMessage) setSuccessMessage(null);
+                      }}
+                      onFocus={() => handleFieldFocus('email')}
+                      onBlur={() => {
+                        setFocusedField(null);
+                        setIsFocused(false);
+                      }}
+                      returnKeyType="done"
+                      onSubmitEditing={() => {
+                        if (!isSubmitDisabled) handleForgotPassword();
+                      }}
+                      editable={!isLoading}
+                    />
+                  </View>
                 </View>
               </View>
-            </View>
-          ) : (
-            <View style={{ gap: SPACING.md }}>
-              <View>
-                <Text style={styles.inputLabel}>Email Address</Text>
-                <View
-                  style={[
-                    styles.inputRowContainer,
-                    focusedField === 'email' && styles.inputRowContainerFocused,
-                    (validationError || errorMessage) && styles.inputRowContainerError,
-                  ]}
-                >
-                  <TextInput
-                    ref={emailInputRef}
-                    style={styles.textInput}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    placeholder="name@example.com"
-                    placeholderTextColor={COLORS.t3}
-                    value={email}
-                    onChangeText={(text) => {
-                      setEmail(text);
-                      if (validationError) setValidationError(null);
-                      if (errorMessage) setErrorMessage(null);
-                    }}
-                    onFocus={() => {
-                      setFocusedField('email');
-                      setIsFocused(true);
-                    }}
-                    onBlur={() => {
-                      setFocusedField(null);
-                      setIsFocused(false);
-                    }}
-                    returnKeyType="next"
-                    onSubmitEditing={() => passwordInputRef.current?.focus()}
-                    blurOnSubmit={false}
-                    editable={!isLoading}
-                  />
+            ) : (
+              <View style={{ gap: SPACING.md }}>
+                <View>
+                  <Text style={styles.inputLabel}>Email Address</Text>
+                  <View
+                    style={[
+                      styles.inputRowContainer,
+                      focusedField === 'email' && styles.inputRowContainerFocused,
+                      (validationError || errorMessage) && styles.inputRowContainerError,
+                    ]}
+                  >
+                    <TextInput
+                      ref={emailInputRef}
+                      style={styles.textInput}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      placeholder="name@example.com"
+                      placeholderTextColor={COLORS.t3}
+                      value={email}
+                      onChangeText={(text) => {
+                        setEmail(text);
+                        if (validationError) setValidationError(null);
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                      onFocus={() => handleFieldFocus('email')}
+                      onBlur={() => {
+                        setFocusedField(null);
+                        setIsFocused(false);
+                      }}
+                      returnKeyType="next"
+                      onSubmitEditing={() => passwordInputRef.current?.focus()}
+                      blurOnSubmit={false}
+                      editable={!isLoading}
+                    />
+                  </View>
                 </View>
-              </View>
 
-              <View>
-                <Text style={styles.inputLabel}>Password (min. 6 chars)</Text>
-                <View
-                  style={[
-                    styles.inputRowContainer,
-                    focusedField === 'password' && styles.inputRowContainerFocused,
-                    (validationError || errorMessage) && styles.inputRowContainerError,
-                  ]}
-                >
-                  <TextInput
-                    ref={passwordInputRef}
-                    style={styles.textInput}
-                    secureTextEntry
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    placeholder="••••••••"
-                    placeholderTextColor={COLORS.t3}
-                    value={password}
-                    onChangeText={(text) => {
-                      setPassword(text);
-                      if (validationError) setValidationError(null);
-                      if (errorMessage) setErrorMessage(null);
-                    }}
-                    onFocus={() => {
-                      setFocusedField('password');
-                      setIsFocused(true);
-                    }}
-                    onBlur={() => {
-                      setFocusedField(null);
-                      setIsFocused(false);
-                    }}
-                    returnKeyType={isSignUp ? 'done' : 'go'}
+                <View>
+                  <Text style={styles.inputLabel}>Password (min. 6 chars)</Text>
+                  <View
+                    style={[
+                      styles.inputRowContainer,
+                      focusedField === 'password' && styles.inputRowContainerFocused,
+                      (validationError || errorMessage) && styles.inputRowContainerError,
+                    ]}
+                  >
+                    <TextInput
+                      ref={passwordInputRef}
+                      style={[styles.textInput, { flex: 1, paddingRight: 8 }]}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      placeholder="••••••••"
+                      placeholderTextColor={COLORS.t3}
+                      value={password}
+                      onChangeText={(text) => {
+                        setPassword(text);
+                        if (validationError) setValidationError(null);
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                      onFocus={() => handleFieldFocus('password')}
+                      onBlur={() => {
+                        setFocusedField(null);
+                        setIsFocused(false);
+                      }}
+                    returnKeyType={isSignUp ? 'next' : 'go'}
                     onSubmitEditing={() => {
-                      if (!isSubmitDisabled) handleEmailAuth();
+                      if (isSignUp) {
+                        confirmPasswordInputRef.current?.focus();
+                      } else if (!isSubmitDisabled) {
+                        handleEmailAuth();
+                      }
                     }}
+                    blurOnSubmit={!isSignUp}
                     editable={!isLoading}
                   />
+                  <Pressable
+                    onPress={() => setShowPassword((prev) => !prev)}
+                    style={styles.eyeButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={20} color={COLORS.t3} />
+                    ) : (
+                      <Eye size={20} color={COLORS.t3} />
+                    )}
+                  </Pressable>
                 </View>
                 {!isSignUp && (
                   <Pressable
@@ -636,6 +686,58 @@ export default function LoginScreen(): React.JSX.Element {
                   </Pressable>
                 )}
               </View>
+
+              {isSignUp && (
+                <View>
+                  <Text style={styles.inputLabel}>Confirm Password</Text>
+                  <View
+                    style={[
+                      styles.inputRowContainer,
+                      focusedField === 'confirmPassword' && styles.inputRowContainerFocused,
+                      (validationError || errorMessage) && styles.inputRowContainerError,
+                    ]}
+                  >
+                    <TextInput
+                      ref={confirmPasswordInputRef}
+                      style={[styles.textInput, { flex: 1, paddingRight: 8 }]}
+                      secureTextEntry={!showConfirmPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      placeholder="••••••••"
+                      placeholderTextColor={COLORS.t3}
+                      value={confirmPassword}
+                      onChangeText={(text) => {
+                        setConfirmPassword(text);
+                        if (validationError) setValidationError(null);
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                      onFocus={() => handleFieldFocus('confirmPassword')}
+                      onBlur={() => {
+                        setFocusedField(null);
+                        setIsFocused(false);
+                      }}
+                      returnKeyType="done"
+                      onSubmitEditing={() => {
+                        if (!isSubmitDisabled) handleEmailAuth();
+                      }}
+                      editable={!isLoading}
+                    />
+                    <Pressable
+                      onPress={() => setShowConfirmPassword((prev) => !prev)}
+                      style={styles.eyeButton}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff size={20} color={COLORS.t3} />
+                      ) : (
+                        <Eye size={20} color={COLORS.t3} />
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              )}
             </View>
           )}
 
@@ -739,12 +841,26 @@ export default function LoginScreen(): React.JSX.Element {
             </Pressable>
           )}
 
-          {!isKeyboardOpen && (
+          <View style={styles.legalRowContainer}>
             <Text style={styles.bottomLegalText}>
-              By continuing, you agree to our Terms and Privacy Policy
+              By continuing, you agree to our{' '}
+              <Text
+                style={styles.legalLinkText}
+                onPress={() => router.push('/terms')}
+              >
+                Terms
+              </Text>
+              {' and '}
+              <Text
+                style={styles.legalLinkText}
+                onPress={() => router.push('/privacy')}
+              >
+                Privacy Policy
+              </Text>
             </Text>
-          )}
+          </View>
         </View>
+      </View>
       </ScrollView>
 
       {/* Country Picker Sheet */}
@@ -764,61 +880,47 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.md,
   },
-  scrollContentKeyboard: {
-    justifyContent: 'flex-start',
+  formResponsiveContainer: {
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
+    paddingVertical: SPACING.md,
   },
   brandingSection: {
-    height: screenHeight * 0.32,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.xxl,
-  },
-  brandingSectionCompact: {
-    height: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 4,
-    marginBottom: 8,
-  },
-  compactBrandingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  compactAppName: {
-    fontFamily: TYPOGRAPHY.fonts.display,
-    fontSize: 22,
-    color: COLORS.t1,
-    letterSpacing: -0.5,
+    paddingHorizontal: SPACING.lg,
+    marginBottom: 20,
   },
   logoContainer: {
-    width: 72,
-    height: 72,
+    width: 52,
+    height: 52,
     borderRadius: RADIUS.lg,
     backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: COLORS.navy,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 4,
   },
   appName: {
     fontFamily: TYPOGRAPHY.fonts.display,
-    fontSize: 32,
+    fontSize: 26,
     fontWeight: 'normal',
     color: COLORS.t1,
     letterSpacing: -0.5,
-    marginTop: SPACING.lg,
+    marginTop: 8,
   },
   tagline: {
     fontFamily: TYPOGRAPHY.fonts.sans,
-    fontSize: 15,
+    fontSize: 14,
     color: COLORS.t3,
-    marginTop: SPACING.xs,
+    marginTop: 3,
   },
   inputSection: {
     paddingHorizontal: SPACING.xxl,
@@ -838,7 +940,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.md,
-    height: 56,
+    height: 50,
     paddingHorizontal: SPACING.lg,
   },
   inputRowContainerFocused: {
@@ -891,13 +993,13 @@ const styles = StyleSheet.create({
   },
   ctaSection: {
     paddingHorizontal: SPACING.xxl,
-    marginTop: 14,
+    marginTop: 16,
   },
   switchModeBtn: {
     alignSelf: 'center',
-    paddingVertical: 6,
+    paddingVertical: 5,
     paddingHorizontal: 12,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   switchModeText: {
     color: COLORS.violet,
@@ -908,10 +1010,10 @@ const styles = StyleSheet.create({
   submitBtn: {
     backgroundColor: COLORS.violet,
     borderRadius: RADIUS.md + 2, // 14px
-    height: 56,
+    height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm + 2,
   },
   submitBtnDisabled: {
     backgroundColor: COLORS.violet,
@@ -932,10 +1034,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.md + 2,
-    height: 56,
+    height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.xxl,
+    marginBottom: SPACING.lg,
   },
   googleBtnPressed: {
     backgroundColor: COLORS.bg,
@@ -954,6 +1056,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.t3,
     textAlign: 'center',
+    lineHeight: 18,
+  },
+  legalRowContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.md,
+  },
+  legalLinkText: {
+    color: COLORS.violet,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  eyeButton: {
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tabContainer: {
     flexDirection: 'row',

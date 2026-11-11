@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,9 @@ import {
   Sun,
   Sparkles,
   Tag,
+  Clock,
+  Target,
+  Zap,
 } from 'lucide-react-native';
 import { TimerCircle } from './TimerCircle';
 
@@ -75,6 +78,12 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
   // Apple StandBy Night Mode (crimson red phosphor tint for dark rooms)
   const [nightMode, setNightMode] = useState(false);
 
+  // Guarantee true landscape dimensions even if Activity/Modal hasn't finished rotation animation
+  const [layoutDims, setLayoutDims] = useState(() => ({
+    width: Math.max(rawWidth, rawHeight),
+    height: Math.min(rawWidth, rawHeight),
+  }));
+
   // Hardware back button support for Android
   React.useEffect(() => {
     if (!isVisible) return;
@@ -88,9 +97,22 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
     return () => sub.remove();
   }, [isVisible, onClose]);
 
+  const sessionLengthMinutes = Math.max(1, Math.round(totalSeconds / 60));
+
+  const targetFinishTime = useMemo(() => {
+    const remainingMs = Math.max(0, secondsLeft) * 1000;
+    const end = new Date(Date.now() + remainingMs);
+    return end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }, [secondsLeft]);
+
+  const sessionXP = useMemo(() => {
+    return Math.max(15, Math.round(sessionLengthMinutes * 1.5));
+  }, [sessionLengthMinutes]);
+
   if (!isVisible) return null;
 
-  const isLandscape = rawWidth >= rawHeight;
+  const effectiveWidth = Math.max(layoutDims.width, layoutDims.height);
+  const effectiveHeight = Math.min(layoutDims.width, layoutDims.height);
   const effectiveThemeColor = nightMode ? '#FF3B30' : activeThemeColor;
 
   const minutes = Math.floor(secondsLeft / 60);
@@ -101,39 +123,28 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
   const progress = totalSeconds > 0 ? (totalSeconds - secondsLeft) / totalSeconds : 0;
   const progressPercent = Math.min(100, Math.max(0, Math.round(progress * 100)));
 
-  // On Android, insets.top inside translucent modals is often 0 or less than the physical status bar.
-  // We guarantee effectiveTopInset is at least the physical Android status bar height.
-  const androidStatusBar = Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0;
-  const effectiveTopInset = Math.max(insets.top, androidStatusBar);
-
-  const safeLeft = isLandscape
-    ? Math.max(32, insets.left, androidStatusBar)
-    : Math.max(20, insets.left);
-  const safeRight = isLandscape
-    ? Math.max(32, insets.right, androidStatusBar)
-    : Math.max(20, insets.right);
-  const safeTop = isLandscape
-    ? Math.max(16, insets.top)
-    : Math.max(effectiveTopInset + 8, 24);
-  const safeBottom = Math.max(isLandscape ? 16 : 24, insets.bottom);
+  // Notch & Camera Cutout Safe Area Insets (RESP-04)
+  const safeLeft = Math.max(insets.left, 24);
+  const safeRight = Math.max(insets.right, 24);
+  const safeTop = Math.max(insets.top, 12);
+  const safeBottom = Math.max(insets.bottom, 12);
 
   // Responsive dial size:
-  // In landscape: height is constrained, dial fits in left section.
-  // In portrait: width is constrained, dial fits comfortably centered.
-  const dialSize = isLandscape
-    ? Math.min(
-        Math.floor((rawHeight - safeTop - safeBottom) * 0.88),
-        Math.floor((rawWidth - safeLeft - safeRight) * 0.42),
-        320
-      )
-    : Math.min(
-        Math.floor((rawWidth - safeLeft - safeRight) * 0.68),
-        Math.floor((rawHeight - safeTop - safeBottom) * 0.35),
-        260
-      );
+  // StandBy Desk Clock takes up the left 50% half of the screen.
+  // Dial fills the left half elegantly (like Apple StandBy chronometer dial).
+  const availHeight = effectiveHeight - safeTop - safeBottom;
+  const availHalfWidth = (effectiveWidth - safeLeft - safeRight) * 0.5;
+  const dialSize = Math.max(
+    220,
+    Math.min(
+      Math.floor(availHeight * 0.94),
+      Math.floor(availHalfWidth * 0.94),
+      370
+    )
+  );
 
   const renderTopRow = () => (
-    <View style={[styles.hudTopRow, !isLandscape && styles.portraitTopRow]}>
+    <View style={styles.hudTopRow}>
       <View style={styles.standbyPill}>
         <View
           style={[
@@ -152,7 +163,6 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
           style={[
             styles.subjectTagPill,
             { borderColor: effectiveThemeColor },
-            !isLandscape && styles.subjectTagPillPortrait,
           ]}
         >
           <Tag size={11} color={effectiveThemeColor} />
@@ -211,38 +221,39 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
   );
 
   const renderCenterContent = () => (
-    <View style={[styles.hudCenterContent, !isLandscape && styles.portraitCenterContent]}>
-      <Text
-        style={[
-          styles.sessionNameText,
-          !isLandscape && styles.sessionNameTextPortrait,
-          nightMode && { color: '#FF8880' },
-        ]}
-        numberOfLines={1}
-      >
-        {sessionGoal.trim() || 'Deep Focus Session'}
-      </Text>
+    <View style={styles.hudCenterContent}>
+      {/* Apple StandBy Minimalist Typography (Zero boxes, Zero distraction) */}
+      <View style={styles.appleHeaderBlock}>
+        <View style={styles.appleSubtitleRow}>
+          <View style={[styles.appleModeDot, { backgroundColor: effectiveThemeColor }]} />
+          <Text style={[styles.appleSubtitle, { color: effectiveThemeColor }]}>
+            {currentMode === 'focus' ? 'FOCUS' : 'BREAK'}
+          </Text>
+        </View>
 
-      {/* Giant Monospace Digits - guaranteed single-line via adjustsFontSizeToFit */}
-      <Text
-        style={[
-          styles.giantTimeDigits,
-          !isLandscape && styles.giantTimeDigitsPortrait,
-          nightMode && { color: '#FF3B30' },
-        ]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.65}
-      >
-        {timeStr}
-      </Text>
+        <Text
+          style={[
+            styles.appleTitle,
+            nightMode && { color: '#FF8880' },
+          ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+        >
+          {sessionGoal.trim() || 'Deep Focus'}
+        </Text>
 
-      {/* Progress Capsule Track */}
-      <View style={styles.progressContainer}>
-        <View style={styles.progressTrack}>
+        <Text style={styles.appleUntilText}>
+          Until {targetFinishTime}
+        </Text>
+      </View>
+
+      {/* Apple-style Minimalist Sleek Progress Capsule */}
+      <View style={styles.appleProgressContainer}>
+        <View style={styles.appleProgressTrack}>
           <View
             style={[
-              styles.progressFill,
+              styles.appleProgressFill,
               {
                 width: `${progressPercent}%`,
                 backgroundColor: effectiveThemeColor,
@@ -250,12 +261,12 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
             ]}
           />
         </View>
-        <View style={styles.progressMetaRow}>
-          <Text style={styles.progressMetaText}>
+        <View style={styles.appleProgressMetaRow}>
+          <Text style={[styles.appleProgressPercent, { color: effectiveThemeColor }]}>
             {progressPercent}% COMPLETED
           </Text>
-          <Text style={styles.progressMetaText}>
-            TODAY: {todayMinutes}m FOCUSED
+          <Text style={styles.appleProgressToday}>
+            TODAY {todayMinutes}M
           </Text>
         </View>
       </View>
@@ -263,7 +274,7 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
   );
 
   const renderBottomControls = () => (
-    <View style={[styles.hudBottomControls, !isLandscape && styles.portraitBottomControls]}>
+    <View style={styles.hudBottomControls}>
       {/* Primary Action Button */}
       <TouchableOpacity
         style={[
@@ -315,8 +326,6 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
       visible={isVisible}
       animationType="fade"
       supportedOrientations={[
-        'portrait',
-        'portrait-upside-down',
         'landscape',
         'landscape-left',
         'landscape-right',
@@ -330,9 +339,14 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
         backgroundColor="transparent"
       />
       <View
+        onLayout={(e) => {
+          const { width: w, height: h } = e.nativeEvent.layout;
+          if (w > 0 && h > 0) {
+            setLayoutDims({ width: w, height: h });
+          }
+        }}
         style={[
           styles.container,
-          isLandscape ? styles.containerLandscape : styles.containerPortrait,
           nightMode && styles.containerNight,
           {
             paddingLeft: safeLeft,
@@ -342,65 +356,41 @@ export const LandscapeFocusClock: React.FC<LandscapeFocusClockProps> = ({
           },
         ]}
       >
-        {/* Ambient background glow circles */}
+        {/* Ambient background glow: corner circles as originally designed */}
         <View
           style={[
             styles.ambientGlowLeft,
-            { backgroundColor: nightMode ? 'rgba(255, 59, 48, 0.08)' : 'rgba(91, 79, 232, 0.12)' },
+            { backgroundColor: nightMode ? 'rgba(255, 59, 48, 0.12)' : 'rgba(91, 79, 232, 0.15)' },
           ]}
           pointerEvents="none"
         />
         <View
           style={[
             styles.ambientGlowRight,
-            { backgroundColor: nightMode ? 'rgba(255, 59, 48, 0.06)' : 'rgba(91, 79, 232, 0.08)' },
+            { backgroundColor: nightMode ? 'rgba(255, 59, 48, 0.08)' : 'rgba(91, 79, 232, 0.10)' },
           ]}
           pointerEvents="none"
         />
 
-        {isLandscape ? (
-          <>
-            {/* Left Section: Retro Chronometer Dial */}
-            <View style={styles.leftSection}>
-              <TimerCircle
-                size={dialSize}
-                secondsLeft={secondsLeft}
-                totalSeconds={totalSeconds}
-                isRunning={isRunning}
-                currentMode={currentMode}
-                themeColorOverride={effectiveThemeColor}
-                isNightMode={nightMode}
-              />
-            </View>
+        {/* Left Section: 50% Half - Retro Chronometer Dial */}
+        <View style={styles.leftSection}>
+          <TimerCircle
+            size={dialSize}
+            secondsLeft={secondsLeft}
+            totalSeconds={totalSeconds}
+            isRunning={isRunning}
+            currentMode={currentMode}
+            themeColorOverride={effectiveThemeColor}
+            isNightMode={nightMode}
+          />
+        </View>
 
-            {/* Right Section: StandBy HUD, Controls & Progress */}
-            <View style={styles.rightSection}>
-              {renderTopRow()}
-              {renderCenterContent()}
-              {renderBottomControls()}
-            </View>
-          </>
-        ) : (
-          <>
-            {/* Portrait Layout: Top HUD -> Centered Dial -> Center Info -> Bottom Controls */}
-            {renderTopRow()}
-
-            <View style={styles.portraitDialSection}>
-              <TimerCircle
-                size={dialSize}
-                secondsLeft={secondsLeft}
-                totalSeconds={totalSeconds}
-                isRunning={isRunning}
-                currentMode={currentMode}
-                themeColorOverride={effectiveThemeColor}
-                isNightMode={nightMode}
-              />
-            </View>
-
-            {renderCenterContent()}
-            {renderBottomControls()}
-          </>
-        )}
+        {/* Right Section: 50% Half - StandBy HUD, Controls & Progress */}
+        <View style={styles.rightSection}>
+          {renderTopRow()}
+          {renderCenterContent()}
+          {renderBottomControls()}
+        </View>
       </View>
     </Modal>
   );
@@ -411,20 +401,13 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#09080D',
-  },
-  containerLandscape: {
+    backgroundColor: '#000000',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  containerPortrait: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   containerNight: {
-    backgroundColor: '#050002',
+    backgroundColor: '#000000',
   },
   ambientGlowLeft: {
     position: 'absolute',
@@ -443,16 +426,94 @@ const styles = StyleSheet.create({
     borderRadius: 140,
   },
   leftSection: {
-    flex: 0.44,
+    flex: 0.5,
+    width: '50%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
   rightSection: {
-    flex: 0.56,
+    flex: 0.5,
+    width: '50%',
     height: '100%',
     justifyContent: 'space-between',
-    paddingLeft: 20,
-    paddingVertical: 6,
+    paddingLeft: 24,
+    paddingRight: 16,
+    paddingVertical: 14,
+  },
+  hudCenterContent: {
+    justifyContent: 'center',
+    marginVertical: 4,
+    paddingRight: 8,
+  },
+  appleHeaderBlock: {
+    marginBottom: 16,
+  },
+  appleSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  appleModeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  appleSubtitle: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
+  appleTitle: {
+    fontFamily: 'Outfit-Bold',
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.6,
+    marginBottom: 4,
+  },
+  appleUntilText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.55)',
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  appleProgressContainer: {
+    width: '100%',
+    marginTop: 6,
+  },
+  appleProgressTrack: {
+    height: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 2.5,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  appleProgressFill: {
+    height: '100%',
+    borderRadius: 2.5,
+  },
+  appleProgressMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  appleProgressPercent: {
+    fontFamily: 'DMMono',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
+  appleProgressToday: {
+    fontFamily: 'DMSans-Bold',
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.45)',
+    letterSpacing: 1.5,
   },
   portraitTopRow: {
     width: '100%',
@@ -557,54 +618,6 @@ const styles = StyleSheet.create({
   hudCircleBtnSoundOn: {
     backgroundColor: 'rgba(91, 79, 232, 0.22)',
     borderColor: '#5B4FE8',
-  },
-  hudCenterContent: {
-    justifyContent: 'center',
-    marginVertical: 4,
-  },
-  sessionNameText: {
-    fontFamily: 'Outfit-Bold',
-    fontSize: 22,
-    color: '#FFFFFF',
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  giantTimeDigits: {
-    fontFamily: 'DMMono',
-    fontSize: 54,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: -1.5,
-    marginVertical: 2,
-    includeFontPadding: false,
-  },
-  progressContainer: {
-    width: '100%',
-    marginTop: 6,
-  },
-  progressTrack: {
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 3,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  progressMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  progressMetaText: {
-    fontFamily: 'DMMono',
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.55)',
-    letterSpacing: 1.0,
   },
   hudBottomControls: {
     flexDirection: 'row',

@@ -21,13 +21,22 @@ const createWrapper = () => {
 const mockFromObj: any = {
   select: jest.fn().mockReturnThis(),
   eq: jest.fn().mockReturnThis(),
+  neq: jest.fn().mockReturnThis(),
+  gt: jest.fn().mockReturnThis(),
   gte: jest.fn().mockReturnThis(),
+  lt: jest.fn().mockReturnThis(),
   lte: jest.fn().mockReturnThis(),
+  like: jest.fn().mockReturnThis(),
+  ilike: jest.fn().mockReturnThis(),
+  is: jest.fn().mockReturnThis(),
+  in: jest.fn().mockReturnThis(),
+  not: jest.fn().mockReturnThis(),
+  or: jest.fn().mockReturnThis(),
   order: jest.fn().mockReturnThis(),
   limit: jest.fn().mockReturnThis(),
-  is: jest.fn().mockReturnThis(),
-  or: jest.fn().mockReturnThis(),
+  range: jest.fn().mockReturnThis(),
   maybeSingle: jest.fn().mockReturnThis(),
+  single: jest.fn().mockReturnThis(),
 };
 
 // Supabase queries are thenable (resolved as promises)

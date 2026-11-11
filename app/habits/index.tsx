@@ -297,8 +297,8 @@ export default function HabitsManagementScreen() {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              colors={[COLORS.violet]}
-              tintColor={COLORS.violet}
+              colors={['#5B4FE8']}
+              tintColor="#5B4FE8"
             />
           }
           ListHeaderComponent={

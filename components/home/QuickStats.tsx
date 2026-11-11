@@ -8,7 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
-import { CheckSquare, Flame, HeartCrack } from 'lucide-react-native';
+import { CheckSquare, Flame, HeartCrack, Clock } from 'lucide-react-native';
 
 // Custom Count-Up Animation Hook for 60fps smooth page load animation
 function useCountUp(target: number, duration: number = 850) {
@@ -175,7 +175,7 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         onPress={() => router.push('/(tabs)/focus')}
         activeOpacity={0.8}
       >
-        <Text style={styles.iconEmoji}>⏱️</Text>
+        <Clock size={16} color="#6355F6" />
         <Text
           style={styles.number}
           numberOfLines={1}
@@ -184,7 +184,9 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         >
           {`${Math.round(animatedMinutes)} min`}
         </Text>
-        <Text style={styles.label}>Focus time</Text>
+        <Text style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+          Focus time
+        </Text>
 
         {/* 7-Day Sparkline Bar Chart (Violet) */}
         <MiniSparkline bars={focusSparklines} color="#6355F6" />
@@ -197,12 +199,19 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         activeOpacity={0.8}
       >
         <CheckSquare size={16} color="#10B981" />
-        <Text style={styles.number}>
+        <Text
+          style={styles.number}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+        >
           {targetTasksTotal > 0
             ? `${Math.round(animatedTasksDone)}/${targetTasksTotal}`
             : `${Math.round(animatedTasksDone)}`}
         </Text>
-        <Text style={styles.label}>Tasks done</Text>
+        <Text style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+          Tasks done
+        </Text>
 
         {/* 7-Day Sparkline Bar Chart (Emerald/Mint) */}
         <MiniSparkline bars={tasksSparklines} color="#10B981" />
@@ -223,10 +232,20 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         ) : (
           <Flame size={16} color="#F59E0B" />
         )}
-        <Text style={[styles.number, isStreakBroken && { color: '#EF4444' }]}>
+        <Text
+          style={[styles.number, isStreakBroken && { color: '#EF4444' }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+        >
           {Math.round(animatedStreak)}
         </Text>
-        <Text style={[styles.label, isStreakBroken && { color: '#EF4444' }]}>
+        <Text
+          style={[styles.label, isStreakBroken && { color: '#EF4444' }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
+        >
           {isStreakBroken ? 'Broken' : 'Day streak'}
         </Text>
 

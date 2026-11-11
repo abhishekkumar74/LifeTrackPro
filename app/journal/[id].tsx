@@ -36,7 +36,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import Svg, { Polygon } from 'react-native-svg';
 
@@ -166,6 +166,8 @@ const FONT_OPTIONS: FontOption[] = [
 ];
 
 export default function CozyJournalDetailPage(): React.JSX.Element {
+  const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef<ScrollView>(null);
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = id === 'new';
 
@@ -412,9 +414,14 @@ export default function CozyJournalDetailPage(): React.JSX.Element {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContainer}
+          ref={scrollViewRef}
+          contentContainerStyle={[
+            styles.scrollContainer,
+            { paddingBottom: Math.max(insets.bottom, 24) + 140 },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >

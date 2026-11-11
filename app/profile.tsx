@@ -46,10 +46,20 @@ import {
   Shield,
   ShieldCheck,
   Star,
+  Share2,
   Trash2,
   Upload,
   X,
+  Target,
+  GraduationCap,
+  Code2,
+  Briefcase,
+  Palette,
+  Rocket,
+  BookOpen,
+  type LucideIcon,
 } from 'lucide-react-native';
+import { shareReferralLink } from '@/lib/utils/referral';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -79,49 +89,53 @@ const CATEGORIES: UserCategory[] = [
   'educator',
 ];
 
-export const CATEGORY_META: Record<
-  UserCategory,
-  { label: string; emoji: string; shortLabel: string; subtitle: string }
-> = {
+export interface CategoryMetaItem {
+  label: string;
+  icon: LucideIcon;
+  shortLabel: string;
+  subtitle: string;
+}
+
+export const CATEGORY_META: Record<UserCategory, CategoryMetaItem> = {
   aspirant: {
     label: 'Govt Job Aspirant',
-    emoji: '🎯',
+    icon: Target,
     shortLabel: 'Govt Aspirant',
     subtitle: 'UPSC, SSC, Banking, Railways, Defence',
   },
   student: {
     label: 'Entrance Exams',
-    emoji: '🎓',
+    icon: GraduationCap,
     shortLabel: 'Entrance Exams',
     subtitle: 'NEET, JEE, CUET, CAT, GATE, Boards',
   },
   cse_student: {
     label: 'College Student',
-    emoji: '🏛️',
+    icon: Code2,
     shortLabel: 'College Student',
     subtitle: 'B.Tech, BCA, Degree & Placements',
   },
   employee: {
     label: 'Working Professional',
-    emoji: '💼',
+    icon: Briefcase,
     shortLabel: 'Professional',
     subtitle: 'Corporate, Remote & Tech',
   },
   creator: {
     label: 'Creator',
-    emoji: '🎨',
+    icon: Palette,
     shortLabel: 'Creator',
     subtitle: 'Content, Design & Media',
   },
   entrepreneur: {
     label: 'Entrepreneur',
-    emoji: '🚀',
+    icon: Rocket,
     shortLabel: 'Entrepreneur',
     subtitle: 'Startups & Business',
   },
   educator: {
     label: 'Educator',
-    emoji: '📖',
+    icon: BookOpen,
     shortLabel: 'Educator',
     subtitle: 'Teaching & Coaching',
   },
@@ -1160,18 +1174,18 @@ export default function ProfileScreen(): React.JSX.Element {
   const getCategoryDisplay = () => {
     const meta = CATEGORY_META[profile?.category || 'student'] || {
       label: 'Student',
-      emoji: '🎓',
+      icon: GraduationCap,
       shortLabel: 'Student',
     };
     const subCats = (profile?.sub_category || []).filter((s) => s !== 'cse_student');
 
     if (subCats.length === 0) {
-      return `${meta.emoji} ${meta.shortLabel}`;
+      return meta.shortLabel;
     }
 
     if (subCats.length === 1) {
       const shortName = getShortTargetName(getSubcategoryDisplayName(subCats[0]));
-      return `${meta.emoji} ${meta.shortLabel} · ${shortName}`;
+      return `${meta.shortLabel} · ${shortName}`;
     }
 
     // 2 targets: compact 1-line tag
@@ -1424,7 +1438,8 @@ export default function ProfileScreen(): React.JSX.Element {
             >
               {CATEGORIES.map((cat) => {
                 const active = category === cat;
-                const meta = CATEGORY_META[cat] || { emoji: '📌', shortLabel: cat };
+                const meta = CATEGORY_META[cat];
+                const IconComponent = meta?.icon || GraduationCap;
                 return (
                   <TouchableOpacity
                     key={cat}
@@ -1432,8 +1447,13 @@ export default function ProfileScreen(): React.JSX.Element {
                     onPress={() => handleCategorySelect(cat)}
                     activeOpacity={0.7}
                   >
+                    <IconComponent
+                      size={14}
+                      color={active ? '#FFFFFF' : '#64748B'}
+                      style={{ marginRight: 6 }}
+                    />
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {meta.emoji} {meta.shortLabel}
+                      {meta?.shortLabel || cat}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -1714,6 +1734,24 @@ export default function ProfileScreen(): React.JSX.Element {
             </View>
             <Text style={styles.rowVal}>{CONFIG.app.version}</Text>
           </View>
+
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => {
+              shareReferralLink({
+                source: 'profile_invite',
+                medium: 'direct_share',
+                campaign: 'user_referral',
+              }).catch(() => {});
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.rowLabelCol}>
+              <Text style={styles.rowTitle}>Invite Friends</Text>
+              <Text style={styles.rowSubtitle}>Share LifeTrack Pro with your referral link</Text>
+            </View>
+            <Share2 size={18} color="#5B4FE8" />
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.row}

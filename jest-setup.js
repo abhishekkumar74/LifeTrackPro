@@ -13,3 +13,18 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 jest.mock('@react-native-community/netinfo', () =>
   require('@react-native-community/netinfo/jest/netinfo-mock')
 );
+
+jest.mock('posthog-react-native', () => {
+  const mockClient = {
+    identify: jest.fn(),
+    capture: jest.fn(),
+    reset: jest.fn(),
+    flush: jest.fn().mockResolvedValue(undefined),
+    shutdown: jest.fn().mockResolvedValue(undefined),
+  };
+  return {
+    PostHog: jest.fn().mockImplementation(() => mockClient),
+    usePostHog: jest.fn(() => mockClient),
+    PostHogProvider: ({ children }) => children,
+  };
+});

@@ -15,6 +15,7 @@ import {
   Switch,
   Keyboard,
   useWindowDimensions,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -262,7 +263,6 @@ export default function FocusScreen(): React.JSX.Element {
   const completedSoundRef = useRef<string | null>(null);
   const completedRoutineIdRef = useRef<string | null>(null);
   const [tempGoal, setTempGoal] = useState('');
-  const mainScrollViewRef = useRef<ScrollView>(null);
 
   const params = useLocalSearchParams<{
     suggestedSubject?: string;
@@ -282,19 +282,11 @@ export default function FocusScreen(): React.JSX.Element {
   const [cseIncompleteTopics, setCseIncompleteTopics] = useState<any[]>([]);
   const [topicSelectionActive, setTopicSelectionActive] = useState(false);
 
-  // Responsive dial size: adapts to both screen width and vertical viewport space
-  const availableVertical = height - (params.routineBlockId ? 430 : 380);
-  const maxDialByHeight = Math.floor(availableVertical * 0.85);
+  // Responsive dial size: enlarged so the focus timer is bold, immersive and visually prominent
+  const availableDialHeight = Math.floor(height - (params.routineBlockId ? 420 : 370));
   const dialSize = Math.min(
-    330,
-    Math.max(250, Math.min(Math.floor(width * 0.82), maxDialByHeight > 250 ? maxDialByHeight : 285))
-  );
-
-  // Responsive top margin for Pause and End Session action buttons during active focus
-  // Leaves generous breathing room around the chronometer dial and sound HUD to minimize distraction
-  const runningActionMarginTop = Math.min(
-    52,
-    Math.max(22, Math.floor((height - 700) * 0.18 + 24))
+    336,
+    Math.max(260, Math.min(Math.floor(width * 0.82), availableDialHeight > 260 ? availableDialHeight : 325))
   );
 
   const todayMinutes = useMemo(() => {
@@ -382,13 +374,6 @@ export default function FocusScreen(): React.JSX.Element {
   } = useFocusStore();
 
   const isSessionActive = isRunning || isPaused;
-
-  // Auto-reset scroll to top when session starts so viewport is perfectly anchored
-  useEffect(() => {
-    if (isRunning) {
-      mainScrollViewRef.current?.scrollTo({ y: 0, animated: false });
-    }
-  }, [isRunning]);
 
   // Ambient sound hook
   const ambient = useAmbientSound();
@@ -1154,7 +1139,6 @@ export default function FocusScreen(): React.JSX.Element {
       }).catch(() => {});
     } else {
       Keyboard.dismiss();
-      mainScrollViewRef.current?.scrollTo({ y: 0, animated: false });
       start();
       FocusLiveActivity.startSession({
         sessionName: sessionGoal.trim() || 'Deep Focus',
@@ -1381,8 +1365,8 @@ export default function FocusScreen(): React.JSX.Element {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <SafeAreaView style={[styles.safeArea, { paddingTop: Math.max(0, androidTopExtra) }]} edges={['top']}>
-          {/* Top bar with back button, centered TODAY 0 min, and action buttons */}
+        <SafeAreaView style={[styles.safeArea, { paddingTop: Math.max(0, androidTopExtra) }]} edges={['top', 'bottom']}>
+          {/* Top bar with back button and right actions (Today removed for clean spacious UI) */}
           <View style={styles.topBar}>
             <TouchableOpacity
               style={styles.circleGlassBtn}
@@ -1393,20 +1377,6 @@ export default function FocusScreen(): React.JSX.Element {
               <X size={15} color="rgba(255, 255, 255, 0.85)" strokeWidth={2.2} />
             </TouchableOpacity>
 
-            <View style={styles.topCenterContainer}>
-              <View style={styles.todayFocusCapsule}>
-                <Clock size={11} color="#A78BFA" strokeWidth={2.4} />
-                <Text style={styles.todayFocusLabel}>TODAY</Text>
-                <Text style={styles.todayFocusValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                  {todayMinutes >= 60
-                    ? todayMinutes % 60 === 0
-                      ? `${Math.floor(todayMinutes / 60)}h`
-                      : `${Math.floor(todayMinutes / 60)}h ${todayMinutes % 60}m`
-                    : `${todayMinutes}m`}
-                </Text>
-              </View>
-            </View>
-
             <View style={styles.topRightActions}>
               <TouchableOpacity
                 style={styles.rewardsBalanceCleanChip}
@@ -1416,6 +1386,7 @@ export default function FocusScreen(): React.JSX.Element {
                   rewardsSheetRef.current?.expand();
                 }}
                 activeOpacity={0.7}
+                accessibilityLabel="Focus Rewards"
               >
                 <Trophy size={11} color="#E8A020" />
                 <Text style={styles.rewardsBalanceCleanText}>
@@ -1429,7 +1400,7 @@ export default function FocusScreen(): React.JSX.Element {
                 activeOpacity={0.7}
                 accessibilityLabel="StandBy Desk Clock"
               >
-                <Maximize2 size={15} color="rgba(255, 255, 255, 0.85)" />
+                <Maximize2 size={14} color="rgba(255, 255, 255, 0.85)" />
               </TouchableOpacity>
 
               {/* Ambient Sound & Music button (Accessible anytime, running or idle) */}
@@ -1444,9 +1415,9 @@ export default function FocusScreen(): React.JSX.Element {
                 accessibilityLabel="Ambient Sound & Music"
               >
                 {activeSound ? (
-                  <Volume2 size={15} color="#5B4FE8" />
+                  <Volume2 size={14} color="#5B4FE8" />
                 ) : (
-                  <VolumeX size={15} color="rgba(255, 255, 255, 0.7)" />
+                  <VolumeX size={14} color="rgba(255, 255, 255, 0.7)" />
                 )}
               </TouchableOpacity>
 
@@ -1461,323 +1432,342 @@ export default function FocusScreen(): React.JSX.Element {
                   activeOpacity={0.7}
                   accessibilityLabel="Timer Settings"
                 >
-                  <Settings size={15} color="rgba(255, 255, 255, 0.7)" />
+                  <Settings size={14} color="rgba(255, 255, 255, 0.7)" />
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          <ScrollView
-            ref={mainScrollViewRef}
-            scrollEnabled={!isSessionActive}
-            bounces={!isSessionActive}
-            overScrollMode={isSessionActive ? 'never' : 'auto'}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[
-              styles.scrollContainer,
-              isSessionActive && styles.scrollContainerRunning,
-            ]}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Routine Link Banner if linked from schedule */}
-            {params.routineBlockId && (
-              <View style={styles.routineLinkBanner}>
-                <Text style={styles.routineLinkText}>
-                  Linked Routine: {params.suggestedGoal || 'Study Routine'}
-                </Text>
-                <Text style={styles.routineLinkSubtext}>
-                  Requires 25m+ focus between {params.routineStartTime} and {params.routineEndTime} to mark done.
-                </Text>
-              </View>
-            )}
-
-            {/* Header: What are you focusing on? */}
-            <Text style={[styles.mainHeading, isSessionActive && styles.mainHeadingRunning]}>
-              What are you focusing on?
-            </Text>
-
-            {/* Frosted Liquid Glass Pill Capsule Input */}
-            <View style={[styles.sessionPillCapsule, isSessionActive && styles.sessionPillCapsuleRunning]}>
-              <TextInput
-                style={styles.sessionPillInput}
-                value={sessionGoal}
-                onChangeText={setSessionGoal}
-                placeholder="Name this session"
-                placeholderTextColor="rgba(255, 255, 255, 0.45)"
-                maxLength={60}
-                returnKeyType="done"
-                editable={!isRunning}
-              />
-            </View>
-
-            {/* Retro Chronometer Dial */}
-            <View style={[styles.dialContainer, isSessionActive && styles.dialContainerRunning]}>
-              <TimerCircle
-                size={dialSize}
-                secondsLeft={secondsLeft}
-                totalSeconds={totalSeconds}
-                isRunning={isRunning}
-                currentMode={currentMode}
-              />
-            </View>
-
-            {/* When Running or Paused: Active Session Music / Sound HUD */}
-            {(isRunning || isPaused) && (
-              <View style={styles.activeSessionControlRow}>
-                {/* Sound / Music Capsule: Tap to open soundscape sheet and change sound */}
-                <TouchableOpacity
-                  style={[styles.activeSoundPill, activeSound ? styles.activeSoundPillPlaying : null]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    setSoundSheetOpen(true);
-                    soundSheetRef.current?.expand();
-                  }}
-                  activeOpacity={0.8}
-                  accessibilityLabel="Change ambient music"
-                >
-                  {activeSound ? (
-                    <Volume2 size={14} color="#5B4FE8" />
-                  ) : (
-                    <VolumeX size={14} color="rgba(255, 255, 255, 0.5)" />
-                  )}
-                  <Text
-                    style={[styles.activeSoundText, activeSound ? styles.activeSoundTextPlaying : null]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {activeSound ? activeSound.replace('_', ' ').toUpperCase() : 'SOUND OFF'}
-                  </Text>
-                  <View style={styles.activeSoundChangeTag}>
-                    <Text style={styles.activeSoundChangeTagText}>CHANGE</Text>
-                  </View>
-                </TouchableOpacity>
-
-                {/* Instant Mute / Unmute Toggle Button */}
-                <TouchableOpacity
-                  style={[styles.activeMuteToggleBtn, activeSound ? styles.activeMuteToggleBtnPlaying : null]}
-                  onPress={async () => {
-                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    if (activeSound) {
-                      handleSoundSelect(null);
-                    } else {
-                      handleSoundSelect(lastActiveSoundRef.current || 'rain');
-                    }
-                  }}
-                  activeOpacity={0.7}
-                  accessibilityLabel={activeSound ? 'Mute audio' : 'Play ambient audio'}
-                >
-                  {activeSound ? (
-                    <VolumeX size={15} color="#FDA4AF" />
-                  ) : (
-                    <Volume2 size={15} color="#5B4FE8" />
-                  )}
-                </TouchableOpacity>
-
-                {/* Subject Tag Pill if present */}
-                {subjectTag && (
-                  <View style={styles.activeSubjectPill}>
-                    <Tag size={11} color="#A89EF8" />
-                    <Text style={styles.activeSubjectText} numberOfLines={1}>
-                      {subjectTag}
+          {/* Fixed Non-Scrollable Screen Body */}
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View style={styles.fixedContentContainer}>
+              {/* Top Section: Routine banner + Heading + Name input */}
+              <View style={styles.fixedTopSection}>
+                {params.routineBlockId && (
+                  <View style={styles.routineLinkBanner}>
+                    <Text style={styles.routineLinkText} numberOfLines={1}>
+                      Linked Routine: {params.suggestedGoal || 'Study Routine'}
+                    </Text>
+                    <Text style={styles.routineLinkSubtext} numberOfLines={1}>
+                      Requires 25m+ focus between {params.routineStartTime} and {params.routineEndTime}
                     </Text>
                   </View>
                 )}
-              </View>
-            )}
 
-            {/* Duration Presets & Secondary options (when idle) */}
-            {!isRunning && !isPaused && (
-              <View style={styles.presetsSection}>
-                <View style={styles.presetsRow}>
-                  {(['25/5', '50/10', '90/20', 'custom'] as FocusPreset[]).map((preset) => {
-                    const active = selectedPreset === preset;
-                    let displayLabel = preset === 'custom' ? 'Custom' : `${preset.split('/')[0]} min`;
-                    return (
-                      <TouchableOpacity
-                        key={preset}
-                        style={[styles.presetPill, active && styles.presetPillActive]}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                          setPreset(preset);
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.presetPillText, active && styles.presetPillTextActive]}>
-                          {displayLabel}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {/* Custom Stepper */}
-                {selectedPreset === 'custom' && (
-                  <View style={styles.stepperContainer}>
-                    <TouchableOpacity
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                        setCustomMinutes(Math.max(1, customMinutes - 5));
-                      }}
-                      style={styles.stepperButton}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.stepperButtonText}>-</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.stepperValueText}>{customMinutes} min</Text>
-                    <TouchableOpacity
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                        setCustomMinutes(customMinutes + 5);
-                      }}
-                      style={styles.stepperButton}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.stepperButtonText}>+</Text>
-                    </TouchableOpacity>
-                  </View>
+                {/* Header: What are you focusing on? (Only shown when timer is idle) */}
+                {!isSessionActive && (
+                  <Text
+                    style={styles.mainHeading}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit={true}
+                    minimumFontScale={0.75}
+                  >
+                    What are you focusing on?
+                  </Text>
                 )}
 
-                {/* Secondary Pill row: Subject & Ambient Sound */}
-                <View style={styles.secondaryPillsRow}>
-                  <SubjectPicker
-                    selectedSubject={subjectTag}
-                    onSelect={setSubjectTag}
-                    isDark
-                    customTrigger={(open) => (
-                      <TouchableOpacity
-                        style={styles.optionGlassPill}
-                        onPress={async () => {
-                          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          open();
-                        }}
-                        activeOpacity={0.8}
-                      >
-                        <Tag size={12} color="rgba(255, 255, 255, 0.75)" />
-                        <Text style={styles.optionGlassPillText} numberOfLines={1}>
-                          {subjectTag || 'General'}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
+                {/* Frosted Liquid Glass Pill Capsule Input */}
+                <View style={[styles.sessionPillCapsule, isSessionActive && styles.sessionPillCapsuleRunning]}>
+                  <TextInput
+                    style={styles.sessionPillInput}
+                    value={sessionGoal}
+                    onChangeText={setSessionGoal}
+                    placeholder="Name this session"
+                    placeholderTextColor="rgba(255, 255, 255, 0.45)"
+                    maxLength={60}
+                    returnKeyType="done"
+                    editable={!isRunning}
                   />
+                </View>
+              </View>
 
-                  {/* Sound Trigger Pill (Opens Soundscape sheet) */}
+              {/* Center Section: Retro Chronometer Dial */}
+              <View style={[styles.dialContainer, isSessionActive && styles.dialContainerRunning]}>
+                <TimerCircle
+                  size={dialSize}
+                  secondsLeft={secondsLeft}
+                  totalSeconds={totalSeconds}
+                  isRunning={isRunning}
+                  currentMode={currentMode}
+                />
+              </View>
+
+              {/* Middle Controls Section: Active Sound HUD OR Idle Presets */}
+              {isSessionActive ? (
+                <View style={styles.activeSessionControlRow}>
+                  {/* Sound / Music Capsule: Tap to open soundscape sheet and change sound */}
                   <TouchableOpacity
-                    style={[styles.optionGlassPill, activeSound ? styles.optionGlassPillActive : null]}
-                    onPress={async () => {
-                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    style={[styles.activeSoundPill, activeSound ? styles.activeSoundPillPlaying : null]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                       setSoundSheetOpen(true);
                       soundSheetRef.current?.expand();
                     }}
                     activeOpacity={0.8}
+                    accessibilityLabel="Change ambient music"
                   >
-                    <Headphones size={13} color={activeSound ? '#A89EF8' : 'rgba(255, 255, 255, 0.75)'} />
-                    <Text style={[styles.optionGlassPillText, activeSound ? styles.optionGlassPillTextActive : null]}>
-                      {activeSound ? activeSound.replace('_', ' ') : 'Sound off'}
+                    {activeSound ? (
+                      <Volume2 size={14} color="#5B4FE8" />
+                    ) : (
+                      <VolumeX size={14} color="rgba(255, 255, 255, 0.5)" />
+                    )}
+                    <Text
+                      style={[styles.activeSoundText, activeSound ? styles.activeSoundTextPlaying : null]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {activeSound ? activeSound.replace('_', ' ').toUpperCase() : 'SOUND OFF'}
                     </Text>
+                    <View style={styles.activeSoundChangeTag}>
+                      <Text style={styles.activeSoundChangeTagText}>CHANGE</Text>
+                    </View>
                   </TouchableOpacity>
-                </View>
-              </View>
-            )}
 
-            {/* PRIMARY & SECONDARY TIMER ACTIONS */}
-            {!isRunning && !isPaused ? (
-              <View style={styles.primaryActionWrapper}>
-                <TouchableOpacity
-                  style={styles.prominentLiquidGlassBtn}
-                  onPress={handlePlayPause}
-                  activeOpacity={0.85}
-                  accessibilityLabel="Start Focus"
-                >
-                  <View style={styles.prominentActionContent}>
-                    <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
-                    <Text style={styles.prominentActionText}>Start Focus</Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={[styles.runningActionWrapper, { marginTop: runningActionMarginTop }]}>
-                {/* Pause / Resume Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.runningPauseBtn,
-                    isPaused && styles.runningResumeBtnActive,
-                  ]}
-                  onPress={handlePlayPause}
-                  activeOpacity={0.85}
-                  accessibilityLabel={isRunning ? 'Pause Focus' : 'Resume Focus'}
-                >
-                  {isRunning ? (
-                    <Pause size={14} color="rgba(255, 255, 255, 0.9)" strokeWidth={2.4} />
-                  ) : (
-                    <Play size={14} color="#FFFFFF" fill="#FFFFFF" />
+                  {/* Instant Mute / Unmute Toggle Button */}
+                  <TouchableOpacity
+                    style={[styles.activeMuteToggleBtn, activeSound ? styles.activeMuteToggleBtnPlaying : null]}
+                    onPress={async () => {
+                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      if (activeSound) {
+                        handleSoundSelect(null);
+                      } else {
+                        handleSoundSelect(lastActiveSoundRef.current || 'rain');
+                      }
+                    }}
+                    activeOpacity={0.7}
+                    accessibilityLabel={activeSound ? 'Mute audio' : 'Play ambient audio'}
+                  >
+                    {activeSound ? (
+                      <VolumeX size={15} color="#FDA4AF" />
+                    ) : (
+                      <Volume2 size={15} color="#5B4FE8" />
+                    )}
+                  </TouchableOpacity>
+
+                  {/* Subject Tag Pill if present */}
+                  {subjectTag && (
+                    <View style={styles.activeSubjectPill}>
+                      <Tag size={11} color="#A89EF8" />
+                      <Text style={styles.activeSubjectText} numberOfLines={1}>
+                        {subjectTag}
+                      </Text>
+                    </View>
                   )}
-                  <Text
-                    style={[
-                      styles.runningActionText,
-                      isPaused && styles.runningActionTextActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {isRunning ? 'Pause' : 'Resume'}
-                  </Text>
-                </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.presetsSection}>
+                  <View style={styles.presetsRow}>
+                    {(['25/5', '50/10', '90/20', 'custom'] as FocusPreset[]).map((preset) => {
+                      const active = selectedPreset === preset;
+                      let displayLabel = preset === 'custom' ? 'Custom' : `${preset.split('/')[0]} min`;
+                      return (
+                        <TouchableOpacity
+                          key={preset}
+                          style={[styles.presetPill, active && styles.presetPillActive]}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                            setPreset(preset);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.presetPillText, active && styles.presetPillTextActive]}>
+                            {displayLabel}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
 
-                {/* End Session Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.runningEndBtn,
-                    isPaused && styles.runningEndBtnPaused,
-                  ]}
-                  onPress={handleReset}
-                  activeOpacity={0.8}
-                  accessibilityLabel="End Session"
-                >
-                  <Square
-                    size={11}
-                    color={isPaused ? '#F87171' : 'rgba(255, 255, 255, 0.45)'}
-                    fill={isPaused ? '#F87171' : 'rgba(255, 255, 255, 0.45)'}
-                  />
-                  <Text
-                    style={[
-                      styles.runningEndText,
-                      isPaused && styles.runningEndTextPaused,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    End Session
-                  </Text>
-                </TouchableOpacity>
+                  {/* Custom Stepper */}
+                  {selectedPreset === 'custom' && (
+                    <View style={styles.stepperContainer}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                          const prev = customMinutes <= 5 ? 5 : (Math.ceil(customMinutes / 5) - 1) * 5;
+                          setCustomMinutes(Math.max(5, prev));
+                        }}
+                        style={styles.stepperButton}
+                        activeOpacity={0.7}
+                        accessibilityLabel="Decrease custom minutes"
+                      >
+                        <Text style={styles.stepperButtonText}>-</Text>
+                      </TouchableOpacity>
+
+                      <Text style={styles.stepperValueText}>{customMinutes} min</Text>
+
+                      <TouchableOpacity
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                          const next = customMinutes < 5 ? 5 : (Math.floor(customMinutes / 5) + 1) * 5;
+                          setCustomMinutes(Math.min(180, next));
+                        }}
+                        style={styles.stepperButton}
+                        activeOpacity={0.7}
+                        accessibilityLabel="Increase custom minutes"
+                      >
+                        <Text style={styles.stepperButtonText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {/* Secondary Pill row: Subject & Ambient Sound */}
+                  <View style={styles.secondaryPillsRow}>
+                    <SubjectPicker
+                      selectedSubject={subjectTag}
+                      onSelect={setSubjectTag}
+                      isDark
+                      customTrigger={(open) => (
+                        <TouchableOpacity
+                          style={styles.optionGlassPill}
+                          onPress={async () => {
+                            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            open();
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Tag size={12} color="rgba(255, 255, 255, 0.75)" />
+                          <Text style={styles.optionGlassPillText} numberOfLines={1}>
+                            {subjectTag || 'General'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    />
+
+                    {/* Sound Trigger Pill (Opens Soundscape sheet) */}
+                    <TouchableOpacity
+                      style={[styles.optionGlassPill, activeSound ? styles.optionGlassPillActive : null]}
+                      onPress={async () => {
+                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSoundSheetOpen(true);
+                        soundSheetRef.current?.expand();
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Headphones size={13} color={activeSound ? '#A89EF8' : 'rgba(255, 255, 255, 0.75)'} />
+                      <Text style={[styles.optionGlassPillText, activeSound ? styles.optionGlassPillTextActive : null]}>
+                        {activeSound ? activeSound.replace('_', ' ') : 'Sound off'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* Bottom Fixed Action Area: Start Focus & History (idle) OR Pause & End (running) */}
+              <View style={styles.bottomFixedArea}>
+                {!isRunning && !isPaused ? (
+                  <View style={styles.idleBottomActions}>
+                    <TouchableOpacity
+                      style={styles.prominentLiquidGlassBtn}
+                      onPress={handlePlayPause}
+                      activeOpacity={0.85}
+                      accessibilityLabel="Start Focus"
+                    >
+                      <View style={styles.prominentActionContent}>
+                        <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
+                        <Text style={styles.prominentActionText}>Start Focus</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.historyTriggerCapsule}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                        setHistorySheetOpen(true);
+                        historySheetRef.current?.expand();
+                      }}
+                      activeOpacity={0.75}
+                      accessibilityLabel="Open Focus History"
+                    >
+                      <FileText size={13} color="rgba(255, 255, 255, 0.7)" strokeWidth={2} />
+                      <Text style={styles.historyTriggerText}>Focus History</Text>
+                      {todayMinutes > 0 && (
+                        <View style={styles.todayFocusBadge}>
+                          <Text style={styles.todayFocusBadgeText}>{todayMinutes}m today</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.runningBottomActions}>
+                    <View style={styles.runningActionWrapper}>
+                      {/* Pause / Resume Button */}
+                      <TouchableOpacity
+                        style={[
+                          styles.runningPauseBtn,
+                          isPaused && styles.runningResumeBtnActive,
+                        ]}
+                        onPress={handlePlayPause}
+                        activeOpacity={0.85}
+                        accessibilityLabel={isRunning ? 'Pause Focus' : 'Resume Focus'}
+                      >
+                        {isRunning ? (
+                          <Pause size={14} color="rgba(255, 255, 255, 0.9)" strokeWidth={2.4} />
+                        ) : (
+                          <Play size={14} color="#FFFFFF" fill="#FFFFFF" />
+                        )}
+                        <Text
+                          style={[
+                            styles.runningActionText,
+                            isPaused && styles.runningActionTextActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {isRunning ? 'Pause' : 'Resume'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* End Session Button */}
+                      <TouchableOpacity
+                        style={[
+                          styles.runningEndBtn,
+                          isPaused && styles.runningEndBtnPaused,
+                        ]}
+                        onPress={handleReset}
+                        activeOpacity={0.8}
+                        accessibilityLabel="End Session"
+                      >
+                        <Square
+                          size={11}
+                          color={isPaused ? '#F87171' : 'rgba(255, 255, 255, 0.45)'}
+                          fill={isPaused ? '#F87171' : 'rgba(255, 255, 255, 0.45)'}
+                        />
+                        <Text
+                          style={[
+                            styles.runningEndText,
+                            isPaused && styles.runningEndTextPaused,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          End Session
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Focus History Trigger (running) */}
+                    <TouchableOpacity
+                      style={styles.historyTriggerCapsule}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                        setHistorySheetOpen(true);
+                        historySheetRef.current?.expand();
+                      }}
+                      activeOpacity={0.75}
+                      accessibilityLabel="Open Focus History"
+                    >
+                      <FileText size={13} color="rgba(255, 255, 255, 0.7)" strokeWidth={2} />
+                      <Text style={styles.historyTriggerText}>Focus History</Text>
+                      {todayMinutes > 0 && (
+                        <View style={styles.todayFocusBadge}>
+                          <Text style={styles.todayFocusBadgeText}>{todayMinutes}m today</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
-            )}
-          </ScrollView>
-
-          {/* Floating Bottom Segmented Pill Bar: [ Focus | History ] */}
-          <View style={styles.bottomFloatingNav} pointerEvents="box-none">
-            <View style={styles.bottomNavCapsule}>
-              {/* Focus Tab (Active) */}
-              <TouchableOpacity
-                style={styles.bottomNavSegmentActive}
-                activeOpacity={0.9}
-              >
-                <Power size={16} color="#5B4FE8" strokeWidth={2.6} />
-                <Text style={styles.bottomNavTextActive}>Focus</Text>
-              </TouchableOpacity>
-
-              {/* History Tab */}
-              <TouchableOpacity
-                style={styles.bottomNavSegmentInactive}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  setHistorySheetOpen(true);
-                  historySheetRef.current?.expand();
-                }}
-                activeOpacity={0.7}
-              >
-                <FileText size={16} color="rgba(255, 255, 255, 0.7)" strokeWidth={2} />
-                <Text style={styles.bottomNavTextInactive}>History</Text>
-              </TouchableOpacity>
             </View>
-          </View>
+          </TouchableWithoutFeedback>
         </SafeAreaView>
       </KeyboardAvoidingView>
 
@@ -2469,7 +2459,18 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'ios' ? 0 : 8,
+  },
+  fixedContentContainer: {
+    flex: 1,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+  fixedTopSection: {
+    width: '100%',
+    alignItems: 'center',
   },
   scrollContainer: {
     paddingBottom: 170,
@@ -2502,8 +2503,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 48,
-    marginBottom: 8,
+    height: 44,
+    marginBottom: 4,
   },
   circleGlassBtn: {
     width: 34,
@@ -2526,35 +2527,6 @@ const styles = StyleSheet.create({
   },
   topCenterContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  todayFocusCapsule: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    paddingHorizontal: 9,
-    paddingVertical: 4.5,
-    borderRadius: 14,
-  },
-  todayFocusLabel: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 9,
-    color: '#8E8EA8',
-    letterSpacing: 0.8,
-    fontWeight: '700',
-    includeFontPadding: false,
-  },
-  todayFocusValue: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 11,
-    color: '#FFFFFF',
-    fontWeight: '700',
-    includeFontPadding: false,
   },
   topRightActions: {
     flexDirection: 'row',
@@ -2563,39 +2535,41 @@ const styles = StyleSheet.create({
   },
   mainHeading: {
     fontFamily: 'Outfit-Bold',
-    fontSize: 28,
+    fontSize: 22,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginTop: 12,
-    marginBottom: 14,
-    letterSpacing: -0.4,
-  },
-  mainHeadingRunning: {
     marginTop: 6,
     marginBottom: 8,
-    fontSize: 22,
+    letterSpacing: -0.3,
+    paddingHorizontal: 8,
+  },
+  mainHeadingRunning: {
+    marginTop: 4,
+    marginBottom: 6,
+    fontSize: 18,
   },
   sessionPillCapsule: {
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
     borderColor: 'rgba(255, 255, 255, 0.22)',
     borderWidth: 1.2,
     borderRadius: 9999,
-    height: 50,
+    height: 44,
     paddingHorizontal: 16,
-    width: '94%',
-    maxWidth: 380,
+    width: '92%',
+    maxWidth: 360,
     alignSelf: 'center',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 6,
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
   },
   sessionPillCapsuleRunning: {
-    height: 44,
-    marginBottom: 8,
+    height: 40,
+    marginTop: 8,
+    marginBottom: 6,
   },
   sessionPillInput: {
     fontFamily: 'DMSans-Medium',
@@ -2678,55 +2652,96 @@ const styles = StyleSheet.create({
     color: '#A89EF8',
     fontWeight: '700',
   },
-  primaryActionWrapper: {
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 12,
+  bottomFixedArea: {
     width: '100%',
+    paddingTop: 6,
+    paddingBottom: Platform.OS === 'android' ? 12 : 6,
+    alignItems: 'center',
+  },
+  idleBottomActions: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  runningBottomActions: {
+    width: '100%',
+    alignItems: 'center',
   },
   prominentLiquidGlassBtn: {
-    width: '88%',
-    maxWidth: 380,
-    height: 60,
-    borderRadius: 9999,
-    backgroundColor: 'rgba(255, 255, 255, 0.26)',
+    width: '90%',
+    maxWidth: 340,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255, 255, 255, 0.24)',
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.42)',
+    borderColor: 'rgba(255, 255, 255, 0.40)',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
   },
   prominentActionContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   prominentActionText: {
     fontFamily: 'Outfit-Bold',
-    fontSize: 18,
+    fontSize: 17,
     color: '#FFFFFF',
     letterSpacing: 0.3,
+  },
+  historyTriggerCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 18,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    marginTop: 6,
+  },
+  historyTriggerText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '600',
+  },
+  todayFocusBadge: {
+    backgroundColor: 'rgba(91, 79, 232, 0.25)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(91, 79, 232, 0.4)',
+    marginLeft: 4,
+  },
+  todayFocusBadgeText: {
+    fontFamily: 'DMSans-Medium',
+    fontSize: 10,
+    color: '#A89EF8',
+    fontWeight: '700',
   },
   runningActionWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    marginTop: 48,
-    marginBottom: 8,
-    width: '100%',
-    maxWidth: 310,
+    width: '90%',
+    maxWidth: 320,
     alignSelf: 'center',
+    marginBottom: 8,
   },
   runningPauseBtn: {
     flex: 1,
-    height: 42,
-    borderRadius: 21,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
@@ -2753,8 +2768,8 @@ const styles = StyleSheet.create({
   },
   runningEndBtn: {
     flex: 1,
-    height: 42,
-    borderRadius: 21,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.10)',
@@ -2803,57 +2818,6 @@ const styles = StyleSheet.create({
     color: '#FF7070',
     fontWeight: '600',
   },
-  bottomFloatingNav: {
-    position: 'absolute',
-    bottom: 12,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  bottomNavCapsule: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.10)',
-    borderWidth: 1.2,
-    borderColor: 'rgba(255, 255, 255, 0.16)',
-    padding: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-  },
-  bottomNavSegmentActive: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#1F1D23',
-    height: 46,
-    borderRadius: 23,
-    paddingHorizontal: 20,
-  },
-  bottomNavTextActive: {
-    fontFamily: 'DMSans-Bold',
-    fontSize: 12,
-    color: '#5B4FE8',
-    fontWeight: '800',
-  },
-  bottomNavSegmentInactive: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 46,
-    borderRadius: 23,
-    paddingHorizontal: 20,
-  },
-  bottomNavTextInactive: {
-    fontFamily: 'DMSans-Medium',
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '600',
-  },
   bottomSheetDarkBackground: {
     backgroundColor: '#16151A',
   },
@@ -2886,7 +2850,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
+    marginTop: 8,
     gap: 16,
   },
   stepperButton: {

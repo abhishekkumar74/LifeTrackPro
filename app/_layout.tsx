@@ -39,6 +39,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
 import { AdManager } from '@/components/ads';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import { captureIncomingReferral, syncUserReferralToPostHog } from '@/lib/utils/referral';
+import { initPlayInstallReferrer } from '@/lib/services/installReferrer';
 
 // Ignore non-fatal fetch cancellation/abort, background sync, and network failure redboxes in LogBox
 LogBox.ignoreLogs([
@@ -85,23 +87,23 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
 
     const segmentsArray = segments as string[];
-    const inAuthGroup = segmentsArray.includes('(auth)');
     const inOnboardingGroup = segmentsArray.includes('onboarding');
+    const isLoginOrReset = segmentsArray.includes('login') || segmentsArray.includes('reset-password');
 
     if (!session) {
-      // Unauthenticated users must be forced onto the login page
-      if (!inAuthGroup) {
+      // Unauthenticated users must be forced onto the login page (cannot access onboarding without an account)
+      if (!isLoginOrReset) {
         router.replace('/login');
       }
     } else if (!profile) {
-      // Authenticated users with no profile setup must onboarding
+      // Authenticated users with no profile setup must complete onboarding
       if (!inOnboardingGroup) {
         router.replace('/onboarding');
       }
     } else {
       // Authenticated users with active profiles are routed to the dashboard
-      if (inAuthGroup || inOnboardingGroup) {
-        router.replace('/');
+      if (segmentsArray.includes('(auth)') || inOnboardingGroup) {
+        router.replace('/(tabs)');
       }
     }
   }, [session, profile, isLoading, segments]);
@@ -139,6 +141,16 @@ function InnerApp({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     trackEvent('app_opened', { platform: Platform.OS });
+    
+    // 1. Capture incoming deep link or URL intent
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        captureIncomingReferral(url).catch(() => {});
+      }
+    });
+
+    // 2. Capture Google Play Install Referrer on Android first open
+    initPlayInstallReferrer().catch(() => {});
   }, []);
 
   return <>{children}</>;
@@ -237,8 +249,9 @@ function RootLayout() {
       
       const ALLOWED_SCHEME = 'lifetrackpro://';
       const ALLOWED_HTTPS = 'https://lifetrackpro.com';
+      const ALLOWED_HTTPS_APP = 'https://lifetrackpro.app';
       
-      if (!url.startsWith(ALLOWED_SCHEME) && !url.startsWith(ALLOWED_HTTPS)) {
+      if (!url.startsWith(ALLOWED_SCHEME) && !url.startsWith(ALLOWED_HTTPS) && !url.startsWith(ALLOWED_HTTPS_APP)) {
         if (__DEV__) {
           console.warn('Blocked unknown deep link:', url);
         }
@@ -248,6 +261,9 @@ function RootLayout() {
       if (__DEV__) {
         console.log('Incoming deep link captured:', url);
       }
+      
+      // Capture referral attribution in PostHog
+      captureIncomingReferral(url).catch(() => {});
       
       const params = new Map<string, string>();
       const queryString = url.includes('?') ? url.split('?')[1]?.split('#')[0] : '';
@@ -265,7 +281,19 @@ function RootLayout() {
       const errorDescription = params.get('error_description') || params.get('error');
       if (errorDescription) {
         if (__DEV__) console.warn('Deep link auth error:', errorDescription);
-        Alert.alert('Authentication Notice', decodeURIComponent(errorDescription.replace(/\+/g, ' ')));
+        Alert.alert(
+          'Authentication Notice',
+          decodeURIComponent(errorDescription.replace(/\+/g, ' ')),
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                router.replace('/login');
+              },
+            },
+          ]
+        );
+        router.replace('/login');
         return;
       }
 
@@ -283,6 +311,7 @@ function RootLayout() {
             setSession(data.session);
             setSentryUser(data.session.user.id);
             identifyUser(data.session.user.id, { email: data.session.user.email });
+            syncUserReferralToPostHog(data.session.user.id).catch(() => {});
             await fetchProfile(data.session.user.id);
             if (url.includes('reset-password')) {
               router.replace('/reset-password');
@@ -306,6 +335,7 @@ function RootLayout() {
             setSession(data.session);
             setSentryUser(data.session.user.id);
             identifyUser(data.session.user.id, { email: data.session.user.email });
+            syncUserReferralToPostHog(data.session.user.id).catch(() => {});
             await fetchProfile(data.session.user.id);
             if (url.includes('reset-password')) {
               router.replace('/reset-password');
@@ -476,20 +506,10 @@ function RootLayout() {
           identifyUser(session.user.id, { email: session.user.email });
           await fetchProfile(session.user.id);
         } else {
-          // Only clear if no saved session was found in persisted store
-          const existingSession = useAuthStore.getState().session;
-          if (!existingSession) {
-            setSession(null);
-            setProfile(null);
-            setLoading(false);
-          } else {
-            // Verify saved session user profile
-            if (useAuthStore.getState().user?.id) {
-              await fetchProfile(useAuthStore.getState().user!.id);
-            } else {
-              setLoading(false);
-            }
-          }
+          // If Supabase has no active session, sync Zustand state with reality
+          setSession(null);
+          setProfile(null);
+          setLoading(false);
         }
       } finally {
         if (isMounted) {
@@ -589,6 +609,7 @@ function RootLayout() {
                     <Stack screenOptions={{ headerShown: false }}>
                       <Stack.Screen name="(auth)/login" options={{ gestureEnabled: false }} />
                       <Stack.Screen name="(auth)/onboarding/index" options={{ gestureEnabled: false }} />
+                      <Stack.Screen name="(auth)/reset-password" options={{ headerShown: false }} />
                       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                       <Stack.Screen name="rooms/index" options={{ headerShown: false }} />
                       <Stack.Screen name="rooms/create" options={{ headerShown: false }} />
@@ -598,8 +619,15 @@ function RootLayout() {
                       <Stack.Screen name="paywall" options={{ presentation: 'modal', headerShown: false }} />
                       <Stack.Screen name="habit/[id]" options={{ headerShown: false }} />
                       <Stack.Screen name="habits/index" options={{ headerShown: false }} />
+                      <Stack.Screen name="routines" options={{ headerShown: false }} />
                       <Stack.Screen name="routine_analytics" options={{ headerShown: false }} />
                       <Stack.Screen name="routine_detail" options={{ headerShown: false }} />
+                      <Stack.Screen name="journal/index" options={{ headerShown: false }} />
+                      <Stack.Screen name="journal/[id]" options={{ headerShown: false }} />
+                      <Stack.Screen name="terms" options={{ headerShown: false }} />
+                      <Stack.Screen name="privacy" options={{ headerShown: false }} />
+                      <Stack.Screen name="transactions" options={{ headerShown: false }} />
+                      <Stack.Screen name="+not-found" options={{ headerShown: false }} />
                     </Stack>
                     <Toast />
                   </ErrorBoundary>

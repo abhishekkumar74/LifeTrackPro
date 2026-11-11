@@ -6,6 +6,7 @@ import {
   Text,
   ActivityIndicator,
   Platform,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -177,9 +178,22 @@ export default function OnboardingScreen(): React.JSX.Element {
 
     try {
       // 1. Retrieve the authenticated user session details
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error(userError?.message || 'Authenticated user session not found.');
+      let user = (await supabase.auth.getUser())?.data?.user;
+      if (!user) {
+        user = useAuthStore.getState().user || useAuthStore.getState().session?.user || null;
+      }
+      if (!user) {
+        Alert.alert(
+          'Sign In Required',
+          'Please create an account or sign in before completing profile onboarding.',
+          [
+            {
+              text: 'Go to Sign In',
+              onPress: () => router.replace('/login'),
+            },
+          ]
+        );
+        return;
       }
 
       // 2. Perform Profile details insertion

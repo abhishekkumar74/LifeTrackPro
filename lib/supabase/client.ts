@@ -27,13 +27,40 @@ if (typeof WebSocket === 'undefined') {
  */
 const customStorage = {
   getItem: async (key: string): Promise<string | null> => {
+    let rawVal: string | null = null;
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined' && window.localStorage) {
-        return window.localStorage.getItem(key);
+        rawVal = window.localStorage.getItem(key);
       }
-      return null;
+    } else {
+      rawVal = await AsyncStorage.getItem(key);
     }
-    return AsyncStorage.getItem(key);
+
+    // Defensive check: If an auth token is corrupted in storage (not a 3-part JWT), clean it up
+    if (rawVal && (key.includes('auth-token') || key.includes('supabase.auth'))) {
+      try {
+        const parsed = JSON.parse(rawVal);
+        const token = parsed?.access_token || parsed?.currentSession?.access_token;
+        if (token && typeof token === 'string' && token.split('.').length !== 3) {
+          if (Platform.OS === 'web') {
+            window.localStorage.removeItem(key);
+          } else {
+            AsyncStorage.removeItem(key).catch(() => {});
+          }
+          return null;
+        }
+      } catch {
+        // Not valid JSON, clean it up
+        if (Platform.OS === 'web') {
+          window.localStorage.removeItem(key);
+        } else {
+          AsyncStorage.removeItem(key).catch(() => {});
+        }
+        return null;
+      }
+    }
+
+    return rawVal;
   },
   setItem: async (key: string, value: string): Promise<void> => {
     if (Platform.OS === 'web') {
@@ -678,11 +705,58 @@ export const supabase = createClient<any>(
           }
         }
 
+        // Sanitize Authorization header to ensure invalid/corrupted JWTs never cause PGRST301
+        const customHeaders: Record<string, string> = {};
+        if (options.headers) {
+          if (options.headers instanceof Headers) {
+            options.headers.forEach((v, k) => {
+              customHeaders[k] = v;
+            });
+          } else if (Array.isArray(options.headers)) {
+            options.headers.forEach(([k, v]) => {
+              customHeaders[k] = v;
+            });
+          } else {
+            Object.assign(customHeaders, options.headers);
+          }
+        }
+
+        const authKey = Object.keys(customHeaders).find((k) => k.toLowerCase() === 'authorization');
+        if (authKey) {
+          const authVal = customHeaders[authKey];
+          if (typeof authVal === 'string' && authVal.startsWith('Bearer ')) {
+            const token = authVal.substring(7).trim();
+            // A valid JWT must consist of three dot-separated parts: header.payload.signature
+            if (token && token.split('.').length !== 3) {
+              customHeaders[authKey] = `Bearer ${supabaseAnonKey}`;
+            }
+          }
+        }
+
         try {
-          return await fetch(url, {
+          const res = await fetch(url, {
             ...options,
+            headers: customHeaders,
             signal: controller.signal,
           });
+
+          // If server rejects with PGRST301 (malformed JWT), clean up stale AsyncStorage auth
+          if (res.status === 401) {
+            res.clone().json().then((jsonBody) => {
+              if (jsonBody?.code === 'PGRST301' || jsonBody?.message?.includes('Expected 3 parts in JWT')) {
+                if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                  window.localStorage.removeItem('sb-zvfeafmixnevqbelxnqp-auth-token');
+                } else {
+                  AsyncStorage.multiRemove([
+                    'sb-zvfeafmixnevqbelxnqp-auth-token',
+                    'auth-storage',
+                  ]).catch(() => {});
+                }
+              }
+            }).catch(() => {});
+          }
+
+          return res;
         } catch (err: any) {
           if (
             err?.name === 'AbortError' ||

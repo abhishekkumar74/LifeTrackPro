@@ -75,4 +75,5 @@ scratch/
 test-types.ts
 coverage/
 android-sdk-tmp/
+QA_REPORTS/
 

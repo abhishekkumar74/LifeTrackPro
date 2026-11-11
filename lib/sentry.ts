@@ -63,6 +63,8 @@ export function captureError(
     'cancelled',
     'ExponentAV',
     'Cannot find native module',
+    'PGRST301',
+    'Expected 3 parts in JWT',
   ].some(ignored => errStr.toLowerCase().includes(ignored.toLowerCase()));
 
   if (isIgnored) {
@@ -73,7 +75,7 @@ export function captureError(
   }
 
   if (__DEV__) {
-    console.error('[Error]', error);
+    console.error('[Error]', error, context ? JSON.stringify(context) : '');
     return;
   }
   Sentry.withScope((scope) => {
