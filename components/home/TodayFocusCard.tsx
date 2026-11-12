@@ -241,7 +241,7 @@ export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
         </Text>
 
         {/* Estimate & Time Subtitle */}
-        <Text style={styles.subtitle}>
+        <Text style={styles.subtitle} numberOfLines={1} ellipsizeMode="tail">
           {`${displayEstimate} · ${displaySubject}`}
         </Text>
 
@@ -250,7 +250,9 @@ export const TodayFocusCard = React.memo<TodayFocusCardProps>(({
           {/* Subject Badge Pill */}
           <View style={styles.subjectPill}>
             {getSubjectIcon(displaySubject, category)}
-            <Text style={styles.subjectText}>{displaySubject}</Text>
+            <Text style={styles.subjectText} numberOfLines={1} ellipsizeMode="tail">
+              {displaySubject}
+            </Text>
           </View>
 
           {/* Start Focus Pill Button */}
@@ -345,6 +347,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
   },
   subjectPill: {
     flexDirection: 'row',
@@ -356,6 +359,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    flexShrink: 1,
+    maxWidth: '65%',
   },
   subjectEmoji: {
     fontSize: 12.5,
@@ -364,6 +369,7 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans-Bold',
     fontSize: 12.5,
     color: '#E0E0F0',
+    flexShrink: 1,
   },
   startButton: {
     flexDirection: 'row',
@@ -378,6 +384,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowRadius: 8,
     elevation: 5,
+    flexShrink: 0,
   },
   startButtonLive: {
     backgroundColor: '#059669',

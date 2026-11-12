@@ -15,11 +15,11 @@ export async function checkForUpdate() {
     const update = await Updates.checkForUpdateAsync();
     
     if (update.isAvailable) {
-      console.log('[Updates] New update found! Downloading...');
+      console.log('[Updates] New update found! Downloading in background...');
       await Updates.fetchUpdateAsync();
-      // Reload app with new bundle
-      console.log('[Updates] Applying update and reloading...');
-      await Updates.reloadAsync();
+      // Note: In Expo, once fetched, the new bundle is automatically applied on the next cold launch.
+      // We do NOT call reloadAsync() immediately to prevent jarring force-close / white screen while user is active.
+      console.log('[Updates] New bundle downloaded successfully. It will activate on next launch.');
     } else {
       console.log('[Updates] App is currently up-to-date.');
     }

@@ -564,6 +564,7 @@ function RootLayout() {
   }, []);
 
   const [splashAnimationDone, setSplashAnimationDone] = useState(false);
+  const [splashCanDismiss, setSplashCanDismiss] = useState(false);
 
   // Dismiss native splash screen immediately so AnimatedSplash takes over smoothly
   useEffect(() => {
@@ -573,25 +574,21 @@ function RootLayout() {
   useEffect(() => {
     if (fontsLoaded && authInitialized) {
       markEnd('app_boot');
+      if (splashCanDismiss) {
+        setSplashAnimationDone(true);
+      }
     }
-  }, [fontsLoaded, authInitialized]);
+  }, [fontsLoaded, authInitialized, splashCanDismiss]);
 
   const handleSplashFinish = () => {
+    setSplashCanDismiss(true);
     if (fontsLoaded && authInitialized) {
       setSplashAnimationDone(true);
-    } else {
-      // If fonts or auth still loading, wait briefly until ready before revealing app
-      const checkTimer = setInterval(() => {
-        if (useAuthStore.getState().isLoading === false) {
-          clearInterval(checkTimer);
-          setSplashAnimationDone(true);
-        }
-      }, 80);
     }
   };
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0F172A' }}>
       {fontsLoaded && authInitialized ? (
         <PostHogProvider
           client={posthog}

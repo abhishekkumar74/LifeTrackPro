@@ -520,6 +520,34 @@ export async function cancelAllNotifications(): Promise<void> {
   }
 }
 
+export async function dismissSystemNotification(identifier: string): Promise<void> {
+  if (!Notifications) return;
+  try {
+    await Notifications.dismissNotificationAsync(identifier).catch(() => {});
+  } catch (err) {
+    if (__DEV__) console.warn('dismissSystemNotification failed:', err);
+  }
+}
+
+export async function dismissAllSystemNotifications(): Promise<void> {
+  if (!Notifications) return;
+  try {
+    await Notifications.dismissAllNotificationsAsync().catch(() => {});
+    await Notifications.setBadgeCountAsync(0).catch(() => {});
+  } catch (err) {
+    if (__DEV__) console.warn('dismissAllSystemNotifications failed:', err);
+  }
+}
+
+export async function setAppBadgeCount(count: number): Promise<void> {
+  if (!Notifications) return;
+  try {
+    await Notifications.setBadgeCountAsync(Math.max(0, count)).catch(() => {});
+  } catch (err) {
+    if (__DEV__) console.warn('setAppBadgeCount failed:', err);
+  }
+}
+
 // 5. useNotificationResponse custom hook
 export function useNotificationResponse() {
   useEffect(() => {

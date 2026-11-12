@@ -48,19 +48,20 @@ const MiniSparkline: React.FC<{
   bars: number[];
   color: string;
 }> = React.memo(({ bars, color }) => {
+  const maxVal = Math.max(...bars, 1);
   return (
     <View style={styles.sparklineContainer} pointerEvents="none">
-      {bars.map((height, idx) => {
-        const isRecent = idx >= 5;
-        const isActivity = height > 3;
-        const opacity = isActivity ? (isRecent ? 1 : 0.65) : 0.25;
+      {bars.map((val, idx) => {
+        const isToday = idx === bars.length - 1;
+        const normalizedHeight = Math.max(3, Math.min(12, Math.round((val / maxVal) * 12)));
+        const opacity = val > 0 ? (isToday ? 1 : 0.65) : 0.22;
         return (
           <View
             key={idx}
             style={[
               styles.sparklineBar,
               {
-                height: Math.max(3, Math.min(18, height)),
+                height: normalizedHeight,
                 backgroundColor: color,
                 opacity,
               },
@@ -158,7 +159,10 @@ export const QuickStats = React.memo<QuickStatsProps>(({
       <View style={styles.container}>
         {[1, 2, 3].map((key) => (
           <View key={key} style={styles.card}>
-            <Animated.View style={[styles.skeletonIcon, pulseStyle]} />
+            <View style={styles.cardHeader}>
+              <Animated.View style={[styles.skeletonIcon, pulseStyle]} />
+              <Animated.View style={[styles.skeletonSparkline, pulseStyle]} />
+            </View>
             <Animated.View style={[styles.skeletonNumber, pulseStyle]} />
             <Animated.View style={[styles.skeletonLabel, pulseStyle]} />
           </View>
@@ -175,7 +179,11 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         onPress={() => router.push('/(tabs)/focus')}
         activeOpacity={0.8}
       >
-        <Clock size={16} color="#6355F6" />
+        <View style={styles.cardHeader}>
+          <Clock size={16} color="#6355F6" />
+          {/* 7-Day Sparkline Bar Chart (Violet) */}
+          <MiniSparkline bars={focusSparklines} color="#6355F6" />
+        </View>
         <Text
           style={styles.number}
           numberOfLines={1}
@@ -187,9 +195,6 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         <Text style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
           Focus time
         </Text>
-
-        {/* 7-Day Sparkline Bar Chart (Violet) */}
-        <MiniSparkline bars={focusSparklines} color="#6355F6" />
       </TouchableOpacity>
 
       {/* Tile 2 — Tasks done */}
@@ -198,7 +203,11 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         onPress={() => router.push('/(tabs)/goals')}
         activeOpacity={0.8}
       >
-        <CheckSquare size={16} color="#10B981" />
+        <View style={styles.cardHeader}>
+          <CheckSquare size={16} color="#10B981" />
+          {/* 7-Day Sparkline Bar Chart (Emerald/Mint) */}
+          <MiniSparkline bars={tasksSparklines} color="#10B981" />
+        </View>
         <Text
           style={styles.number}
           numberOfLines={1}
@@ -212,9 +221,6 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         <Text style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
           Tasks done
         </Text>
-
-        {/* 7-Day Sparkline Bar Chart (Emerald/Mint) */}
-        <MiniSparkline bars={tasksSparklines} color="#10B981" />
       </TouchableOpacity>
 
       {/* Tile 3 — Day streak */}
@@ -227,11 +233,15 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         onPress={onPressStreak ? onPressStreak : () => router.push('/habits')}
         activeOpacity={0.8}
       >
-        {isStreakBroken ? (
-          <HeartCrack size={16} color="#EF4444" />
-        ) : (
-          <Flame size={16} color="#F59E0B" />
-        )}
+        <View style={styles.cardHeader}>
+          {isStreakBroken ? (
+            <HeartCrack size={16} color="#EF4444" />
+          ) : (
+            <Flame size={16} color="#F59E0B" />
+          )}
+          {/* 7-Day Sparkline Bar Chart (Amber/Gold or Red if broken) */}
+          <MiniSparkline bars={streakSparklines} color={isStreakBroken ? '#EF4444' : '#F59E0B'} />
+        </View>
         <Text
           style={[styles.number, isStreakBroken && { color: '#EF4444' }]}
           numberOfLines={1}
@@ -248,9 +258,6 @@ export const QuickStats = React.memo<QuickStatsProps>(({
         >
           {isStreakBroken ? 'Broken' : 'Day streak'}
         </Text>
-
-        {/* 7-Day Sparkline Bar Chart (Amber/Gold or Red if broken) */}
-        <MiniSparkline bars={streakSparklines} color={isStreakBroken ? '#EF4444' : '#F59E0B'} />
       </TouchableOpacity>
     </View>
   );
@@ -273,13 +280,19 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 9,
     paddingHorizontal: 10,
-    position: 'relative',
     minHeight: 82,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 6,
   },
   focusCardBorder: {
     borderBottomColor: '#6355F6',
@@ -314,25 +327,31 @@ const styles = StyleSheet.create({
   },
   // Mini Sparkline Styles
   sparklineContainer: {
-    position: 'absolute',
-    bottom: 7,
-    right: 7,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    height: 18,
+    height: 14,
     gap: 2,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.025)',
+    borderRadius: 4,
   },
   sparklineBar: {
-    width: 3,
-    borderRadius: 1.5,
+    width: 2.5,
+    borderRadius: 1.25,
   },
   // Skeleton Styles
   skeletonIcon: {
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
     borderRadius: 4,
     backgroundColor: '#ECECEF',
-    marginBottom: 6,
+  },
+  skeletonSparkline: {
+    width: 28,
+    height: 12,
+    borderRadius: 3,
+    backgroundColor: '#ECECEF',
   },
   skeletonNumber: {
     width: 44,

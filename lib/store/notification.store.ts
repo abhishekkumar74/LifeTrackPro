@@ -3,6 +3,36 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
+let NotificationsModule: typeof import('expo-notifications') | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  NotificationsModule = require('expo-notifications');
+} catch {
+  // Graceful fallback if expo-notifications is unavailable
+}
+
+function safelyDismissNotification(id: string) {
+  if (!NotificationsModule) return;
+  try {
+    NotificationsModule.dismissNotificationAsync(id).catch(() => {});
+  } catch {}
+}
+
+function safelyDismissAllNotifications() {
+  if (!NotificationsModule) return;
+  try {
+    NotificationsModule.dismissAllNotificationsAsync().catch(() => {});
+    NotificationsModule.setBadgeCountAsync(0).catch(() => {});
+  } catch {}
+}
+
+function safelySetBadgeCount(count: number) {
+  if (!NotificationsModule) return;
+  try {
+    NotificationsModule.setBadgeCountAsync(Math.max(0, count)).catch(() => {});
+  } catch {}
+}
+
 export type NotificationType = 'brief' | 'streak' | 'revision' | 'milestone' | 'habit' | 'system';
 
 export interface AppNotification {
@@ -30,6 +60,7 @@ interface NotificationState {
   notifications: AppNotification[];
   settings: NotificationSettings;
   lastClearedAt: number | null;
+  dismissedNotificationIds: string[];
 
   // Actions
   markAsRead: (id: string) => void;
@@ -77,17 +108,24 @@ export const useNotificationStore = create<NotificationState>()(
       notifications: [],
       settings: DEFAULT_SETTINGS,
       lastClearedAt: null,
+      dismissedNotificationIds: [],
 
       markAsRead: (id: string) => {
-        set((state) => ({
-          notifications: (state.notifications || []).map((n) =>
+        set((state) => {
+          const next = (state.notifications || []).map((n) =>
             n.id === id ? { ...n, isRead: true } : n
-          ),
-        }));
+          );
+          const unread = next.filter((n) => !n.isRead).length;
+          safelySetBadgeCount(unread);
+          safelyDismissNotification(id);
+          return { notifications: next };
+        });
       },
 
       markAllAsRead: () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        safelySetBadgeCount(0);
+        safelyDismissAllNotifications();
         set((state) => ({
           notifications: (state.notifications || []).map((n) => ({ ...n, isRead: true })),
         }));
@@ -95,26 +133,52 @@ export const useNotificationStore = create<NotificationState>()(
 
       deleteNotification: (id: string) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-        set((state) => ({
-          notifications: (state.notifications || []).filter((n) => n.id !== id),
-        }));
+        safelyDismissNotification(id);
+        set((state) => {
+          const next = (state.notifications || []).filter((n) => n.id !== id);
+          const unread = next.filter((n) => !n.isRead).length;
+          safelySetBadgeCount(unread);
+          const currentDismissed = state.dismissedNotificationIds || [];
+          return {
+            notifications: next,
+            dismissedNotificationIds: currentDismissed.includes(id)
+              ? currentDismissed
+              : [id, ...currentDismissed].slice(0, 200),
+          };
+        });
       },
 
       clearAll: () => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        set({
-          notifications: [],
-          lastClearedAt: Date.now(),
+        safelyDismissAllNotifications();
+        safelySetBadgeCount(0);
+        set((state) => {
+          const currentIds = (state.notifications || []).map((n) => n.id);
+          const mergedDismissed = Array.from(
+            new Set(['notif_welcome_init', ...currentIds, ...(state.dismissedNotificationIds || [])])
+          ).slice(0, 200);
+          return {
+            notifications: [],
+            lastClearedAt: Date.now(),
+            dismissedNotificationIds: mergedDismissed,
+          };
         });
       },
 
       addNotification: (item) => {
+        const state = get();
         const now = Date.now();
-        const currentNotifications = get().notifications || [];
+        const currentNotifications = state.notifications || [];
+        const dismissedIds = state.dismissedNotificationIds || [];
 
         const targetTimestamp = item.timestamp ?? now;
         const targetId = item.id ?? `notif_${now}_${Math.random().toString(36).substring(2, 7)}`;
         const targetIsRead = item.isRead ?? false;
+
+        // If explicitly deleted by user, do NOT re-add!
+        if (dismissedIds.includes(targetId)) {
+          return;
+        }
 
         // Deduplication: Avoid duplicate notifications with identical title & type within 4 hours, or matching id
         const isDuplicate = currentNotifications.some(
@@ -137,9 +201,14 @@ export const useNotificationStore = create<NotificationState>()(
           isRead: targetIsRead,
         };
 
-        // Prepend and cap at maximum 50 notifications to prevent unbounded memory growth
+        const updated = [newNotif, ...currentNotifications].slice(0, 50);
+        if (!targetIsRead) {
+          const unread = updated.filter((n) => !n.isRead).length;
+          safelySetBadgeCount(unread);
+        }
+
         set({
-          notifications: [newNotif, ...currentNotifications].slice(0, 50),
+          notifications: updated,
         });
       },
 
@@ -147,6 +216,7 @@ export const useNotificationStore = create<NotificationState>()(
         const state = get();
         const now = Date.now();
         const currentNotifications = state.notifications || [];
+        const dismissedIds = state.dismissedNotificationIds || [];
 
         if (state.settings.doNotDisturb) {
           return;
@@ -164,7 +234,10 @@ export const useNotificationStore = create<NotificationState>()(
 
         const newItems: AppNotification[] = [];
 
+        const isDismissed = (id: string) => dismissedIds.includes(id);
+
         const hasNotif = (id: string, title?: string) =>
+          isDismissed(id) ||
           currentNotifications.some(
             (n) =>
               n.id === id ||
@@ -185,6 +258,7 @@ export const useNotificationStore = create<NotificationState>()(
           currentHour >= 6 &&
           state.settings.morningBriefEnabled &&
           isAfterCleared(effectiveBriefTs) &&
+          !isDismissed(`notif_brief_${dateStr}`) &&
           !hasNotif(`notif_brief_${dateStr}`, 'Daily Morning Brief')
         ) {
           newItems.push({
@@ -206,6 +280,7 @@ export const useNotificationStore = create<NotificationState>()(
           (currentHour > 14 || (currentHour === 14 && currentMinute >= 30)) &&
           state.settings.habitRemindersEnabled &&
           isAfterCleared(habitCheckinTs) &&
+          !isDismissed(`notif_habit_${dateStr}`) &&
           !hasNotif(`notif_habit_${dateStr}`, 'Habit Check-in')
         ) {
           newItems.push({
@@ -227,6 +302,7 @@ export const useNotificationStore = create<NotificationState>()(
           currentHour >= 21 &&
           state.settings.streakAlertsEnabled &&
           isAfterCleared(streakAlertTs) &&
+          !isDismissed(`notif_streak_${dateStr}`) &&
           !hasNotif(`notif_streak_${dateStr}`, "Don't break your streak!") &&
           !hasNotif(`notif_streak_${dateStr}`, 'Keep Your Streak Active')
         ) {
@@ -248,6 +324,7 @@ export const useNotificationStore = create<NotificationState>()(
         if (
           currentHour >= 22 &&
           isAfterCleared(eveningReviewTs) &&
+          !isDismissed(`notif_review_${dateStr}`) &&
           !hasNotif(`notif_review_${dateStr}`, 'Daily Wrap-up')
         ) {
           newItems.push({
@@ -263,8 +340,13 @@ export const useNotificationStore = create<NotificationState>()(
           });
         }
 
-        // Welcome card if user has completely fresh inbox and never cleared
-        if (currentNotifications.length === 0 && newItems.length === 0 && state.lastClearedAt === null) {
+        // Welcome card if user has completely fresh inbox and never cleared or dismissed
+        if (
+          currentNotifications.length === 0 &&
+          newItems.length === 0 &&
+          state.lastClearedAt === null &&
+          !isDismissed('notif_welcome_init')
+        ) {
           newItems.push({
             id: 'notif_welcome_init',
             type: 'system',
@@ -280,6 +362,8 @@ export const useNotificationStore = create<NotificationState>()(
 
         if (newItems.length > 0) {
           const combined = [...newItems, ...currentNotifications].sort((a, b) => b.timestamp - a.timestamp);
+          const unread = combined.filter((n) => !n.isRead).length;
+          safelySetBadgeCount(unread);
           set({
             notifications: combined.slice(0, 50),
           });
@@ -297,23 +381,27 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       resetDefaults: () => {
+        safelySetBadgeCount(0);
+        safelyDismissAllNotifications();
         set({
           notifications: [],
           settings: DEFAULT_SETTINGS,
           lastClearedAt: null,
+          dismissedNotificationIds: [],
         });
       },
     }),
     {
       name: 'lifetrack_notification_storage',
       storage: createJSONStorage(() => AsyncStorage),
-      version: 2,
+      version: 3,
       migrate: (persistedState: any, version: number) => {
         if (!persistedState) {
           return {
             notifications: [],
             settings: DEFAULT_SETTINGS,
             lastClearedAt: null,
+            dismissedNotificationIds: [],
           };
         }
         // Purge legacy hardcoded mock notification IDs
@@ -327,10 +415,15 @@ export const useNotificationStore = create<NotificationState>()(
             )
           : [];
 
+        const cleanedDismissed = Array.isArray(persistedState.dismissedNotificationIds)
+          ? persistedState.dismissedNotificationIds
+          : [];
+
         return {
           ...persistedState,
           notifications: cleanedNotifications,
           lastClearedAt: persistedState.lastClearedAt ?? null,
+          dismissedNotificationIds: cleanedDismissed,
           settings: {
             ...DEFAULT_SETTINGS,
             ...(persistedState.settings || {}),
