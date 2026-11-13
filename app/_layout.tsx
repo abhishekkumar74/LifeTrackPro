@@ -189,12 +189,10 @@ function RootLayout() {
 
   useEffect(() => {
     let isMounted = true;
-    const safetyTimeout = setTimeout(() => {
-      if (isMounted) setFontsLoaded(true);
-    }, 1500);
 
     async function loadFonts() {
       try {
+        // Step 1: Load bundled local fonts immediately (< 50ms)
         await Font.loadAsync({
           SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
           InstrumentSerif: require('../assets/fonts/InstrumentSerif-Regular.ttf'),
@@ -206,36 +204,42 @@ function RootLayout() {
           'Outfit-SemiBold': require('../assets/fonts/Outfit-SemiBold.ttf'),
           'PlusJakartaSans-Bold': require('../assets/fonts/PlusJakartaSans-Bold.ttf'),
           'PlusJakartaSans-SemiBold': require('../assets/fonts/PlusJakartaSans-SemiBold.ttf'),
-          Caveat: 'https://fonts.gstatic.com/s/caveat/v18/WncdHAc5bAfYB2Q7ae54EA.ttf',
-          Fraunces: 'https://fonts.gstatic.com/s/fraunces/v31/6nuHBaBJf4MeaxHcU3j318b84YpS58A73zp_C852D5oU55k_3q751Z1F.ttf',
-          Newsreader: 'https://fonts.gstatic.com/s/newsreader/v25/6nU54q6y8_j9Z0y8eY3W3zNn4bS13p2z.ttf',
-          Kalam: 'https://fonts.gstatic.com/s/kalam/v16/KrumBXdLD2N7y8N07t7k.ttf',
-          PatrickHand: 'https://fonts.gstatic.com/s/patrickhand/v21/L0x5DF4xlVMF-BfR8bXMIhJPq48.ttf',
-          ArchitectsDaughter: 'https://fonts.gstatic.com/s/architectsdaughter/v18/KtkM350A33-of6jX6vG9I83WdSA2yL4.ttf',
-          IndieFlower: 'https://fonts.gstatic.com/s/indieflower/v17/1410350A33-of6jX6vG9I83WdSA2.ttf',
-          DancingScript: 'https://fonts.gstatic.com/s/dancingscript/v25/If2cXTr6YS-zF4S-Fv67xpxZ2g.ttf',
-          Pacifico: 'https://fonts.gstatic.com/s/pacifico/v22/FwZYrNK-Fv67xpxZ2g.ttf',
-          AmaticSC: 'https://fonts.gstatic.com/s/amaticsc/v26/Tavq20NPG20_W-D8fT-I-G3i.ttf',
-          CaveatBrush: 'https://fonts.gstatic.com/s/caveatbrush/v16/0FlmB2FpzvjA9KZ3wW3qXn8.ttf',
-          NanumPenScript: 'https://fonts.gstatic.com/s/nanumpenscript/v23/m8JVjfNBPaxyHbhX2kF0-W4X2Q.ttf',
-          Handlee: 'https://fonts.gstatic.com/s/handlee/v18/5aU19_atWWA67l57MhM.ttf',
-          Gaegu: 'https://fonts.gstatic.com/s/gaegu/v17/k3kVo80058Nua3U6xQ.ttf',
-          MarckScript: 'https://fonts.gstatic.com/s/marckscript/v17/nF1Y2Z92eS6P-e1jYx-G.ttf',
-          NothingYouCouldDo: 'https://fonts.gstatic.com/s/nothingyoucoulddo/v19/o-0bIp19-BD1Sro82IZm9L-13A23pL4.ttf',
-          Neucha: 'https://fonts.gstatic.com/s/neucha/v17/q4bMV2DGKK0197v2.ttf',
         });
       } catch (error) {
         if (__DEV__) {
-          console.warn('Font loading warning (handled gracefully):', error);
+          console.warn('Local font loading warning:', error);
         }
       } finally {
+        // Immediately unblock UI rendering with local fonts
         if (isMounted) setFontsLoaded(true);
       }
+
+      // Step 2: Load remote Google Fonts asynchronously in the background
+      // This ensures 17 remote HTTP requests NEVER delay or freeze app startup
+      Font.loadAsync({
+        Caveat: 'https://fonts.gstatic.com/s/caveat/v18/WncdHAc5bAfYB2Q7ae54EA.ttf',
+        Fraunces: 'https://fonts.gstatic.com/s/fraunces/v31/6nuHBaBJf4MeaxHcU3j318b84YpS58A73zp_C852D5oU55k_3q751Z1F.ttf',
+        Newsreader: 'https://fonts.gstatic.com/s/newsreader/v25/6nU54q6y8_j9Z0y8eY3W3zNn4bS13p2z.ttf',
+        Kalam: 'https://fonts.gstatic.com/s/kalam/v16/KrumBXdLD2N7y8N07t7k.ttf',
+        PatrickHand: 'https://fonts.gstatic.com/s/patrickhand/v21/L0x5DF4xlVMF-BfR8bXMIhJPq48.ttf',
+        ArchitectsDaughter: 'https://fonts.gstatic.com/s/architectsdaughter/v18/KtkM350A33-of6jX6vG9I83WdSA2yL4.ttf',
+        IndieFlower: 'https://fonts.gstatic.com/s/indieflower/v17/1410350A33-of6jX6vG9I83WdSA2.ttf',
+        DancingScript: 'https://fonts.gstatic.com/s/dancingscript/v25/If2cXTr6YS-zF4S-Fv67xpxZ2g.ttf',
+        Pacifico: 'https://fonts.gstatic.com/s/pacifico/v22/FwZYrNK-Fv67xpxZ2g.ttf',
+        AmaticSC: 'https://fonts.gstatic.com/s/amaticsc/v26/Tavq20NPG20_W-D8fT-I-G3i.ttf',
+        CaveatBrush: 'https://fonts.gstatic.com/s/caveatbrush/v16/0FlmB2FpzvjA9KZ3wW3qXn8.ttf',
+        NanumPenScript: 'https://fonts.gstatic.com/s/nanumpenscript/v23/m8JVjfNBPaxyHbhX2kF0-W4X2Q.ttf',
+        Handlee: 'https://fonts.gstatic.com/s/handlee/v18/5aU19_atWWA67l57MhM.ttf',
+        Gaegu: 'https://fonts.gstatic.com/s/gaegu/v17/k3kVo80058Nua3U6xQ.ttf',
+        MarckScript: 'https://fonts.gstatic.com/s/marckscript/v17/nF1Y2Z92eS6P-e1jYx-G.ttf',
+        NothingYouCouldDo: 'https://fonts.gstatic.com/s/nothingyoucoulddo/v19/o-0bIp19-BD1Sro82IZm9L-13A23pL4.ttf',
+        Neucha: 'https://fonts.gstatic.com/s/neucha/v17/q4bMV2DGKK0197v2.ttf',
+      }).catch(() => {});
     }
+
     loadFonts();
     return () => {
       isMounted = false;
-      clearTimeout(safetyTimeout);
     };
   }, []);
 
@@ -497,21 +501,22 @@ function RootLayout() {
     let isMounted = true;
 
     // 1. Resolve initial Supabase user session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return;
       try {
         if (session) {
           setSession(session);
           setSentryUser(session.user.id);
           identifyUser(session.user.id, { email: session.user.email });
-          await fetchProfile(session.user.id);
+          // Fetch fresh profile in the BACKGROUND - DO NOT BLOCK INITIAL RENDER!
+          fetchProfile(session.user.id).catch(() => {});
         } else {
           // If Supabase has no active session, sync Zustand state with reality
           setSession(null);
           setProfile(null);
-          setLoading(false);
         }
       } finally {
+        setLoading(false);
         if (isMounted) {
           setAuthInitialized(true);
         }
@@ -543,8 +548,8 @@ function RootLayout() {
         setSession(session);
         setSentryUser(session.user.id);
         identifyUser(session.user.id, { email: session.user.email });
-        await fetchProfile(session.user.id);
         setAuthInitialized(true);
+        fetchProfile(session.user.id).catch(() => {});
       } else if (event === 'INITIAL_SESSION') {
         // Don't wipe session on initial null event if store already rehydrated session
         const currentSession = useAuthStore.getState().session;
@@ -571,6 +576,17 @@ function RootLayout() {
     SplashScreen.hideAsync().catch(() => {});
   }, []);
 
+  // Failsafe timer: Under NO CIRCUMSTANCES should the app freeze or hang for > 2.5 seconds
+  useEffect(() => {
+    const failsafeTimer = setTimeout(() => {
+      setFontsLoaded(true);
+      setAuthInitialized(true);
+      setSplashAnimationDone(true);
+    }, 2500);
+
+    return () => clearTimeout(failsafeTimer);
+  }, []);
+
   useEffect(() => {
     if (fontsLoaded && authInitialized) {
       markEnd('app_boot');
@@ -584,6 +600,13 @@ function RootLayout() {
     setSplashCanDismiss(true);
     if (fontsLoaded && authInitialized) {
       setSplashAnimationDone(true);
+    } else {
+      // If fonts or auth still resolving, wait at most 300ms then force dismiss
+      setTimeout(() => {
+        setFontsLoaded(true);
+        setAuthInitialized(true);
+        setSplashAnimationDone(true);
+      }, 300);
     }
   };
 
