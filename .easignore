@@ -1,7 +1,12 @@
 # EAS Build / Update Ignore Rules
-# Keep uploads minimal and fast
+# Managed Expo project: native folders are generated in EAS Cloud via expo prebuild
+/android/
+/ios/
 
-# Documentation & Reports
+# Dependencies
+node_modules/
+
+# Documentation, Marketing, & Store Assets
 docs/
 QA_REPORTS/
 coverage/
@@ -11,14 +16,16 @@ __tests__/
 *.md
 *.csv
 
-# Cache & Logs
+# Expo & Metro Caches
 .expo/
+dist/
+web-build/
 *.log
 npm-debug.*
 yarn-debug.*
 yarn-error.*
 
-# Secrets
+# Secrets & Credentials (handled securely by EAS credentials manager)
 *.pem
 *.keystore
 google-play-key.json
@@ -27,3 +34,4 @@ lifetrack-pro-*.json
 
 # OS Junk
 .DS_Store
+Thumbs.db
