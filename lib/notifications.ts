@@ -112,17 +112,21 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 // 2. scheduleMorningBrief
-export async function scheduleMorningBrief(topTaskTitle: string, hour = 8, minute = 0): Promise<void> {
+export async function scheduleMorningBrief(topTaskTitle?: string, hour = 8, minute = 0): Promise<void> {
   if (!Notifications) return;
   try {
     await Notifications.cancelScheduledNotificationAsync('morning_brief').catch(() => {});
 
+    const bodyText = topTaskTitle
+      ? `Today's priority: "${topTaskTitle}". 25 min ka pehla session start karein 🎯`
+      : 'Aaj ka goal set kiya? 25 min ka pehla focus session start karein 🎯';
+
     await Notifications.scheduleNotificationAsync({
       identifier: 'morning_brief',
       content: {
-        title: 'Good morning!',
-        body: `Today's priority: ${topTaskTitle || 'Complete your planned focus blocks'}`,
-        data: { screen: '/', type: 'brief', actionText: "View Today's Plan" },
+        title: 'Aaj ka goal set kiya? 🎯',
+        body: bodyText,
+        data: { screen: '/focus', type: 'brief', actionText: 'Start 25m Focus' },
         sound: true,
       },
       trigger: {
@@ -163,8 +167,8 @@ export async function scheduleHabitReminder(hour = 14, minute = 30): Promise<voi
   }
 }
 
-// 3. scheduleStreakAlert (Evening Streak Saver)
-export async function scheduleStreakAlert(hour = 21, minute = 0): Promise<void> {
+// 3. scheduleStreakAlert (Evening Streak Saver - 8:00 PM)
+export async function scheduleStreakAlert(hour = 20, minute = 0): Promise<void> {
   if (!Notifications) return;
   try {
     await Notifications.cancelScheduledNotificationAsync('streak_alert').catch(() => {});
@@ -172,9 +176,9 @@ export async function scheduleStreakAlert(hour = 21, minute = 0): Promise<void> 
     await Notifications.scheduleNotificationAsync({
       identifier: 'streak_alert',
       content: {
-        title: "Don't break your streak!",
-        body: 'Complete at least 1 habit before midnight to protect your active streak shield.',
-        data: { screen: '/habits', type: 'streak', actionText: 'Save Streak' },
+        title: 'Aapki streak khatre mein hai! 🛡️',
+        body: 'Bas 1 focus session complete karke apna streak safe rakhein 🛡️',
+        data: { screen: '/focus', type: 'streak', actionText: 'Protect Streak' },
         sound: true,
       },
       trigger: {
@@ -496,9 +500,9 @@ export async function syncNotificationSchedules(): Promise<void> {
       await cancelScheduledNotification('afternoon_habit');
     }
 
-    // 3. Streak Alerts (Evening 9:00 PM)
+    // 3. Streak Alerts (Evening 8:00 PM)
     if (settings.streakAlertsEnabled) {
-      await scheduleStreakAlert(21, 0);
+      await scheduleStreakAlert(20, 0);
     } else {
       await cancelScheduledNotification('streak_alert');
     }

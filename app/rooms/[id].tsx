@@ -90,7 +90,7 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
-const cozyHeader = require('../../assets/images/study-room-cozy-header.png');
+const cozyHeader = require('../../assets/images/study-room-cozy-header.webp');
 
 interface MusicStation {
   id: string;

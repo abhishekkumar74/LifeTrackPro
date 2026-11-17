@@ -1,0 +1,29 @@
+# EAS Build / Update Ignore Rules
+# Keep uploads minimal and fast
+
+# Documentation & Reports
+docs/
+QA_REPORTS/
+coverage/
+scratch/
+android-sdk-tmp/
+__tests__/
+*.md
+*.csv
+
+# Cache & Logs
+.expo/
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Secrets
+*.pem
+*.keystore
+google-play-key.json
+service-account*.json
+lifetrack-pro-*.json
+
+# OS Junk
+.DS_Store
