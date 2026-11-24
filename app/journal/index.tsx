@@ -3,7 +3,26 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import * as Haptics from 'expo-haptics';
 import { Href, router } from 'expo-router';
-import { ArrowLeft, Calendar, ChevronRight, KeyRound, Lock, Plus, ShieldCheck, Sparkles, Trash2, Unlock, Flame, Trophy, Crown } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Calendar,
+  ChevronRight,
+  KeyRound,
+  Lock,
+  Plus,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  Unlock,
+  Flame,
+  Trophy,
+  Crown,
+  FileDown,
+} from 'lucide-react-native';
+import { generateAndShareJournalPdf } from '@/lib/utils/journal-pdf';
+import { useRewardStore } from '@/lib/store/reward.store';
+import { AdRewarded } from '@/components/ads';
+import { useUiStore } from '@/lib/store/ui.store';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -23,7 +42,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function CozyJournalVaultScreen(): React.JSX.Element {
-  const { profile } = useAuthStore();
+  const { profile, user } = useAuthStore();
   const isPremium = profile?.is_premium || false;
 
   const { hasPin, isUnlocked, loading: pinLoading, savePin, verifyPin, lockVault, resetPin } = useVaultPin();
@@ -117,6 +136,62 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
     }
     return streak;
   };
+
+  // Placement 3.2: Journal PDF Export Pass
+  const isJournalExportUnlocked = useRewardStore((state) => state.isJournalExportUnlocked);
+  const grantJournalExportPass = useRewardStore((state) => state.grantJournalExportPass);
+  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+
+  const handleExportPdf = useCallback(async () => {
+    if (entries.length === 0) {
+      Alert.alert('No Entries', 'Your journal is currently empty. Write an entry before exporting.');
+      return;
+    }
+
+    const hasAccess = isJournalExportUnlocked(isPremium);
+
+    const performExport = async () => {
+      try {
+        setIsExportingPdf(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        const userName =
+          profile?.name ||
+          (user?.email ? user.email.split('@')[0] : 'LifeTrack User');
+        await generateAndShareJournalPdf({ entries, userName });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      } catch (err: any) {
+        Alert.alert('Export Error', 'Failed to generate PDF document. Please try again.');
+      } finally {
+        setIsExportingPdf(false);
+      }
+    };
+
+    if (hasAccess) {
+      await performExport();
+    } else {
+      Alert.alert(
+        'Export Formatted PDF',
+        'Export your entire journal collection as an elegant multi-page PDF document. Watch a short video ad to unlock free export for 24 hours, or upgrade to Gold for unlimited instant exports.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Upgrade to Gold',
+            onPress: () => router.push('/paywall'),
+          },
+          {
+            text: 'Watch Ad & Export',
+            onPress: () => {
+              AdRewarded.showRewardAd(async () => {
+                grantJournalExportPass();
+                useUiStore.getState().showToast('24-Hour Journal Export Pass unlocked!', 'success');
+                await performExport();
+              });
+            },
+          },
+        ]
+      );
+    }
+  }, [entries, isJournalExportUnlocked, isPremium, profile, user, grantJournalExportPass]);
 
   const handleKeyPress = (num: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -446,6 +521,20 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <TouchableOpacity
+            style={styles.exportPdfHeaderButton}
+            onPress={handleExportPdf}
+            disabled={isExportingPdf}
+            accessibilityLabel="Export Journal to PDF"
+            accessibilityRole="button"
+          >
+            {isExportingPdf ? (
+              <ActivityIndicator size="small" color="#6B6154" />
+            ) : (
+              <FileDown size={15} color="#6B6154" />
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.resetPinHeaderButton}
             onPress={() => {
               Alert.alert('Reset Vault PIN', 'Do you want to reset your 4-digit PIN?', [
@@ -471,7 +560,7 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
       </View>
 
       {/* SUBHEADER CAVEAT ACCENT */}
-      <Text style={styles.subHeaderAccent}>for your eyes only ✏️</Text>
+      <Text style={styles.subHeaderAccent}>for your eyes only</Text>
 
       <FlatList
         data={entries}
@@ -483,10 +572,14 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
             {/* STREAK & SUMMARY PARCHMENT CARD */}
             <View style={styles.streakCard}>
               <View style={styles.streakLeft}>
-                <Flame size={20} color="#E8A020" fill="#E8A020" />
-                <View>
+                <View style={styles.streakFlameWrap}>
+                  <Flame size={19} color="#E8A020" fill="#E8A020" />
+                </View>
+                <View style={styles.streakTextWrap}>
                   <Text style={styles.streakNumber}>{calculateStreak()} Day Streak</Text>
-                  <Text style={styles.streakSub}>CONSISTENT DAILY REFLECTIONS & DIARY LOGS</Text>
+                  <Text style={styles.streakSub} numberOfLines={1} ellipsizeMode="tail">
+                    DAILY REFLECTIONS & LOGS
+                  </Text>
                 </View>
               </View>
 
@@ -495,6 +588,41 @@ export default function CozyJournalVaultScreen(): React.JSX.Element {
                 <Text style={styles.totalEntriesLabel}>ENTRIES</Text>
               </View>
             </View>
+
+            {/* EXPORT JOURNAL TO PDF BANNER - COZY PARCHMENT AESTHETIC */}
+            {entries.length > 0 && (
+              <TouchableOpacity
+                style={styles.exportBanner}
+                onPress={handleExportPdf}
+                disabled={isExportingPdf}
+                activeOpacity={0.8}
+              >
+                <View style={styles.exportBannerLeft}>
+                  <View style={styles.exportBannerIconWrap}>
+                    {isExportingPdf ? (
+                      <ActivityIndicator size="small" color="#AD8A54" />
+                    ) : (
+                      <FileDown size={19} color="#AD8A54" />
+                    )}
+                  </View>
+                  <View style={styles.exportTextWrap}>
+                    <Text style={styles.exportBannerTitle} numberOfLines={1} ellipsizeMode="tail">
+                      {isExportingPdf ? 'Binding Journal Book...' : 'Export Journal as PDF'}
+                    </Text>
+                    <Text style={styles.exportBannerSubtitle} numberOfLines={1} ellipsizeMode="tail">
+                      {isJournalExportUnlocked(isPremium)
+                        ? 'PUBLICATION-GRADE BOOK'
+                        : 'WATCH AD FOR 24H PASS'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.exportStamp}>
+                  <Text style={styles.exportStampText}>PDF</Text>
+                  <ChevronRight size={13} color="#AD8A54" strokeWidth={2.5} />
+                </View>
+              </TouchableOpacity>
+            )}
 
             <Text style={styles.sectionLabel}>SECRET DIARY TIMELINE</Text>
           </>
@@ -911,14 +1039,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#F3ECDA',
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E2D3AC',
-    marginBottom: 16,
+    marginBottom: 12,
     shadowColor: '#18120A',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 2,
   },
@@ -927,9 +1056,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     flex: 1,
+    marginRight: 10,
   },
-  streakFlame: {
-    fontSize: 26,
+  streakFlameWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#EFE6CE',
+    borderWidth: 1,
+    borderColor: '#E2D3AC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streakTextWrap: {
+    flex: 1,
+    justifyContent: 'center',
   },
   streakNumber: {
     fontFamily: Platform.OS === 'ios' ? 'Fraunces' : 'InstrumentSerif',
@@ -946,8 +1087,10 @@ const styles = StyleSheet.create({
   },
   totalEntriesBadge: {
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#EFE6CE',
-    paddingHorizontal: 14,
+    minWidth: 64,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
@@ -958,6 +1101,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#AD8A54',
     fontWeight: '700',
+    lineHeight: 18,
   },
   totalEntriesLabel: {
     fontFamily: 'SpaceMono',
@@ -965,6 +1109,7 @@ const styles = StyleSheet.create({
     color: '#AD8A54',
     fontWeight: '700',
     letterSpacing: 0.5,
+    marginTop: 1,
   },
   sectionLabel: {
     fontFamily: 'SpaceMono',
@@ -1191,5 +1336,83 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  exportPdfHeaderButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3ECDA',
+    borderWidth: 1,
+    borderColor: '#E2D3AC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exportBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F3ECDA',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2D3AC',
+    shadowColor: '#18120A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  exportBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    marginRight: 10,
+  },
+  exportBannerIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#EFE6CE',
+    borderWidth: 1,
+    borderColor: '#E2D3AC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exportTextWrap: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  exportBannerTitle: {
+    fontFamily: Platform.OS === 'ios' ? 'Fraunces' : 'InstrumentSerif',
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2B2620',
+  },
+  exportBannerSubtitle: {
+    fontFamily: 'SpaceMono',
+    fontSize: 9.5,
+    color: '#6B6154',
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  exportStamp: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFE6CE',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2D3AC',
+  },
+  exportStampText: {
+    fontFamily: 'SpaceMono',
+    fontSize: 10,
+    color: '#AD8A54',
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

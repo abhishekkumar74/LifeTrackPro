@@ -22,8 +22,11 @@ import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 
 import { COLORS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
 import { getTodayLocal } from '@/lib/utils/date';
-import { ArrowLeft, Flame, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Flame, ChevronRight, Shield, Check } from 'lucide-react-native';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { useRewardStore, MAX_HABIT_GRACE_TOKENS } from '@/lib/store/reward.store';
+import { AdRewarded } from '@/components/ads';
+import { useUiStore } from '@/lib/store/ui.store';
 import {
   useHabits,
   useArchivedHabits,
@@ -46,6 +49,10 @@ export default function HabitsManagementScreen() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [archivedExpanded, setArchivedExpanded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Habit Grace Token state
+  const habitGraceTokensCount = useRewardStore((state) => state.habitGraceTokensCount);
+  const claimHabitGraceToken = useRewardStore((state) => state.claimHabitGraceToken);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -224,7 +231,7 @@ export default function HabitsManagementScreen() {
                 accessibilityLabel={`${habit.title} habit, ${isDone ? 'completed' : 'not completed'}`}
                 accessibilityHint="Double tap to toggle completion status"
               >
-                {isDone && <Text style={styles.checkmark}>✓</Text>}
+                {isDone && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
               </TouchableOpacity>
               <ChevronRight size={17} color="#8E8E93" strokeWidth={2.2} style={styles.rowChevron} />
             </View>
@@ -303,6 +310,52 @@ export default function HabitsManagementScreen() {
           }
           ListHeaderComponent={
             <>
+              {/* Habit Grace Token Status */}
+              <View style={[styles.graceTokenCard, SHADOWS.card.ios]}>
+                <View style={styles.graceTokenLeft}>
+                  <View style={styles.graceTokenIconWrap}>
+                    <Shield size={16} color="#5B4FE8" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.graceTokenTitle}>
+                      {habitGraceTokensCount} Grace {habitGraceTokensCount === 1 ? 'Token' : 'Tokens'}
+                    </Text>
+                    <Text style={styles.graceTokenSubtitle}>
+                      Streak insurance to repair missed habits
+                    </Text>
+                  </View>
+                </View>
+                {habitGraceTokensCount < MAX_HABIT_GRACE_TOKENS && (
+                  <TouchableOpacity
+                    style={styles.graceTokenEarnBtn}
+                    onPress={() => {
+                      Alert.alert(
+                        'Earn Habit Grace Token',
+                        'Watch a short video ad to earn a Habit Grace Token (max 3). Keep it ready to repair accidental broken streaks.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Watch Ad',
+                            onPress: () => {
+                              AdRewarded.showRewardAd(() => {
+                                const success = claimHabitGraceToken();
+                                if (success) {
+                                  useUiStore.getState().showToast('Earned 1 Habit Grace Token!', 'success');
+                                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                                }
+                              });
+                            },
+                          },
+                        ]
+                      );
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.graceTokenEarnText}>+ Earn Token</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               {/* Completion Summary Card */}
               {habits.length > 0 && (
                 <View style={[styles.summaryCard, SHADOWS.card.ios]}>
@@ -675,5 +728,54 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#17172A',
     fontWeight: '600',
+  },
+  graceTokenCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(91, 79, 232, 0.2)',
+  },
+  graceTokenLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  graceTokenIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(91, 79, 232, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  graceTokenTitle: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1C1C1E',
+  },
+  graceTokenSubtitle: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 11,
+    color: '#8E8E93',
+  },
+  graceTokenEarnBtn: {
+    backgroundColor: '#5B4FE8',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  graceTokenEarnText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

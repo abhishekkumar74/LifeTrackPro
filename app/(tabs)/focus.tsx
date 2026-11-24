@@ -32,6 +32,7 @@ import { supabase, FocusSessionRow } from '@/lib/supabase/client';
 import { useUiStore } from '@/lib/store/ui.store';
 import { useQueryClient } from '@tanstack/react-query';
 import { AdManager, AdRewarded } from '@/components/ads';
+import { useRewardStore } from '@/lib/store/reward.store';
 
 // Custom Hooks & Stores
 import { useFocusStore, SoundKey, FocusPreset } from '@/lib/store/focus.store';
@@ -375,6 +376,11 @@ export default function FocusScreen(): React.JSX.Element {
 
   const isSessionActive = isRunning || isPaused;
 
+  // Aesthetic theme pass reward store
+  const isThemeUnlocked = useRewardStore((state) => state.isThemeUnlocked);
+  const grantThemePass = useRewardStore((state) => state.grantThemePass);
+  const getThemeRemainingHours = useRewardStore((state) => state.getThemeRemainingHours);
+
   // Ambient sound hook
   const ambient = useAmbientSound();
   const isPremium = profile?.is_premium || false;
@@ -415,6 +421,20 @@ export default function FocusScreen(): React.JSX.Element {
       if (interval) clearInterval(interval);
     };
   }, [isRunning, tick]);
+
+  // Keep background & shade notification text synced every 30 seconds
+  useEffect(() => {
+    if (isRunning && secondsLeft > 0 && secondsLeft % 30 === 0) {
+      showActiveFocusNotification({
+        goal: sessionGoal,
+        subject: subjectTag,
+        activeSound: activeSound,
+        secondsLeft: secondsLeft,
+        isPaused: false,
+        mode: currentMode,
+      }).catch(() => {});
+    }
+  }, [isRunning, secondsLeft, sessionGoal, subjectTag, activeSound, currentMode]);
 
   // Suppress ads during active focus sessions
   useEffect(() => {
@@ -690,11 +710,29 @@ export default function FocusScreen(): React.JSX.Element {
     refreshProfile();
   }, [setProfile]);
 
-  // Handle equipping timer theme rewards
-  const handleEquipTheme = (themeId: any, requiredXp: number) => {
+  // Handle equipping timer theme rewards (supports 24h aesthetic theme pass via rewarded ad)
+  const handleEquipTheme = (themeId: any, requiredXp: number, themeName?: string) => {
     const userXp = profile?.xp_points || 0;
-    if (userXp < requiredXp && !isPremium) {
-      useUiStore.getState().showToast(`Requires ${requiredXp} XP to unlock!`, 'info');
+    const hasPass = isThemeUnlocked(themeId, isPremium);
+    if (userXp < requiredXp && !isPremium && !hasPass) {
+      Alert.alert(
+        'Unlock Aesthetic Theme',
+        `Watch a short video ad to unlock the ${themeName || 'selected'} theme for 24 hours, or earn ${requiredXp} XP to unlock permanently.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upgrade to Gold', onPress: () => router.push('/paywall') },
+          {
+            text: 'Watch Ad (24h Pass)',
+            onPress: () => {
+              AdRewarded.showRewardAd(() => {
+                grantThemePass(themeId);
+                setTheme(themeId);
+                useUiStore.getState().showToast(`${themeName || 'Theme'} unlocked for 24 hours!`, 'success');
+              });
+            },
+          },
+        ]
+      );
       return;
     }
     setTheme(themeId);
@@ -2063,7 +2101,9 @@ export default function FocusScreen(): React.JSX.Element {
 
           {REWARD_THEMES.map((t) => {
             const currentXp = profile?.xp_points || 0;
-            const isUnlocked = isPremium || currentXp >= t.requiredXp;
+            const hasPass = isThemeUnlocked(t.id, isPremium);
+            const remainingHours = getThemeRemainingHours(t.id);
+            const isUnlocked = isPremium || currentXp >= t.requiredXp || hasPass;
             const isEquipped = activeTheme === t.id;
 
             return (
@@ -2086,6 +2126,11 @@ export default function FocusScreen(): React.JSX.Element {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={styles.rewardThemeName}>{t.name}</Text>
                     {isEquipped && <View style={styles.activeMiniDot} />}
+                    {hasPass && !isPremium && currentXp < t.requiredXp && (
+                      <View style={{ backgroundColor: 'rgba(91, 79, 232, 0.12)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ fontSize: 10, color: '#5B4FE8', fontWeight: '600' }}>24h Pass</Text>
+                      </View>
+                    )}
                   </View>
                   <Text
                     style={[
@@ -2094,7 +2139,9 @@ export default function FocusScreen(): React.JSX.Element {
                     ]}
                   >
                     {isUnlocked
-                      ? t.desc
+                      ? (hasPass && !isPremium && currentXp < t.requiredXp && remainingHours
+                          ? `${t.desc} (${remainingHours}h left on pass)`
+                          : t.desc)
                       : `Unlocks at ${t.requiredXp} XP (Level ${t.requiredLevel})`}
                   </Text>
                 </View>
@@ -2108,16 +2155,20 @@ export default function FocusScreen(): React.JSX.Element {
                 ) : isUnlocked ? (
                   <TouchableOpacity
                     style={styles.equipThemeBtn}
-                    onPress={() => handleEquipTheme(t.id, t.requiredXp)}
+                    onPress={() => handleEquipTheme(t.id, t.requiredXp, t.name)}
                     activeOpacity={0.8}
                   >
                     <Text style={styles.equipThemeBtnText}>Equip</Text>
                   </TouchableOpacity>
                 ) : (
-                  <View style={styles.lockedThemeBadge}>
+                  <TouchableOpacity
+                    style={styles.lockedThemeBadge}
+                    onPress={() => handleEquipTheme(t.id, t.requiredXp, t.name)}
+                    activeOpacity={0.7}
+                  >
                     <Lock size={11} color="#6B7280" />
                     <Text style={styles.lockedThemeText}>{t.requiredXp} XP</Text>
-                  </View>
+                  </TouchableOpacity>
                 )}
               </View>
             );
@@ -2239,11 +2290,19 @@ export default function FocusScreen(): React.JSX.Element {
 
           {/* Theme Selector inside Settings */}
           <View style={styles.settingsThemeSection}>
-            <Text style={styles.settingsThemeLabel}>TIMER THEME</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={styles.settingsThemeLabel}>TIMER THEME</Text>
+              {!isPremium && (
+                <Text style={{ fontSize: 11, color: '#8E8E93', fontWeight: '500' }}>
+                  Tap locked for 24h pass
+                </Text>
+              )}
+            </View>
             <View style={styles.themeDotsRow}>
               {TIMER_THEMES.map((theme) => {
                 const active = activeTheme === theme.id;
-                const isLocked = theme.isPremium && !isPremium;
+                const isPassUnlocked = isThemeUnlocked(theme.id, isPremium);
+                const isLocked = theme.isPremium && !isPassUnlocked;
 
                 return (
                   <TouchableOpacity
@@ -2256,7 +2315,30 @@ export default function FocusScreen(): React.JSX.Element {
                     onPress={async () => {
                       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       if (isLocked) {
-                        router.push('/paywall');
+                        Alert.alert(
+                          'Unlock Aesthetic Theme',
+                          `Watch a short video ad to unlock the ${theme.label} theme for 24 hours, or upgrade to Gold for unlimited permanent access.`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Upgrade to Gold',
+                              onPress: () => router.push('/paywall'),
+                            },
+                            {
+                              text: 'Watch Ad (24h Pass)',
+                              onPress: () => {
+                                AdRewarded.showRewardAd(() => {
+                                  grantThemePass(theme.id);
+                                  setTheme(theme.id);
+                                  useUiStore.getState().showToast(
+                                    `${theme.label} theme unlocked for 24 hours!`,
+                                    'success'
+                                  );
+                                });
+                              },
+                            },
+                          ]
+                        );
                       } else {
                         setTheme(theme.id);
                       }

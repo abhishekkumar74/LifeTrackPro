@@ -16,11 +16,14 @@ import * as Haptics from 'expo-haptics';
 import { useAndroidBackHandler } from '@/lib/hooks/use-android-back';
 import { Skeleton } from '@/components/shared/Skeleton';
 
-import { ArrowLeft, Flame, Star, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Flame, Star, ChevronLeft, ChevronRight, Shield } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase/client';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
 import { getTodayLocal } from '@/lib/utils/date';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { useRewardStore } from '@/lib/store/reward.store';
+import { AdRewarded } from '@/components/ads';
+import { useUiStore } from '@/lib/store/ui.store';
 import {
   useHabitHistory,
   useHabitLogs,
@@ -66,6 +69,28 @@ export default function HabitDetailScreen() {
 
   // Streak calculations
   const streak = useHabitStreak(id);
+
+  // Habit Grace Token state
+  const habitGraceTokensCount = useRewardStore((state) => state.habitGraceTokensCount);
+  const claimHabitGraceToken = useRewardStore((state) => state.claimHabitGraceToken);
+  const consumeHabitGraceToken = useRewardStore((state) => state.consumeHabitGraceToken);
+  const isHabitDateGraceRepaired = useRewardStore((state) => state.isHabitDateGraceRepaired);
+
+  const yesterdayStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toLocaleDateString('en-CA');
+  }, []);
+
+  const missedYesterday = useMemo(() => {
+    if (!history || history.length < 2) return false;
+    const yesterdayEntry = history[1];
+    return !yesterdayEntry?.done;
+  }, [history]);
+
+  const alreadyRepairedYesterday = habit?.id
+    ? isHabitDateGraceRepaired(habit.id, yesterdayStr)
+    : false;
 
   // Mutations
   const updateHabit = useUpdateHabit();
@@ -479,6 +504,108 @@ export default function HabitDetailScreen() {
             <Text style={styles.statLabel}>Last 60 days</Text>
           </View>
         </View>
+
+        {/* Streak Recovery / Habit Grace Card */}
+        {missedYesterday && !alreadyRepairedYesterday && habit?.is_active && (
+          <View style={[styles.graceRecoveryCard, SHADOWS.card.ios]}>
+            <View style={styles.graceRecoveryHeader}>
+              <View style={styles.graceRecoveryIconBadge}>
+                <Shield size={18} color="#5B4FE8" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.graceRecoveryTitle}>Streak Recovery Available</Text>
+                <Text style={styles.graceRecoverySubtitle}>
+                  You missed yesterday ({yesterdayStr}). Repair it now to restore your unbroken streak.
+                </Text>
+              </View>
+            </View>
+            <View style={styles.graceRecoveryFooter}>
+              <Text style={styles.graceRecoveryBalance}>
+                {habitGraceTokensCount} Grace {habitGraceTokensCount === 1 ? 'Token' : 'Tokens'} Available
+              </Text>
+              {habitGraceTokensCount > 0 ? (
+                <TouchableOpacity
+                  style={styles.graceRecoveryButton}
+                  onPress={async () => {
+                    if (!habit?.id || !user?.id) return;
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                    const consumed = consumeHabitGraceToken(habit.id, yesterdayStr);
+                    if (!consumed) return;
+                    try {
+                      await supabase.from('habit_logs').upsert(
+                        {
+                          habit_id: habit.id,
+                          user_id: user.id,
+                          date: yesterdayStr,
+                          done: true,
+                        },
+                        { onConflict: 'habit_id,date' }
+                      );
+                      await Promise.all([
+                        queryClient.invalidateQueries({ queryKey: ['habitHistory'] }),
+                        queryClient.invalidateQueries({ queryKey: ['habits'] }),
+                        queryClient.invalidateQueries({ queryKey: ['habitLogs'] }),
+                      ]);
+                      useUiStore.getState().showToast('Streak restored with Habit Grace Token!', 'success');
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                    } catch (e) {
+                      useUiStore.getState().showToast('Failed to update streak log.', 'error');
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.graceRecoveryButtonText}>Repair Yesterday</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.graceRecoveryAdButton}
+                  onPress={() => {
+                    if (!habit?.id || !user?.id) return;
+                    Alert.alert(
+                      'Earn Token & Repair Streak',
+                      'Watch a short video ad to earn a Habit Grace Token and immediately restore yesterday\'s streak.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Watch Ad & Repair',
+                          onPress: () => {
+                            AdRewarded.showRewardAd(async () => {
+                              claimHabitGraceToken();
+                              consumeHabitGraceToken(habit.id, yesterdayStr);
+                              try {
+                                await supabase.from('habit_logs').upsert(
+                                  {
+                                    habit_id: habit.id,
+                                    user_id: user.id,
+                                    date: yesterdayStr,
+                                    done: true,
+                                  },
+                                  { onConflict: 'habit_id,date' }
+                                );
+                                await Promise.all([
+                                  queryClient.invalidateQueries({ queryKey: ['habitHistory'] }),
+                                  queryClient.invalidateQueries({ queryKey: ['habits'] }),
+                                  queryClient.invalidateQueries({ queryKey: ['habitLogs'] }),
+                                ]);
+                                useUiStore.getState().showToast('Streak restored with Habit Grace Token!', 'success');
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                              } catch (e) {
+                                useUiStore.getState().showToast('Failed to update streak log.', 'error');
+                              }
+                            });
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.graceRecoveryAdButtonText}>Watch Ad to Repair</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Monthly Calendar View */}
         <View style={styles.sectionCard}>
@@ -1026,5 +1153,78 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.amber,
     fontWeight: '600',
+  },
+  graceRecoveryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(91, 79, 232, 0.25)',
+  },
+  graceRecoveryHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  graceRecoveryIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(91, 79, 232, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  graceRecoveryTitle: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginBottom: 2,
+  },
+  graceRecoverySubtitle: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 13,
+    color: '#5C5C70',
+    lineHeight: 18,
+  },
+  graceRecoveryFooter: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F3',
+  },
+  graceRecoveryBalance: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5B4FE8',
+  },
+  graceRecoveryButton: {
+    backgroundColor: '#5B4FE8',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  graceRecoveryButtonText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  graceRecoveryAdButton: {
+    backgroundColor: '#5B4FE8',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  graceRecoveryAdButtonText: {
+    fontFamily: TYPOGRAPHY.fonts.sans,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

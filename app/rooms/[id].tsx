@@ -359,6 +359,8 @@ export default function ActiveRoomScreen(): React.JSX.Element {
   const [selectedCheckin, setSelectedCheckin] = useState<string>('');
   const [showMoreModal, setShowMoreModal] = useState(false);
   const [showSoundModal, setShowSoundModal] = useState(false);
+  // Dynamic header measurement for accurate KeyboardAvoidingView offset across screen sizes
+  const [topHeaderHeight, setTopHeaderHeight] = useState(116);
 
   // Memoized reversed message history to prevent re-reversing on every render
   const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
@@ -1394,85 +1396,95 @@ export default function ActiveRoomScreen(): React.JSX.Element {
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="light-content" backgroundColor="#0D0C1D" translucent={false} />
 
-      {/* TOP HEADER BAR */}
-      <View style={styles.topBar}>
-        <TouchableOpacity style={styles.iconCircleBtn} onPress={handleLeave} activeOpacity={0.7}>
-          <ArrowLeft size={18} color="#FFFFFF" />
-        </TouchableOpacity>
+      {/* TOP HEADER & TAB SWITCHER WRAPPER */}
+      <View
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h > 0 && Math.abs(h - topHeaderHeight) > 2) {
+            setTopHeaderHeight(h);
+          }
+        }}
+      >
+        {/* TOP HEADER BAR */}
+        <View style={styles.topBar}>
+          <TouchableOpacity style={styles.iconCircleBtn} onPress={handleLeave} activeOpacity={0.7}>
+            <ArrowLeft size={18} color="#FFFFFF" />
+          </TouchableOpacity>
 
-        {/* Room Title & Badges */}
-        <View style={styles.headerTitleGroup}>
-          <View style={styles.roomIconBox}>
-            {room.room_type === 'music' ? (
-              <Headphones size={18} color="#FFFFFF" />
-            ) : room.room_type === 'silent' ? (
-              <VolumeX size={18} color="#FFFFFF" />
-            ) : (
-              <BookOpen size={18} color="#FFFFFF" />
-            )}
+          {/* Room Title & Badges */}
+          <View style={styles.headerTitleGroup}>
+            <View style={styles.roomIconBox}>
+              {room.room_type === 'music' ? (
+                <Headphones size={18} color="#FFFFFF" />
+              ) : room.room_type === 'silent' ? (
+                <VolumeX size={18} color="#FFFFFF" />
+              ) : (
+                <BookOpen size={18} color="#FFFFFF" />
+              )}
+            </View>
+
+            <View style={styles.titleInfoCol}>
+              <Text style={styles.roomHeaderTitle} numberOfLines={1}>
+                {room.name}
+              </Text>
+              <View style={styles.headerSubPillsRow}>
+                <View style={styles.categoryPill}>
+                  <Text style={styles.categoryPillText} numberOfLines={1}>
+                    {displaySubject}
+                  </Text>
+                </View>
+                <View style={styles.memberPill}>
+                  <Users size={11} color="#A78BFA" />
+                  <Text style={styles.memberPillText}>{activeMembers.length}</Text>
+                </View>
+              </View>
+            </View>
           </View>
 
-          <View style={styles.titleInfoCol}>
-            <Text style={styles.roomHeaderTitle} numberOfLines={1}>
-              {room.name}
-            </Text>
-            <View style={styles.headerSubPillsRow}>
-              <View style={styles.categoryPill}>
-                <Text style={styles.categoryPillText} numberOfLines={1}>
-                  {displaySubject}
-                </Text>
-              </View>
-              <View style={styles.memberPill}>
-                <Users size={11} color="#A78BFA" />
-                <Text style={styles.memberPillText}>{activeMembers.length}</Text>
-              </View>
+          {/* Right Actions: Share & Live Badge */}
+          <View style={styles.headerRightRow}>
+            <TouchableOpacity style={styles.iconCircleBtn} onPress={handleShare} activeOpacity={0.7}>
+              <Share2 size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <View style={styles.liveIndicatorBadge}>
+              <View style={styles.liveIndicatorDot} />
+              <Text style={styles.liveIndicatorText}>LIVE</Text>
             </View>
           </View>
         </View>
 
-        {/* Right Actions: Share & Live Badge */}
-        <View style={styles.headerRightRow}>
-          <TouchableOpacity style={styles.iconCircleBtn} onPress={handleShare} activeOpacity={0.7}>
-            <Share2 size={16} color="#FFFFFF" />
+        {/* SEGMENTED TAB SWITCHER */}
+        <View style={styles.tabSwitchContainer}>
+          <TouchableOpacity
+            style={[styles.tabSwitchBtn, activeTab === 'lounge' && styles.tabSwitchBtnActive]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              setActiveTab('lounge');
+            }}
+            activeOpacity={0.8}
+          >
+            <LayoutGrid size={15} color={activeTab === 'lounge' ? '#FFFFFF' : '#9D9AA8'} />
+            <Text style={[styles.tabSwitchText, activeTab === 'lounge' && styles.tabSwitchTextActive]}>
+              Room
+            </Text>
           </TouchableOpacity>
 
-          <View style={styles.liveIndicatorBadge}>
-            <View style={styles.liveIndicatorDot} />
-            <Text style={styles.liveIndicatorText}>LIVE</Text>
-          </View>
+          <TouchableOpacity
+            style={[styles.tabSwitchBtn, activeTab === 'chat' && styles.tabSwitchBtnActive]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              setActiveTab('chat');
+            }}
+            activeOpacity={0.8}
+          >
+            <MessageSquare size={15} color={activeTab === 'chat' ? '#FFFFFF' : '#9D9AA8'} />
+            <Text style={[styles.tabSwitchText, activeTab === 'chat' && styles.tabSwitchTextActive]}>
+              Chat & Feed
+            </Text>
+            {messages.length > 0 && <View style={styles.chatUnreadDot} />}
+          </TouchableOpacity>
         </View>
-      </View>
-
-      {/* SEGMENTED TAB SWITCHER */}
-      <View style={styles.tabSwitchContainer}>
-        <TouchableOpacity
-          style={[styles.tabSwitchBtn, activeTab === 'lounge' && styles.tabSwitchBtnActive]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            setActiveTab('lounge');
-          }}
-          activeOpacity={0.8}
-        >
-          <LayoutGrid size={15} color={activeTab === 'lounge' ? '#FFFFFF' : '#9D9AA8'} />
-          <Text style={[styles.tabSwitchText, activeTab === 'lounge' && styles.tabSwitchTextActive]}>
-            Room
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabSwitchBtn, activeTab === 'chat' && styles.tabSwitchBtnActive]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            setActiveTab('chat');
-          }}
-          activeOpacity={0.8}
-        >
-          <MessageSquare size={15} color={activeTab === 'chat' ? '#FFFFFF' : '#9D9AA8'} />
-          <Text style={[styles.tabSwitchText, activeTab === 'chat' && styles.tabSwitchTextActive]}>
-            Chat & Feed
-          </Text>
-          {messages.length > 0 && <View style={styles.chatUnreadDot} />}
-        </TouchableOpacity>
       </View>
 
       {/* MAIN CONTENT AREA */}
@@ -1772,8 +1784,8 @@ export default function ActiveRoomScreen(): React.JSX.Element {
           /* CHAT & FEED TAB */
           <KeyboardAvoidingView
             style={{ flex: 1, backgroundColor: '#0D0C1D' }}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 116 : 0}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + topHeaderHeight : insets.top + topHeaderHeight}
           >
             {/* Sticky Mini Bar */}
             <View style={styles.stickyMiniBar}>
@@ -1819,7 +1831,7 @@ export default function ActiveRoomScreen(): React.JSX.Element {
               contentContainerStyle={styles.chatListContent}
               style={{ flex: 1 }}
               keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             />
 
             {/* Optimized Lag-Free Chat Input Bar */}

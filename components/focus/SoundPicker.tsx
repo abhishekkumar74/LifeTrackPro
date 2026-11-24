@@ -3,10 +3,9 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   PanResponder,
 } from 'react-native';
+import { ScrollView, TouchableOpacity } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -155,6 +154,10 @@ export const SoundPicker: React.FC<SoundPickerProps> = ({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        nestedScrollEnabled={true}
+        directionalLockEnabled={true}
+        disallowInterruption={true}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContainer}
       >
         {SOUNDS.map((sound) => {
@@ -253,8 +256,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   scrollContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    paddingRight: 10,
+    paddingRight: 32,
+    paddingVertical: 4,
   },
   chip: {
     paddingHorizontal: 14,

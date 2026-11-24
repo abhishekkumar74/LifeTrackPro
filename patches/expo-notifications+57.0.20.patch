@@ -1,0 +1,32 @@
+diff --git a/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt b/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt
+index 610d303..de7a88f 100644
+--- a/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt
++++ b/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt
+@@ -119,6 +119,27 @@ open class ExpoNotificationBuilder(
+       val extras = builder.extras
+       extras.putString(EXTRAS_BODY_KEY, content.body.toString())
+       builder.setExtras(extras)
++
++      try {
++        if (content.body.has("chronometer")) {
++          if (content.body.optBoolean("chronometer", false)) {
++            val targetTime = content.body.optLong("targetTimestamp", 0L)
++            if (targetTime > 0L) {
++              builder.setShowWhen(true)
++              builder.setWhen(targetTime)
++              builder.setUsesChronometer(true)
++              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
++                builder.setChronometerCountDown(true)
++              }
++            }
++          } else {
++            builder.setUsesChronometer(false)
++            builder.setShowWhen(false)
++          }
++        }
++      } catch (e: Throwable) {
++        Log.e("expo-notifications", "Failed to configure chronometer for notification", e)
++      }
+     }
+ 
+     // Save the notification request in extras for later usage

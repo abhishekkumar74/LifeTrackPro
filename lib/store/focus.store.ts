@@ -164,12 +164,18 @@ export const resyncFocusTimer = async (state: FocusState) => {
         if (__DEV__) console.warn('Failed to log auto-completed focus session on startup:', err);
       }
 
-      // Reset store state
+      // Reset store state and dismiss active focus notification
       useFocusStore.getState().resetSession();
+      try {
+        const { dismissActiveFocusNotification, cancelFocusCompletionNotification } = require('../notifications');
+        dismissActiveFocusNotification().catch(() => {});
+        cancelFocusCompletionNotification().catch(() => {});
+      } catch (_) {}
     } else {
       // Session still active, adjust drift
+      const remainingSeconds = Math.max(0, state.totalSeconds - elapsedSeconds);
       useFocusStore.setState({
-        secondsLeft: Math.max(0, state.totalSeconds - elapsedSeconds),
+        secondsLeft: remainingSeconds,
         elapsedSeconds: elapsedSeconds,
       });
     }
@@ -287,18 +293,30 @@ export const useFocusStore = create<FocusState>()(
   },
 
   pause: () => {
+    const { isRunning, sessionStartTimestamp, totalSeconds, elapsedSeconds } = get();
+    let updatedElapsed = elapsedSeconds;
+    let updatedSecondsLeft = get().secondsLeft;
+    if (isRunning && sessionStartTimestamp) {
+      updatedElapsed = Math.floor((Date.now() - sessionStartTimestamp) / 1000);
+      updatedSecondsLeft = Math.max(0, totalSeconds - updatedElapsed);
+    }
     set({ 
       isRunning: false, 
       isPaused: true, 
-      sessionStartTimestamp: null 
+      sessionStartTimestamp: null,
+      elapsedSeconds: updatedElapsed,
+      secondsLeft: updatedSecondsLeft,
     });
   },
 
   resume: () => {
+    const { elapsedSeconds, totalSeconds } = get();
+    const currentRemaining = Math.max(0, totalSeconds - elapsedSeconds);
     set({ 
       isRunning: true, 
       isPaused: false, 
-      sessionStartTimestamp: Date.now() - (get().elapsedSeconds * 1000) 
+      secondsLeft: currentRemaining,
+      sessionStartTimestamp: Date.now() - (elapsedSeconds * 1000) 
     });
   },
 

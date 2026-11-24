@@ -138,6 +138,8 @@ function InnerApp({ children }: { children: React.ReactNode }) {
   // Listen for lifecycle changes globally
   useAppLifecycle();
   usePostHogScreenTracker();
+  // Listen for notification taps globally once app and auth context are ready
+  useNotificationResponse();
 
   useEffect(() => {
     trackEvent('app_opened', { platform: Platform.OS });
@@ -171,9 +173,6 @@ function RootLayout() {
     }, 2000);
     return () => clearTimeout(timer);
   }, []);
-
-  // Listen for notification taps globally
-  useNotificationResponse();
 
   // Diagnostic log to check if environment variables are successfully parsed by the Metro compiler
   if (__DEV__) {

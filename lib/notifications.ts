@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { router, Href } from 'expo-router';
 import { useNotificationStore } from '@/lib/store/notification.store';
 import { useFocusStore } from '@/lib/store/focus.store';
+import { useAuthStore } from '@/lib/store/auth.store';
 import { FocusLiveActivity } from '@/lib/native/live-activity';
 import { supabase } from '@/lib/supabase/client';
 
@@ -118,13 +119,13 @@ export async function scheduleMorningBrief(topTaskTitle?: string, hour = 8, minu
     await Notifications.cancelScheduledNotificationAsync('morning_brief').catch(() => {});
 
     const bodyText = topTaskTitle
-      ? `Today's priority: "${topTaskTitle}". 25 min ka pehla session start karein 🎯`
-      : 'Aaj ka goal set kiya? 25 min ka pehla focus session start karein 🎯';
+      ? `Today's priority: "${topTaskTitle}". 25 min ka pehla session start karein.`
+      : 'Aaj ka goal set kiya? 25 min ka pehla focus session start karein.';
 
     await Notifications.scheduleNotificationAsync({
       identifier: 'morning_brief',
       content: {
-        title: 'Aaj ka goal set kiya? 🎯',
+        title: 'Aaj ka goal set kiya?',
         body: bodyText,
         data: { screen: '/focus', type: 'brief', actionText: 'Start 25m Focus' },
         sound: true,
@@ -176,8 +177,8 @@ export async function scheduleStreakAlert(hour = 20, minute = 0): Promise<void> 
     await Notifications.scheduleNotificationAsync({
       identifier: 'streak_alert',
       content: {
-        title: 'Aapki streak khatre mein hai! 🛡️',
-        body: 'Bas 1 focus session complete karke apna streak safe rakhein 🛡️',
+        title: 'Aapki streak khatre mein hai!',
+        body: 'Bas 1 focus session complete karke apna streak safe rakhein',
         data: { screen: '/focus', type: 'streak', actionText: 'Protect Streak' },
         sound: true,
       },
@@ -290,6 +291,7 @@ export async function triggerLocalFocusCompleteNotification(
 
 // 3.8.1 showActiveFocusNotification (Ongoing system notification for Android notification shade & Foreground Service)
 export const ACTIVE_FOCUS_NOTIF_ID = 'lifetrack_active_focus_session';
+export const FOCUS_COMPLETION_NOTIF_ID = 'lifetrack_focus_session_completed';
 export const FOCUS_CATEGORY_RUNNING = 'lifetrack_focus_running';
 export const FOCUS_CATEGORY_PAUSED = 'lifetrack_focus_paused';
 
@@ -303,7 +305,7 @@ export async function registerFocusNotificationCategories(): Promise<void> {
         identifier: 'pause_focus',
         buttonTitle: 'Pause',
         options: {
-          opensAppToForeground: false,
+          opensAppToForeground: true,
         },
       },
       {
@@ -321,7 +323,7 @@ export async function registerFocusNotificationCategories(): Promise<void> {
         identifier: 'resume_focus',
         buttonTitle: 'Resume',
         options: {
-          opensAppToForeground: false,
+          opensAppToForeground: true,
         },
       },
       {
@@ -336,6 +338,42 @@ export async function registerFocusNotificationCategories(): Promise<void> {
     areFocusCategoriesRegistered = true;
   } catch (err) {
     if (__DEV__) console.warn('registerFocusNotificationCategories error:', err);
+  }
+}
+
+export async function scheduleFocusCompletionNotification(
+  secondsLeft: number,
+  goal?: string
+): Promise<void> {
+  if (!Notifications || secondsLeft <= 0) return;
+  try {
+    await Notifications.cancelScheduledNotificationAsync(FOCUS_COMPLETION_NOTIF_ID).catch(() => {});
+    await Notifications.scheduleNotificationAsync({
+      identifier: FOCUS_COMPLETION_NOTIF_ID,
+      content: {
+        title: 'Focus Session Completed!',
+        body: goal && goal.trim() ? `Great job! "${goal.trim()}" is completed.` : 'Great job! You stayed focused for the full session.',
+        data: { screen: '/(tabs)/focus', type: 'focus_completed' },
+        sound: true,
+        priority: 'high',
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        channelId: 'focus_channel',
+        seconds: Math.max(1, Math.round(secondsLeft)),
+      },
+    }).catch(() => {});
+  } catch (err) {
+    if (__DEV__) console.warn('scheduleFocusCompletionNotification error:', err);
+  }
+}
+
+export async function cancelFocusCompletionNotification(): Promise<void> {
+  if (!Notifications) return;
+  try {
+    await Notifications.cancelScheduledNotificationAsync(FOCUS_COMPLETION_NOTIF_ID).catch(() => {});
+  } catch (err) {
+    if (__DEV__) console.warn('cancelFocusCompletionNotification error:', err);
   }
 }
 
@@ -356,7 +394,7 @@ export async function showActiveFocusNotification(params: {
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('active_focus_channel', {
         name: 'Active Focus Session',
-        importance: Notifications.AndroidImportance.HIGH,
+        importance: Notifications.AndroidImportance.LOW,
         sound: null,
         enableVibrate: false,
         vibrationPattern: null,
@@ -384,7 +422,30 @@ export async function showActiveFocusNotification(params: {
 
     const statusTag = isPaused ? 'PAUSED' : (isBreak ? 'BREAK' : 'FOCUS');
     const notifTitle = params.title || `${subjectText}${goalText}`;
-    const notifBody = `${statusTag} · ${formattedClock} remaining${soundText}`;
+
+    // Calculate formatted wall-clock target completion time for running sessions
+    let completionText = '';
+    let targetTimestamp: number | null = null;
+    if (!isPaused && params.secondsLeft !== undefined && params.secondsLeft > 0) {
+      targetTimestamp = Date.now() + params.secondsLeft * 1000;
+      const targetTime = new Date(targetTimestamp);
+      let hours = targetTime.getHours();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const minutesStr = targetTime.getMinutes() < 10 ? `0${targetTime.getMinutes()}` : targetTime.getMinutes();
+      completionText = ` · Ends ${hours}:${minutesStr} ${ampm}`;
+
+      // Schedule or refresh exact completion alert notification
+      scheduleFocusCompletionNotification(params.secondsLeft, params.goal).catch(() => {});
+    } else if (isPaused) {
+      // Cancel pending completion chime while session is paused
+      cancelFocusCompletionNotification().catch(() => {});
+    }
+
+    const notifBody = isPaused
+      ? `${statusTag} · ${formattedClock} remaining (Paused)${soundText}`
+      : `${statusTag} · ${formattedClock} left${completionText}${soundText}`;
 
     await Notifications.scheduleNotificationAsync({
       identifier: ACTIVE_FOCUS_NOTIF_ID,
@@ -392,14 +453,19 @@ export async function showActiveFocusNotification(params: {
         title: notifTitle,
         body: notifBody,
         categoryIdentifier: isPaused ? FOCUS_CATEGORY_PAUSED : FOCUS_CATEGORY_RUNNING,
-        data: { screen: '/(tabs)/focus', type: 'focus_active' },
+        data: {
+          screen: '/(tabs)/focus',
+          type: 'focus_active',
+          chronometer: !isPaused && (params.secondsLeft !== undefined && params.secondsLeft > 0),
+          targetTimestamp: targetTimestamp || 0,
+        },
         sound: false,
         sticky: true,
         autoDismiss: false,
         priority: 'high',
         color: '#5B4FE8',
       },
-      trigger: null,
+      trigger: Platform.OS === 'android' ? ({ channelId: 'active_focus_channel' } as any) : null,
     }).catch(() => {});
   } catch (err) {
     if (__DEV__) console.warn('showActiveFocusNotification failed:', err);
@@ -411,6 +477,7 @@ export async function dismissActiveFocusNotification(): Promise<void> {
   try {
     await Notifications.dismissNotificationAsync(ACTIVE_FOCUS_NOTIF_ID).catch(() => {});
     await Notifications.cancelScheduledNotificationAsync(ACTIVE_FOCUS_NOTIF_ID).catch(() => {});
+    await cancelFocusCompletionNotification().catch(() => {});
   } catch (err) {
     if (__DEV__) console.warn('dismissActiveFocusNotification failed:', err);
   }
@@ -553,6 +620,9 @@ export async function setAppBadgeCount(count: number): Promise<void> {
 }
 
 // 5. useNotificationResponse custom hook
+let lastHandledResponseKey = '';
+let lastHandledTimestamp = 0;
+
 export function useNotificationResponse() {
   useEffect(() => {
     // Refresh in-app activity nudges on mount
@@ -562,28 +632,125 @@ export function useNotificationResponse() {
     let responseSubscription: any = null;
     let receivedSubscription: any = null;
 
-    try {
-      // Check for notification response on cold start (when app launched from notification tap)
-      Notifications.getLastNotificationResponseAsync().then((response) => {
-        if (response) {
-          const content = response.notification.request.content;
-          const data = content.data;
-          const screen = data?.screen;
-          if (content.title && data?.type !== 'focus_active') {
-            useNotificationStore.getState().addNotification({
-              type: (data?.type as any) || 'brief',
-              title: content.title,
-              body: content.body || '',
-              time: 'Just now',
-              targetScreen: (screen as string) || '/',
-              actionText: (data?.actionText as string) || 'View Details',
-            });
-          }
-          if (screen) {
-            router.push(screen === 'home' ? '/' : (screen as Href));
+    const safeNavigate = (rawScreen: string) => {
+      if (!rawScreen) return;
+      const target = rawScreen === 'home' || rawScreen === '/' ? '/(tabs)' : rawScreen;
+
+      // Block navigation to protected screens if session does not exist
+      const { session } = useAuthStore.getState();
+      if (!session && !target.includes('login') && !target.includes('reset-password')) {
+        if (__DEV__) console.log('Notification navigation postponed: user is unauthenticated');
+        return;
+      }
+
+      // Defer slightly to avoid racing with Expo Router layout mounting or screen transitions
+      setTimeout(() => {
+        try {
+          router.navigate(target as Href);
+        } catch (e) {
+          try {
+            router.push(target as Href);
+          } catch (err) {
+            if (__DEV__) console.warn('safeNavigate failed:', err);
           }
         }
-      }).catch(() => {});
+      }, 120);
+    };
+
+    const handleResponse = (response: any) => {
+      if (!response?.notification) return;
+
+      const actionIdentifier = response.actionIdentifier;
+      const content = response.notification.request?.content;
+      const data = content?.data;
+      const screen = data?.screen;
+      const notifId = response.notification.request?.identifier || 'default';
+      const notifDate = response.notification.date || 0;
+
+      // Deduplicate: same notification response received multiple times within 2.5s
+      const dedupKey = `${actionIdentifier}_${notifId}_${notifDate}`;
+      const now = Date.now();
+      if (dedupKey === lastHandledResponseKey && now - lastHandledTimestamp < 2500) {
+        return;
+      }
+      lastHandledResponseKey = dedupKey;
+      lastHandledTimestamp = now;
+
+      // 1. Handle Active Focus Notification Action Buttons
+      if (actionIdentifier === 'pause_focus') {
+        const store = useFocusStore.getState();
+        if (store.isRunning) {
+          store.pause();
+          const updatedSeconds = useFocusStore.getState().secondsLeft;
+          FocusLiveActivity.updateSession(true, updatedSeconds, store.sessionGoal).catch(() => {});
+          cancelFocusCompletionNotification().catch(() => {});
+          showActiveFocusNotification({
+            goal: store.sessionGoal,
+            subject: store.subjectTag,
+            activeSound: store.activeSound,
+            secondsLeft: updatedSeconds,
+            isPaused: true,
+            mode: store.currentMode,
+          }).catch(() => {});
+        }
+        return;
+      }
+
+      if (actionIdentifier === 'resume_focus') {
+        const store = useFocusStore.getState();
+        if (store.isPaused) {
+          store.resume();
+          const updatedSeconds = useFocusStore.getState().secondsLeft;
+          FocusLiveActivity.updateSession(false, updatedSeconds, store.sessionGoal).catch(() => {});
+          scheduleFocusCompletionNotification(updatedSeconds, store.sessionGoal).catch(() => {});
+          showActiveFocusNotification({
+            goal: store.sessionGoal,
+            subject: store.subjectTag,
+            activeSound: store.activeSound,
+            secondsLeft: updatedSeconds,
+            isPaused: false,
+            mode: store.currentMode,
+          }).catch(() => {});
+        }
+        return;
+      }
+
+      if (actionIdentifier === 'end_focus') {
+        const store = useFocusStore.getState();
+        store.stop();
+        dismissActiveFocusNotification().catch(() => {});
+        cancelFocusCompletionNotification().catch(() => {});
+        FocusLiveActivity.endSession().catch(() => {});
+        safeNavigate('/(tabs)/focus');
+        return;
+      }
+
+      // 2. Default notification banner tap (system shade or heads-up banner)
+      if (content?.title && data?.type !== 'focus_active') {
+        useNotificationStore.getState().addNotification({
+          type: (data?.type as any) || 'brief',
+          title: content.title,
+          body: content.body || '',
+          time: 'Just now',
+          targetScreen: (screen as string) || '/',
+          actionText: (data?.actionText as string) || 'View Details',
+        });
+      }
+
+      if (screen) {
+        safeNavigate(screen);
+      }
+    };
+
+    try {
+      // Check for notification response on cold start (when app launched from notification tap)
+      Notifications.getLastNotificationResponseAsync()
+        .then((response) => {
+          if (response) {
+            handleResponse(response);
+          }
+        })
+        .catch(() => {});
 
       // Listener 1: When a notification arrives (foreground or background trigger)
       receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
@@ -602,70 +769,7 @@ export function useNotificationResponse() {
 
       // Listener 2: When user taps a notification banner or action button in system shade
       responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-        const actionIdentifier = response.actionIdentifier;
-        const content = response.notification.request.content;
-        const data = content.data;
-        const screen = data?.screen;
-
-        // Handle Active Focus Notification Action Buttons
-        if (actionIdentifier === 'pause_focus') {
-          const store = useFocusStore.getState();
-          if (store.isRunning) {
-            store.pause();
-            FocusLiveActivity.updateSession(true, store.secondsLeft, store.sessionGoal).catch(() => {});
-            showActiveFocusNotification({
-              goal: store.sessionGoal,
-              subject: store.subjectTag,
-              activeSound: store.activeSound,
-              secondsLeft: store.secondsLeft,
-              isPaused: true,
-              mode: store.currentMode,
-            }).catch(() => {});
-          }
-          return;
-        }
-
-        if (actionIdentifier === 'resume_focus') {
-          const store = useFocusStore.getState();
-          if (store.isPaused) {
-            store.resume();
-            FocusLiveActivity.updateSession(false, store.secondsLeft, store.sessionGoal).catch(() => {});
-            showActiveFocusNotification({
-              goal: store.sessionGoal,
-              subject: store.subjectTag,
-              activeSound: store.activeSound,
-              secondsLeft: store.secondsLeft,
-              isPaused: false,
-              mode: store.currentMode,
-            }).catch(() => {});
-          }
-          return;
-        }
-
-        if (actionIdentifier === 'end_focus') {
-          router.push('/(tabs)/focus' as Href);
-          return;
-        }
-
-        // Add or ensure recorded in in-app store, and mark as read
-        if (content.title && data?.type !== 'focus_active') {
-          useNotificationStore.getState().addNotification({
-            type: (data?.type as any) || 'brief',
-            title: content.title,
-            body: content.body || '',
-            time: 'Just now',
-            targetScreen: (screen as string) || '/',
-            actionText: (data?.actionText as string) || 'View Details',
-          });
-        }
-
-        if (screen) {
-          if (screen === 'home') {
-            router.push('/' as Href);
-          } else {
-            router.push(screen as Href);
-          }
-        }
+        handleResponse(response);
       });
     } catch (err) {
       if (__DEV__) console.warn('Notification listener setup failed:', err);
