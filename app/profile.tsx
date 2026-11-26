@@ -78,6 +78,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 
 const CATEGORIES: UserCategory[] = [
   'aspirant',
@@ -703,106 +704,36 @@ export default function ProfileScreen(): React.JSX.Element {
   const getExamCategory = useCallback((itemKey: string, label: string, userCat: UserCategory): string => {
     const s = (itemKey + ' ' + label).toLowerCase();
     if (userCat === 'student' || userCat === 'aspirant') {
-      if (
-        s.includes('rrb') ||
-        s.includes('rpf') ||
-        s.includes('railway') ||
-        s.includes('loco pilot') ||
-        s.includes('alp') ||
-        s.includes('technician') ||
-        s.includes('junior engineer') ||
-        s.includes('ministerial') ||
-        s.includes('paramedical') ||
-        s.includes('section controller') ||
-        s.includes('group d') ||
-        s.includes('ntpc')
-      ) {
-        return 'railway';
+      if (/\b(ctet|reet|super tet|uptet|tet|kvs|nvs|dsssb|teacher|tre)\b/.test(s)) {
+        return 'teaching';
       }
-      if (
-        s.includes('ssc') ||
-        s.includes('cgl') ||
-        s.includes('chsl') ||
-        s.includes('mts') ||
-        s.includes('cpo') ||
-        s.includes('steno') ||
-        s.includes('gd')
-      ) {
-        return 'ssc';
-      }
-      if (
-        s.includes('upsc') ||
-        s.includes('civil services') ||
-        s.includes('ias') ||
-        s.includes('ips') ||
-        s.includes('pcs') ||
-        s.includes('bpsc') ||
-        s.includes('uppsc') ||
-        s.includes('mppsc') ||
-        s.includes('state pcs')
-      ) {
-        return 'upsc';
-      }
-      if (
-        s.includes('jee') ||
-        s.includes('engineering') ||
-        s.includes('gate') ||
-        s.includes('bitsat') ||
-        s.includes('iit')
-      ) {
-        return 'engineering';
-      }
-      if (
-        s.includes('neet') ||
-        s.includes('medical') ||
-        s.includes('aiims') ||
-        s.includes('mbbs')
-      ) {
-        return 'medical';
-      }
-      if (
-        s.includes('bank') ||
-        s.includes('ibps') ||
-        s.includes('sbi') ||
-        s.includes('rbi') ||
-        s.includes('po') ||
-        s.includes('clerk')
-      ) {
-        return 'banking';
-      }
-      if (
-        s.includes('defence') ||
-        s.includes('defense') ||
-        s.includes('cds') ||
-        s.includes('nda') ||
-        s.includes('afcat') ||
-        s.includes('capf')
-      ) {
+      if (/\b(defence|defense|cds|nda|afcat|capf|agniveer|army|air force|airforce|navy)\b/.test(s)) {
         return 'defence';
       }
       if (
-        s.includes('board') ||
-        s.includes('class 10') ||
-        s.includes('class 12') ||
-        s.includes('10th') ||
-        s.includes('12th') ||
-        s.includes('cbse') ||
-        s.includes('icse')
+        /\b(rrb|rrc|rpf|railway|loco pilot|alp|technician|junior engineer|ministerial|paramedical|section controller|group d|ntpc)\b/.test(s)
       ) {
+        return 'railway';
+      }
+      if (/\b(ssc|cgl|chsl|mts|cpo|steno|gd|delhi police)\b/.test(s)) {
+        return 'ssc';
+      }
+      if (/\b(upsc|civil services|ias|ips|pcs|bpsc|uppsc|mppsc)\b/.test(s)) {
+        return 'upsc';
+      }
+      if (/\b(bank|banking|ibps|sbi|rbi|po|clerk)\b/.test(s)) {
+        return 'banking';
+      }
+      if (/\b(jee|engineering|gate|bitsat|iit|btech|b\.tech|computer science|cse)\b/.test(s)) {
+        return 'engineering';
+      }
+      if (/\b(neet|medical|aiims|mbbs)\b/.test(s)) {
+        return 'medical';
+      }
+      if (/\b(board|boards|class 10|class 11|class 12|10th|12th|cbse|icse)\b/.test(s)) {
         return 'boards';
       }
-      if (
-        s.includes('cat') ||
-        s.includes('clat') ||
-        s.includes('mat') ||
-        s.includes('xat') ||
-        s.includes('law') ||
-        s.includes('mba') ||
-        s.includes('cuet') ||
-        s.includes('ca foundation') ||
-        s.includes('cs foundation') ||
-        s.includes('commerce')
-      ) {
+      if (/\b(cat|clat|mat|xat|law|mba|cuet|ca foundation|cs foundation|commerce)\b/.test(s)) {
         return 'management';
       }
       return 'other';
@@ -870,6 +801,7 @@ export default function ProfileScreen(): React.JSX.Element {
         { id: 'medical', label: '🩺 Medical (NEET)', selectedCount: countSelected('medical') },
         { id: 'banking', label: '🏦 Banking', selectedCount: countSelected('banking') },
         { id: 'defence', label: '🛡️ Defence', selectedCount: countSelected('defence') },
+        { id: 'teaching', label: '👩‍🏫 Teaching', selectedCount: countSelected('teaching') },
         { id: 'boards', label: '📚 Boards (10th/12th)', selectedCount: countSelected('boards') },
         { id: 'management', label: '📈 Management & Law', selectedCount: countSelected('management') },
         { id: 'other', label: 'Other', selectedCount: countSelected('other') },
@@ -1847,9 +1779,12 @@ export default function ProfileScreen(): React.JSX.Element {
             {/* Exam Category Filter Chips Bar (All, Railways, SSC, UPSC, Banking, Defence...) */}
             {examCategoryTabs.length > 0 && (
               <View style={styles.sheetCategoryTabsWrapper}>
-                <ScrollView
+                <GHScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
+                  nestedScrollEnabled={true}
+                  directionalLockEnabled={true}
+                  keyboardShouldPersistTaps="handled"
                   contentContainerStyle={styles.sheetCategoryTabsContainer}
                 >
                   {examCategoryTabs.map((tab) => {
@@ -1892,7 +1827,7 @@ export default function ProfileScreen(): React.JSX.Element {
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </GHScrollView>
               </View>
             )}
 
@@ -3167,6 +3102,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingRight: 24,
   },
   sheetCategoryTab: {
     flexDirection: 'row',

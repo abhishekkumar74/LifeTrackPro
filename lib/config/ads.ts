@@ -33,17 +33,33 @@ export const GOOGLE_TEST_IDS = {
 };
 
 /**
+ * Production AdMob Unit IDs (LifeTrack Pro)
+ */
+export const PRODUCTION_AD_IDS = {
+  ANDROID: {
+    BANNER: 'ca-app-pub-3825001060710787/1086720416',
+    INTERSTITIAL: 'ca-app-pub-3825001060710787/5281116297',
+    REWARDED: 'ca-app-pub-3825001060710787/7907279639',
+    APP_OPEN: 'ca-app-pub-3825001060710787/1086720416',
+  },
+  IOS: {
+    BANNER: 'ca-app-pub-3940256099942544/2934735716',
+    INTERSTITIAL: 'ca-app-pub-3940256099942544/4411468910',
+    REWARDED: 'ca-app-pub-3940256099942544/1712485313',
+    APP_OPEN: 'ca-app-pub-3940256099942544/5632435128',
+  },
+};
+
+/**
  * Environment configuration
  */
 export const isDevelopment = __DEV__;
 
-// Force test ads in dev or when EXPO_PUBLIC_ADMOB_USE_TEST_ADS is 'true'
+// Force test ads ONLY in local development or when explicitly requested via EXPO_PUBLIC_ADMOB_USE_TEST_ADS === 'true'
 export const isTestAdEnabled =
-  isDevelopment ||
-  process.env.EXPO_PUBLIC_ADMOB_USE_TEST_ADS === 'true' ||
-  process.env.EXPO_PUBLIC_ADMOB_ENVIRONMENT !== 'production';
+  isDevelopment || process.env.EXPO_PUBLIC_ADMOB_USE_TEST_ADS === 'true';
 
-export const isProduction = !isDevelopment && !isTestAdEnabled;
+export const isProduction = !isTestAdEnabled;
 
 /**
  * Get Ad Unit ID based on ad type and current environment
@@ -69,32 +85,32 @@ export const getAdUnitId = (
     }
   }
 
-  // Production Ad Unit IDs from environment variables
+  // Production Ad Unit IDs (Environment variable with guaranteed production fallback)
   if (isAndroid) {
     switch (adType) {
       case 'banner':
-        return process.env.EXPO_PUBLIC_ADMOB_ANDROID_BANNER_ID || GOOGLE_TEST_IDS.ANDROID.BANNER;
+        return process.env.EXPO_PUBLIC_ADMOB_ANDROID_BANNER_ID || PRODUCTION_AD_IDS.ANDROID.BANNER;
       case 'interstitial':
-        return process.env.EXPO_PUBLIC_ADMOB_ANDROID_INTERSTITIAL_ID || GOOGLE_TEST_IDS.ANDROID.INTERSTITIAL;
+        return process.env.EXPO_PUBLIC_ADMOB_ANDROID_INTERSTITIAL_ID || PRODUCTION_AD_IDS.ANDROID.INTERSTITIAL;
       case 'rewarded':
-        return process.env.EXPO_PUBLIC_ADMOB_ANDROID_REWARDED_ID || GOOGLE_TEST_IDS.ANDROID.REWARDED;
+        return process.env.EXPO_PUBLIC_ADMOB_ANDROID_REWARDED_ID || PRODUCTION_AD_IDS.ANDROID.REWARDED;
       case 'app_open':
-        return process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_OPEN_ID || GOOGLE_TEST_IDS.ANDROID.APP_OPEN;
+        return process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_OPEN_ID || PRODUCTION_AD_IDS.ANDROID.APP_OPEN;
     }
   } else {
     switch (adType) {
       case 'banner':
-        return process.env.EXPO_PUBLIC_ADMOB_IOS_BANNER_ID || GOOGLE_TEST_IDS.IOS.BANNER;
+        return process.env.EXPO_PUBLIC_ADMOB_IOS_BANNER_ID || PRODUCTION_AD_IDS.IOS.BANNER;
       case 'interstitial':
-        return process.env.EXPO_PUBLIC_ADMOB_IOS_INTERSTITIAL_ID || GOOGLE_TEST_IDS.IOS.INTERSTITIAL;
+        return process.env.EXPO_PUBLIC_ADMOB_IOS_INTERSTITIAL_ID || PRODUCTION_AD_IDS.IOS.INTERSTITIAL;
       case 'rewarded':
-        return process.env.EXPO_PUBLIC_ADMOB_IOS_REWARDED_ID || GOOGLE_TEST_IDS.IOS.REWARDED;
+        return process.env.EXPO_PUBLIC_ADMOB_IOS_REWARDED_ID || PRODUCTION_AD_IDS.IOS.REWARDED;
       case 'app_open':
-        return process.env.EXPO_PUBLIC_ADMOB_IOS_APP_OPEN_ID || GOOGLE_TEST_IDS.IOS.APP_OPEN;
+        return process.env.EXPO_PUBLIC_ADMOB_IOS_APP_OPEN_ID || PRODUCTION_AD_IDS.IOS.APP_OPEN;
     }
   }
 
-  return GOOGLE_TEST_IDS.ANDROID.BANNER;
+  return PRODUCTION_AD_IDS.ANDROID.BANNER;
 };
 
 /**
